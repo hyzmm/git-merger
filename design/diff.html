@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Git Tools — Diff (Open Design draft)</title>
+    <link rel="stylesheet" href="./design.css" />
+    <style>
+      .diff-page {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        flex: 1;
+        min-height: 0;
+      }
+
+      /* Left: file tree */
+      .file-tree {
+        border-right: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+        overflow: auto;
+        font-size: 12px;
+      }
+      .file-tree h4 {
+        margin: 0;
+        padding: 10px 12px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: hsl(var(--muted-foreground));
+      }
+      .ftrow {
+        display: grid;
+        grid-template-columns: 14px 1fr auto;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      .ftrow:hover {
+        background: hsl(var(--accent) / 0.5);
+      }
+      .ftrow.active {
+        background: hsl(var(--accent));
+      }
+      .ftrow.added .status {
+        color: hsl(var(--diff-added-fg));
+      }
+      .ftrow.modified .status {
+        color: hsl(var(--diff-modified-fg));
+      }
+      .ftrow.deleted .status {
+        color: hsl(var(--diff-removed-fg));
+      }
+      .ftrow .status {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 700;
+        font-size: 11px;
+        text-align: center;
+      }
+      .ftrow .name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ftrow .stats {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        color: hsl(var(--muted-foreground));
+      }
+      .ftrow .stats .add {
+        color: hsl(var(--diff-added-fg));
+      }
+      .ftrow .stats .del {
+        color: hsl(var(--diff-removed-fg));
+      }
+
+      .group-row {
+        padding: 4px 12px;
+        color: hsl(var(--muted-foreground));
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 500;
+      }
+
+      /* Right: diff viewer */
+      .diff-pane {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .diff-toolbar {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        border-bottom: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+      }
+      .diff-toolbar .file-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      .diff-toolbar .seg {
+        display: inline-flex;
+        border: 1px solid hsl(var(--border));
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .diff-toolbar .seg button {
+        height: 26px;
+        padding: 0 10px;
+        background: transparent;
+        color: hsl(var(--muted-foreground));
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .diff-toolbar .seg button.active {
+        background: hsl(var(--accent));
+        color: hsl(var(--accent-foreground));
+      }
+      .diff-toolbar .right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* Side-by-side */
+      .sbs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        flex: 1;
+        min-height: 0;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+      }
+      .pane {
+        overflow: auto;
+        background: hsl(var(--background));
+      }
+      .pane.left {
+        border-right: 1px solid hsl(var(--border));
+      }
+
+      .hunk-header {
+        background: hsl(var(--card));
+        color: hsl(var(--muted-foreground));
+        padding: 4px 10px;
+        border-top: 1px solid hsl(var(--border));
+        border-bottom: 1px solid hsl(var(--border));
+        font-size: 11px;
+      }
+
+      .line {
+        display: grid;
+        grid-template-columns: 50px 14px 1fr;
+        column-gap: 8px;
+        padding: 0 10px 0 0;
+        line-height: 18px;
+        white-space: pre;
+      }
+      .line .ln {
+        color: hsl(var(--muted-foreground));
+        text-align: right;
+        background: hsl(var(--diff-gutter));
+        padding-right: 8px;
+        user-select: none;
+      }
+      .line .marker {
+        text-align: center;
+        color: hsl(var(--muted-foreground));
+      }
+      .line.add {
+        background: hsl(var(--diff-added-bg));
+      }
+      .line.add .marker {
+        color: hsl(var(--diff-added-fg));
+      }
+      .line.del {
+        background: hsl(var(--diff-removed-bg));
+      }
+      .line.del .marker {
+        color: hsl(var(--diff-removed-fg));
+      }
+      .line.empty {
+        background: hsl(var(--card) / 0.4);
+      }
+
+      /* Word-level highlighting */
+      .word.add {
+        background: hsl(var(--diff-word-add));
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+      .word.del {
+        background: hsl(var(--diff-word-del));
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+
+      /* Syntax tokens (faux) */
+      .kw {
+        color: hsl(280 70% 78%);
+      }
+      .fn {
+        color: hsl(199 89% 70%);
+      }
+      .str {
+        color: hsl(40 90% 70%);
+      }
+      .com {
+        color: hsl(120 12% 55%);
+        font-style: italic;
+      }
+      .num {
+        color: hsl(20 90% 70%);
+      }
+      .ty {
+        color: hsl(170 70% 70%);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="nav-item" title="History">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 9-9 9.74 9.74 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M12 7v5l4 2" />
+          </svg>
+        </div>
+        <div class="nav-item active" title="Diff">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="6" cy="6" r="3" />
+            <circle cx="6" cy="18" r="3" />
+            <line x1="6" y1="9" x2="6" y2="15" />
+            <path d="M21 9v3a3 3 0 0 1-3 3h-3" />
+            <path d="M18 12l3-3-3-3" />
+          </svg>
+        </div>
+        <div class="nav-item" title="Merge">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="18" cy="18" r="3" />
+            <circle cx="6" cy="6" r="3" />
+            <path d="M6 21V9a9 9 0 0 0 9 9" />
+          </svg>
+        </div>
+        <div class="spacer"></div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <div class="repo-meta">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="6" y1="3" x2="6" y2="15" />
+              <circle cx="18" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+            <span class="branch mono">main</span>
+            <span class="hint">G:\Projects\acme-web</span>
+          </div>
+          <div class="right">
+            <span class="chip remote">a3f9c1e</span>
+            <span class="hint">vs</span>
+            <span class="chip branch">e1c0ba2 (parent)</span>
+          </div>
+        </header>
+
+        <div class="diff-page">
+          <!-- File tree -->
+          <aside class="file-tree">
+            <h4>Changed files</h4>
+
+            <div class="group-row">▾ src/components</div>
+            <div class="ftrow modified active">
+              <span class="status">M</span><span class="name">DiffViewer.tsx</span
+              ><span class="stats"><span class="add">+126</span> <span class="del">-14</span></span>
+            </div>
+            <div class="ftrow deleted">
+              <span class="status">D</span><span class="name">old/DiffOld.tsx</span
+              ><span class="stats"><span class="del">-198</span></span>
+            </div>
+
+            <div class="group-row">▾ src/lib</div>
+            <div class="ftrow added">
+              <span class="status">A</span><span class="name">word-diff.ts</span
+              ><span class="stats"><span class="add">+88</span></span>
+            </div>
+            <div class="ftrow modified">
+              <span class="status">M</span><span class="name">diff/tokenizer.ts</span
+              ><span class="stats"><span class="add">+4</span> <span class="del">-2</span></span>
+            </div>
+
+            <div class="group-row">▾ src/pages</div>
+            <div class="ftrow modified">
+              <span class="status">M</span><span class="name">DiffPage.tsx</span
+              ><span class="stats"><span class="add">+34</span> <span class="del">-22</span></span>
+            </div>
+
+            <div class="group-row">▾ src-tauri/src/git</div>
+            <div class="ftrow modified">
+              <span class="status">M</span><span class="name">diff.rs</span
+              ><span class="stats"><span class="add">+18</span> <span class="del">-6</span></span>
+            </div>
+
+            <div class="group-row">▾ /</div>
+            <div class="ftrow modified">
+              <span class="status">M</span><span class="name">README.md</span
+              ><span class="stats"><span class="add">+12</span></span>
+            </div>
+          </aside>
+
+          <!-- Diff viewer -->
+          <section class="diff-pane">
+            <div class="diff-toolbar">
+              <span class="file-pill mono">src/components/DiffViewer.tsx</span>
+              <div class="seg">
+                <button class="active">Side-by-side</button>
+                <button>Unified</button>
+                <button>Folded</button>
+              </div>
+              <div class="right">
+                <button class="btn ghost" title="Previous change">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                </button>
+                <button class="btn ghost" title="Next change">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <span class="hint">Hunk 2 / 5</span>
+                <span class="kbd">F7</span>
+                <button class="btn ghost" title="Whitespace">⌫</button>
+                <button class="btn ghost" title="Word wrap">↩</button>
+              </div>
+            </div>
+
+            <div class="sbs">
+              <!-- Left (old) -->
+              <div class="pane left">
+                <div class="hunk-header">
+                  @@ -42,15 +42,18 @@ export function DiffViewer({ diff }) {
+                </div>
+
+                <div class="line">
+                  <span class="ln">42</span><span class="marker"> </span
+                  ><span
+                    ><span class="kw">export</span> <span class="kw">function</span>
+                    <span class="fn">DiffViewer</span>({ diff }) {</span
+                  >
+                </div>
+                <div class="line del">
+                  <span class="ln">43</span><span class="marker">-</span
+                  ><span>
+                    <span class="kw">const</span> rows = diff.<span class="fn">flatten</span
+                    >();</span
+                  >
+                </div>
+                <div class="line del">
+                  <span class="ln">44</span><span class="marker">-</span
+                  ><span>
+                    <span class="kw">return</span> rows.<span class="fn">map</span>(<span class="fn"
+                      >renderRow</span
+                    >);</span
+                  >
+                </div>
+                <div class="line">
+                  <span class="ln">45</span><span class="marker"> </span><span></span>
+                </div>
+                <div class="line">
+                  <span class="ln">46</span><span class="marker"> </span
+                  ><span> <span class="com">// guard against empty diff</span></span>
+                </div>
+                <div class="line del">
+                  <span class="ln">47</span><span class="marker">-</span
+                  ><span>
+                    <span class="kw">if</span> (!rows.<span class="fn">length</span>)
+                    <span class="kw">return</span> <span class="kw">null</span>;</span
+                  >
+                </div>
+                <div class="line">
+                  <span class="ln">48</span><span class="marker"> </span><span>}</span>
+                </div>
+
+                <div class="hunk-header">@@ -120,8 +123,16 @@ function renderRow(row) {</div>
+
+                <div class="line">
+                  <span class="ln">120</span><span class="marker"> </span
+                  ><span
+                    ><span class="kw">function</span> <span class="fn">renderRow</span>(row) {</span
+                  >
+                </div>
+                <div class="line del">
+                  <span class="ln">121</span><span class="marker">-</span
+                  ><span>
+                    <span class="kw">const</span> cls = row.<span class="fn">origin</span> ===
+                    <span class="str">"+"</span> ? <span class="str">"add"</span> :
+                    <span class="str">"del"</span>;</span
+                  >
+                </div>
+                <div class="line del">
+                  <span class="ln">122</span><span class="marker">-</span
+                  ><span>
+                    <span class="kw">return</span> &lt;<span class="ty">div</span>
+                    className={cls}&gt;{row.content}&lt;/<span class="ty">div</span>&gt;;</span
+                  >
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line empty">
+                  <span class="ln"></span><span class="marker"></span><span></span>
+                </div>
+                <div class="line">
+                  <span class="ln">123</span><span class="marker"> </span><span>}</span>
+                </div>
+              </div>
+
+              <!-- Right (new) -->
+              <div class="pane right">
+                <div class="hunk-header">
+                  @@ -42,15 +42,18 @@ export function DiffViewer({ diff, mode = "sbs" }) {
+                </div>
+
+                <div class="line">
+                  <span class="ln">42</span><span class="marker"> </span
+                  ><span
+                    ><span class="kw">export</span> <span class="kw">function</span>
+                    <span class="fn">DiffViewer</span>({ diff<span class="word add"
+                      >, mode = <span class="str">"sbs"</span></span
+                    >
+                    }) {</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">43</span><span class="marker">+</span
+                  ><span>
+                    <span class="kw">const</span> hunks =
+                    <span class="fn">groupHunks</span>(diff);</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">44</span><span class="marker">+</span
+                  ><span>
+                    <span class="kw">if</span> (mode === <span class="str">"sbs"</span>)
+                    <span class="kw">return</span> &lt;<span class="ty">SideBySide</span>
+                    hunks={hunks} /&gt;;</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">45</span><span class="marker">+</span
+                  ><span>
+                    <span class="kw">return</span> &lt;<span class="ty">Unified</span> hunks={hunks}
+                    /&gt;;</span
+                  >
+                </div>
+                <div class="line">
+                  <span class="ln">46</span><span class="marker"> </span><span></span>
+                </div>
+                <div class="line">
+                  <span class="ln">47</span><span class="marker"> </span
+                  ><span> <span class="com">// guard against empty diff</span></span>
+                </div>
+                <div class="line">
+                  <span class="ln">48</span><span class="marker"> </span><span>}</span>
+                </div>
+
+                <div class="hunk-header">@@ -120,8 +123,16 @@ function renderRow(row) {</div>
+
+                <div class="line">
+                  <span class="ln">123</span><span class="marker"> </span
+                  ><span
+                    ><span class="kw">function</span> <span class="fn">renderRow</span>(row) {</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">124</span><span class="marker">+</span
+                  ><span>
+                    <span class="kw">const</span> cls = <span class="fn">classify</span>(row.<span
+                      class="fn"
+                      >origin</span
+                    >);</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">125</span><span class="marker">+</span
+                  ><span>
+                    <span class="kw">const</span> tokens =
+                    <span class="fn">wordDiff</span>(row.<span class="fn">prev</span>, row.<span
+                      class="fn"
+                      >curr</span
+                    >);</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">126</span><span class="marker">+</span
+                  ><span> <span class="kw">return</span> (</span>
+                </div>
+                <div class="line add">
+                  <span class="ln">127</span><span class="marker">+</span
+                  ><span> &lt;<span class="ty">div</span> className={cls}&gt;</span>
+                </div>
+                <div class="line add">
+                  <span class="ln">128</span><span class="marker">+</span
+                  ><span> {tokens.<span class="fn">map</span>((t, i) =&gt; (</span>
+                </div>
+                <div class="line add">
+                  <span class="ln">129</span><span class="marker">+</span
+                  ><span>
+                    &lt;<span class="ty">span</span> key={i} className={t.<span class="fn">cls</span
+                    >}&gt;{t.<span class="fn">text</span>}&lt;/<span class="ty">span</span
+                    >&gt;</span
+                  >
+                </div>
+                <div class="line add">
+                  <span class="ln">130</span><span class="marker">+</span><span> ))}</span>
+                </div>
+                <div class="line add">
+                  <span class="ln">131</span><span class="marker">+</span
+                  ><span> &lt;/<span class="ty">div</span>&gt;</span>
+                </div>
+                <div class="line add">
+                  <span class="ln">132</span><span class="marker">+</span><span> );</span>
+                </div>
+                <div class="line">
+                  <span class="ln">133</span><span class="marker"> </span><span>}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

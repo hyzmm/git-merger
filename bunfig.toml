@@ -1,0 +1,7 @@
+# Bun configuration — use the same registry as the existing npm setup
+# (Tencent internal mirror is reachable; default registry.npmjs.org sometimes refuses).
+[install]
+registry = "https://mirrors.tencent.com/npm/"
+
+[install.cache]
+disable = false

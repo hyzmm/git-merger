@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Git Tools — History (Open Design draft)</title>
+    <link rel="stylesheet" href="./design.css" />
+    <style>
+      /* History page specific */
+      .history {
+        display: grid;
+        grid-template-columns: 220px 1fr 380px;
+        flex: 1;
+        min-height: 0;
+      }
+
+      /* Left: branches/refs */
+      .refs-pane {
+        border-right: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+        overflow: auto;
+      }
+      .refs-pane h4 {
+        margin: 0;
+        padding: 10px 12px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: hsl(var(--muted-foreground));
+      }
+      .refs-pane .ref {
+        padding: 5px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        border-left: 2px solid transparent;
+      }
+      .refs-pane .ref:hover {
+        background: hsl(var(--accent) / 0.5);
+      }
+      .refs-pane .ref.active {
+        background: hsl(var(--accent));
+        border-left-color: hsl(var(--branch-1));
+        color: hsl(var(--foreground));
+      }
+      .refs-pane .ref .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+      .refs-pane .ref.b1 .dot {
+        background: hsl(var(--branch-1));
+      }
+      .refs-pane .ref.b2 .dot {
+        background: hsl(var(--branch-2));
+      }
+      .refs-pane .ref.b3 .dot {
+        background: hsl(var(--branch-3));
+      }
+      .refs-pane .ref.b4 .dot {
+        background: hsl(var(--branch-4));
+      }
+      .refs-pane .ref.b5 .dot {
+        background: hsl(var(--branch-5));
+      }
+      .refs-pane .count {
+        margin-left: auto;
+        font-size: 10px;
+        color: hsl(var(--muted-foreground));
+      }
+
+      /* Middle: log table */
+      .log-pane {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .filter-bar {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+      }
+      .filter-bar .input {
+        flex: 1;
+        max-width: 260px;
+      }
+      .filter-bar .right {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .log-table {
+        flex: 1;
+        overflow: auto;
+        font-size: 12.5px;
+      }
+      .log-row {
+        display: grid;
+        grid-template-columns: 160px 1fr 180px 110px 80px;
+        align-items: center;
+        height: 32px;
+        padding: 0 10px;
+        border-bottom: 1px solid hsl(var(--border) / 0.5);
+        cursor: pointer;
+      }
+      .log-row:hover {
+        background: hsl(var(--accent) / 0.4);
+      }
+      .log-row.selected {
+        background: hsl(var(--accent));
+      }
+
+      .graph-cell {
+        position: relative;
+        height: 32px;
+        display: flex;
+        align-items: center;
+      }
+      .graph-cell svg {
+        width: 160px;
+        height: 32px;
+      }
+
+      .commit-msg {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .commit-msg .text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .commit-msg .badges {
+        display: inline-flex;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .author {
+        color: hsl(var(--muted-foreground));
+      }
+      .when {
+        color: hsl(var(--muted-foreground));
+      }
+      .oid {
+        color: hsl(var(--muted-foreground));
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+      }
+
+      /* Right: details */
+      .details {
+        border-left: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .details .head {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid hsl(var(--border));
+      }
+      .details .head .title {
+        font-size: 13.5px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: 80px 1fr;
+        gap: 4px 12px;
+        font-size: 12px;
+      }
+      .meta .k {
+        color: hsl(var(--muted-foreground));
+      }
+      .meta .v {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11.5px;
+      }
+
+      .files {
+        flex: 1;
+        overflow: auto;
+        padding: 6px 0;
+      }
+      .files h4 {
+        margin: 0;
+        padding: 8px 14px 4px;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: hsl(var(--muted-foreground));
+      }
+      .file-row {
+        padding: 5px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      .file-row:hover {
+        background: hsl(var(--accent) / 0.5);
+      }
+      .file-row .status {
+        width: 14px;
+        text-align: center;
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 700;
+        font-size: 11px;
+      }
+      .file-row.added .status {
+        color: hsl(var(--diff-added-fg));
+      }
+      .file-row.modified .status {
+        color: hsl(var(--diff-modified-fg));
+      }
+      .file-row.deleted .status {
+        color: hsl(var(--diff-removed-fg));
+      }
+      .file-row.renamed .status {
+        color: hsl(var(--branch-2));
+      }
+      .file-row .path {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 12px;
+      }
+      .file-row .stats {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10.5px;
+        color: hsl(var(--muted-foreground));
+      }
+      .file-row .stats .add {
+        color: hsl(var(--diff-added-fg));
+      }
+      .file-row .stats .del {
+        color: hsl(var(--diff-removed-fg));
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="nav-item active" title="History">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 9-9 9.74 9.74 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M12 7v5l4 2" />
+          </svg>
+        </div>
+        <div class="nav-item" title="Diff">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="6" cy="6" r="3" />
+            <circle cx="6" cy="18" r="3" />
+            <line x1="6" y1="9" x2="6" y2="15" />
+            <path d="M21 9v3a3 3 0 0 1-3 3h-3" />
+            <path d="M18 12l3-3-3-3" />
+          </svg>
+        </div>
+        <div class="nav-item" title="Merge">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="18" cy="18" r="3" />
+            <circle cx="6" cy="6" r="3" />
+            <path d="M6 21V9a9 9 0 0 0 9 9" />
+          </svg>
+        </div>
+        <div class="spacer"></div>
+        <div class="nav-item" title="Settings">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+            />
+          </svg>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <div class="main">
+        <header class="topbar">
+          <button class="btn">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+              />
+            </svg>
+            Open Repository
+          </button>
+          <div class="repo-meta">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="6" y1="3" x2="6" y2="15" />
+              <circle cx="18" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+            <span class="branch mono">main</span>
+            <span class="hint">G:\Projects\acme-web</span>
+          </div>
+          <div class="right">
+            <span class="kbd">Ctrl K</span>
+            <button class="btn ghost">Pull</button>
+            <button class="btn">Push</button>
+          </div>
+        </header>
+
+        <div class="history">
+          <!-- Refs pane -->
+          <aside class="refs-pane">
+            <h4>Local</h4>
+            <div class="ref b1 active">
+              <span class="dot"></span><span>main</span><span class="count">1.2k</span>
+            </div>
+            <div class="ref b2">
+              <span class="dot"></span><span>feat/diff-viewer</span><span class="count">38</span>
+            </div>
+            <div class="ref b3">
+              <span class="dot"></span><span>fix/login-bug</span><span class="count">5</span>
+            </div>
+            <div class="ref b4">
+              <span class="dot"></span><span>release/0.8</span><span class="count">214</span>
+            </div>
+
+            <h4>Remote</h4>
+            <div class="ref b1">
+              <span class="dot"></span><span>origin/main</span><span class="count">1.2k</span>
+            </div>
+            <div class="ref b2">
+              <span class="dot"></span><span>origin/feat/diff-viewer</span
+              ><span class="count">36</span>
+            </div>
+            <div class="ref b5">
+              <span class="dot"></span><span>upstream/main</span><span class="count">1.5k</span>
+            </div>
+
+            <h4>Tags</h4>
+            <div class="ref b3"><span class="dot"></span><span>v0.7.2</span></div>
+            <div class="ref b3"><span class="dot"></span><span>v0.8.0-rc.1</span></div>
+          </aside>
+
+          <!-- Log pane -->
+          <section class="log-pane">
+            <div class="filter-bar">
+              <input class="input" placeholder="Filter by message, author, hash..." />
+              <button class="btn ghost">Author ▾</button>
+              <button class="btn ghost">Date ▾</button>
+              <button class="btn ghost">Path ▾</button>
+              <div class="right">
+                <span class="hint">1,243 commits</span>
+                <button class="btn ghost" title="Refresh">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path
+                      d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="log-table">
+              <!-- Row 1 (HEAD, selected) -->
+              <div class="log-row selected">
+                <div class="graph-cell">
+                  <!-- DAG: HEAD on branch 1, with merge from branch 2 -->
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="50"
+                      y1="0"
+                      x2="50"
+                      y2="16"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M50 16 Q35 16 20 16"
+                      fill="none"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="6"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="badges">
+                    <span class="chip head">HEAD</span>
+                    <span class="chip branch">main</span>
+                    <span class="chip remote">origin/main</span>
+                  </span>
+                  <span class="text"
+                    >Merge pull request #482 from feat/diff-viewer — Side-by-side diff with
+                    word-level highlighting</span
+                  >
+                </div>
+                <div class="author">Alice Chen</div>
+                <div class="when">2 hours ago</div>
+                <div class="oid">a3f9c1e</div>
+              </div>
+
+              <!-- Row 2 -->
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="50"
+                      y1="0"
+                      x2="50"
+                      y2="32"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="50"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-2))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">feat(diff): word-level highlighting via similar crate</span>
+                </div>
+                <div class="author">Bob Liu</div>
+                <div class="when">3 hours ago</div>
+                <div class="oid">7f2bd84</div>
+              </div>
+
+              <!-- Row 3 -->
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="50"
+                      y1="0"
+                      x2="50"
+                      y2="32"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="50"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-2))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">refactor(diff): extract DiffViewer, remove dead code</span>
+                </div>
+                <div class="author">Bob Liu</div>
+                <div class="when">5 hours ago</div>
+                <div class="oid">e1c0ba2</div>
+              </div>
+
+              <!-- Row 4: branch start -->
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="50"
+                      y1="16"
+                      x2="50"
+                      y2="32"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M50 16 Q35 16 20 16"
+                      fill="none"
+                      stroke="hsl(var(--branch-2))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="badges"><span class="chip branch">feat/diff-viewer</span></span>
+                  <span class="text">chore: branch off main for diff viewer work</span>
+                </div>
+                <div class="author">Alice Chen</div>
+                <div class="when">yesterday</div>
+                <div class="oid">9d40173</div>
+              </div>
+
+              <!-- Row 5..10: linear -->
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">feat(history): commit graph DAG renderer (initial)</span>
+                </div>
+                <div class="author">Alice Chen</div>
+                <div class="when">yesterday</div>
+                <div class="oid">2bc9a05</div>
+              </div>
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">fix(repo): properly handle bare repos in `open_repo`</span>
+                </div>
+                <div class="author">Carol Wang</div>
+                <div class="when">2 days ago</div>
+                <div class="oid">5da81fb</div>
+              </div>
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="badges"><span class="chip tag">v0.8.0-rc.1</span></span>
+                  <span class="text">release: 0.8.0-rc.1</span>
+                </div>
+                <div class="author">Alice Chen</div>
+                <div class="when">3 days ago</div>
+                <div class="oid">b04ae29</div>
+              </div>
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">perf(log): use Sort::TIME | Sort::TOPOLOGICAL on revwalk</span>
+                </div>
+                <div class="author">Bob Liu</div>
+                <div class="when">3 days ago</div>
+                <div class="oid">c91e3a7</div>
+              </div>
+
+              <!-- Row with octopus merge -->
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="50"
+                      y1="0"
+                      x2="50"
+                      y2="16"
+                      stroke="hsl(var(--branch-3))"
+                      stroke-width="2"
+                    />
+                    <line
+                      x1="80"
+                      y1="0"
+                      x2="80"
+                      y2="16"
+                      stroke="hsl(var(--branch-4))"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M50 16 Q35 16 20 16"
+                      fill="none"
+                      stroke="hsl(var(--branch-3))"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M80 16 Q50 16 20 16"
+                      fill="none"
+                      stroke="hsl(var(--branch-4))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="6"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text"
+                    >Merge branches 'fix/login-bug' and 'release/0.8' into main</span
+                  >
+                </div>
+                <div class="author">Alice Chen</div>
+                <div class="when">4 days ago</div>
+                <div class="oid">3e7f01b</div>
+              </div>
+
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">docs: README — cross-platform build prerequisites</span>
+                </div>
+                <div class="author">Carol Wang</div>
+                <div class="when">5 days ago</div>
+                <div class="oid">88a2049</div>
+              </div>
+
+              <div class="log-row">
+                <div class="graph-cell">
+                  <svg viewBox="0 0 160 32">
+                    <line
+                      x1="20"
+                      y1="0"
+                      x2="20"
+                      y2="32"
+                      stroke="hsl(var(--branch-1))"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="20"
+                      cy="16"
+                      r="5"
+                      fill="hsl(var(--branch-1))"
+                      stroke="hsl(var(--background))"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </div>
+                <div class="commit-msg">
+                  <span class="text">feat(merge): conflict iteration via index.conflicts()</span>
+                </div>
+                <div class="author">Bob Liu</div>
+                <div class="when">a week ago</div>
+                <div class="oid">f5d12c8</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Details pane -->
+          <aside class="details">
+            <div class="head">
+              <div class="title">
+                Merge pull request #482 from feat/diff-viewer — Side-by-side diff with word-level
+                highlighting
+              </div>
+              <div class="meta">
+                <span class="k">Commit</span
+                ><span class="v">a3f9c1e8d2b4f6a017c98e1234abcdef56789012</span>
+                <span class="k">Parents</span><span class="v">e1c0ba2 7f2bd84</span>
+                <span class="k">Author</span
+                ><span class="v mono">Alice Chen &lt;alice@acme.io&gt;</span>
+                <span class="k">Date</span><span class="v">2026-05-19 14:08:11 +08:00</span>
+                <span class="k">Refs</span>
+                <span class="v">
+                  <span class="chip head">HEAD</span>
+                  <span class="chip branch">main</span>
+                  <span class="chip remote">origin/main</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="files">
+              <h4>Changed files (7)</h4>
+
+              <div class="file-row modified">
+                <span class="status">M</span
+                ><span class="path mono">src/components/DiffViewer.tsx</span
+                ><span class="stats"
+                  ><span class="add">+126</span> <span class="del">-14</span></span
+                >
+              </div>
+              <div class="file-row added">
+                <span class="status">A</span><span class="path mono">src/lib/word-diff.ts</span
+                ><span class="stats"><span class="add">+88</span></span>
+              </div>
+              <div class="file-row modified">
+                <span class="status">M</span><span class="path mono">src/pages/DiffPage.tsx</span
+                ><span class="stats"
+                  ><span class="add">+34</span> <span class="del">-22</span></span
+                >
+              </div>
+              <div class="file-row deleted">
+                <span class="status">D</span
+                ><span class="path mono">src/components/old/DiffOld.tsx</span
+                ><span class="stats"><span class="del">-198</span></span>
+              </div>
+              <div class="file-row renamed">
+                <span class="status">R</span
+                ><span class="path mono">src/lib/diff/{utils → tokenizer}.ts</span
+                ><span class="stats"><span class="add">+4</span> <span class="del">-2</span></span>
+              </div>
+              <div class="file-row modified">
+                <span class="status">M</span><span class="path mono">src-tauri/src/git/diff.rs</span
+                ><span class="stats"><span class="add">+18</span> <span class="del">-6</span></span>
+              </div>
+              <div class="file-row modified">
+                <span class="status">M</span><span class="path mono">README.md</span
+                ><span class="stats"><span class="add">+12</span></span>
+              </div>
+
+              <h4>Message</h4>
+              <pre
+                class="mono"
+                style="
+                  margin: 0;
+                  padding: 8px 14px 14px;
+                  white-space: pre-wrap;
+                  font-size: 11.5px;
+                  color: hsl(var(--muted-foreground));
+                "
+              >
+Merge pull request #482 from feat/diff-viewer
+
+Side-by-side diff with word-level highlighting
+- New `word-diff.ts` based on Myers tokenizer
+- Diff page supports Side-by-side / Unified switch
+- Removes legacy DiffOld component
+
+Co-authored-by: Bob Liu &lt;bob@acme.io&gt;</pre
+              >
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

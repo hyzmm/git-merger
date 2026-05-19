@@ -1,0 +1,264 @@
+/* Shared design tokens & utilities for the design drafts under /design.
+   Mirrors src/styles/globals.css so the React implementation can be a 1:1 port. */
+
+:root {
+  --background: 220 13% 9%;
+  --foreground: 220 14% 96%;
+  --card: 220 13% 11%;
+  --card-foreground: 220 14% 96%;
+  --popover: 220 13% 13%;
+  --popover-foreground: 220 14% 96%;
+  --primary: 220 14% 96%;
+  --primary-foreground: 220 13% 9%;
+  --secondary: 220 13% 16%;
+  --secondary-foreground: 220 14% 96%;
+  --muted: 220 13% 16%;
+  --muted-foreground: 220 9% 62%;
+  --accent: 220 13% 18%;
+  --accent-foreground: 220 14% 96%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 220 14% 96%;
+  --border: 220 13% 18%;
+  --input: 220 13% 18%;
+  --ring: 220 14% 70%;
+
+  --diff-added-bg: 142 76% 36% / 0.18;
+  --diff-added-fg: 142 70% 50%;
+  --diff-removed-bg: 0 72% 51% / 0.18;
+  --diff-removed-fg: 0 72% 65%;
+  --diff-modified-bg: 38 92% 50% / 0.16;
+  --diff-modified-fg: 38 92% 60%;
+  --diff-gutter: 220 13% 13%;
+  --diff-line-bg: transparent;
+  --diff-word-add: 142 76% 45% / 0.45;
+  --diff-word-del: 0 72% 55% / 0.5;
+
+  --branch-1: 199 89% 60%;
+  --branch-2: 280 70% 70%;
+  --branch-3: 40 95% 60%;
+  --branch-4: 142 70% 55%;
+  --branch-5: 0 75% 65%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family:
+    "Inter",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+}
+
+.mono {
+  font-family:
+    "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Layout primitives */
+.app {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+}
+.sidebar .nav-item {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+.sidebar .nav-item:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.sidebar .nav-item.active {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.sidebar .spacer {
+  flex: 1;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.topbar .repo-meta {
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar .branch {
+  color: hsl(var(--foreground));
+}
+.topbar .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Buttons / chips */
+.btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: hsl(var(--accent));
+}
+.btn.primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: transparent;
+}
+.btn.primary:hover {
+  opacity: 0.9;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: hsl(var(--muted-foreground));
+}
+.btn.ghost:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.btn.danger {
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  border-color: transparent;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+}
+.chip.branch {
+  color: hsl(var(--branch-1));
+  border-color: hsl(var(--branch-1) / 0.35);
+  background: hsl(var(--branch-1) / 0.08);
+}
+.chip.tag {
+  color: hsl(var(--branch-3));
+  border-color: hsl(var(--branch-3) / 0.35);
+  background: hsl(var(--branch-3) / 0.08);
+}
+.chip.head {
+  color: hsl(var(--branch-4));
+  border-color: hsl(var(--branch-4) / 0.35);
+  background: hsl(var(--branch-4) / 0.08);
+}
+.chip.remote {
+  color: hsl(var(--branch-2));
+  border-color: hsl(var(--branch-2) / 0.35);
+  background: hsl(var(--branch-2) / 0.08);
+}
+
+.input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--input));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  outline: none;
+}
+.input:focus {
+  border-color: hsl(var(--ring));
+}
+
+.kbd {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  color: hsl(var(--muted-foreground));
+}
+
+.hint {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+.divider-h {
+  height: 1px;
+  background: hsl(var(--border));
+}
+.divider-v {
+  width: 1px;
+  background: hsl(var(--border));
+}

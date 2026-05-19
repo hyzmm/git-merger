@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Git Tools — Design drafts</title>
+    <link rel="stylesheet" href="./design.css" />
+    <style>
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 48px 24px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      h1 + p {
+        color: hsl(var(--muted-foreground));
+        margin: 0 0 32px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: hsl(var(--card));
+        border: 1px solid hsl(var(--border));
+        border-radius: 12px;
+        padding: 18px;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition:
+          border-color 0.15s,
+          transform 0.15s;
+      }
+      .card:hover {
+        border-color: hsl(var(--ring));
+        transform: translateY(-2px);
+      }
+      .card .name {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .card .desc {
+        color: hsl(var(--muted-foreground));
+        font-size: 12.5px;
+      }
+      .card .meta {
+        margin-top: auto;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: hsl(var(--muted-foreground));
+      }
+      .footer {
+        margin-top: 36px;
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+      }
+      code {
+        background: hsl(var(--secondary));
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Git Tools — Design drafts</h1>
+      <p>
+        Static HTML mockups serving as the visual spec for the Tauri + React 19 + shadcn/ui
+        implementation.
+      </p>
+      <div class="grid">
+        <a class="card" href="./history.html">
+          <div class="name">History</div>
+          <div class="desc">
+            IDEA-style commit list with DAG, branch / tag / HEAD chips, filter bar, and right-side
+            commit details panel showing changed files and message.
+          </div>
+          <div class="meta">history.html</div>
+        </a>
+        <a class="card" href="./diff.html">
+          <div class="name">Diff</div>
+          <div class="desc">
+            Side-by-side / Unified / Folded modes, syntax + word-level highlighting, hunk
+            navigation, and a left tree of changed files grouped by directory.
+          </div>
+          <div class="meta">diff.html</div>
+        </a>
+        <a class="card" href="./merge.html">
+          <div class="name">Merge</div>
+          <div class="desc">
+            Three-pane conflict editor (LEFT ours / RESULT / RIGHT theirs), conflict navigation,
+            Accept Left/Right/Both, progress bar, and keyboard shortcuts.
+          </div>
+          <div class="meta">merge.html</div>
+        </a>
+      </div>
+      <p class="footer">
+        These pages reuse the same design tokens as <code>src/styles/globals.css</code>, so the
+        React port is a 1:1 visual mapping. Open any of them directly in a browser, or run
+        <code>bunx serve design</code> from the project root for a quick local preview.
+      </p>
+    </div>
+  </body>
+</html>
