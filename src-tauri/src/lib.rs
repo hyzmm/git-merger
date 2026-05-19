@@ -12,6 +12,9 @@ pub fn run() {
             commands::file_diff,
             commands::working_diff,
             commands::conflicts,
+            commands::merge_state,
+            commands::conflict_content,
+            commands::resolve_conflict,
             commands::list_refs,
         ])
         .run(tauri::generate_context!())

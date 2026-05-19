@@ -1,12 +1,15 @@
+import { FileTree } from "@/components/diff/FileTree";
+import { DiffViewer } from "@/components/diff/DiffViewer";
+
 export function DiffPage() {
   return (
-    <div className="grid h-full grid-cols-2">
-      <section className="min-w-0 overflow-auto border-r border-border p-4 font-mono text-xs text-muted-foreground">
-        Left (old) — coming next.
-      </section>
-      <section className="min-w-0 overflow-auto p-4 font-mono text-xs text-muted-foreground">
-        Right (new) — coming next.
-      </section>
+    <div className="grid h-full grid-cols-[280px_1fr]">
+      <div className="min-h-0 border-r border-border">
+        <FileTree />
+      </div>
+      <div className="min-w-0">
+        <DiffViewer />
+      </div>
     </div>
   );
 }

@@ -70,6 +70,27 @@ export interface RefEntry {
   is_head: boolean;
 }
 
+export type MergeState =
+  | "clean"
+  | "merge"
+  | "revert"
+  | "cherry_pick"
+  | "bisect"
+  | "rebase"
+  | "rebase_interactive"
+  | "rebase_merge"
+  | "apply_mailbox"
+  | "apply_mailbox_or_rebase";
+
+export interface ConflictContent {
+  path: string;
+  ancestor: string | null;
+  ours: string | null;
+  theirs: string | null;
+  /** working-tree content with conflict markers, if not yet resolved */
+  working: string | null;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -80,5 +101,10 @@ export const git = {
     invoke<FileDiff>("file_diff", { path, oid, file }),
   workingDiff: (path: string, file: string) => invoke<FileDiff>("working_diff", { path, file }),
   conflicts: (path: string) => invoke<ConflictFile[]>("conflicts", { path }),
+  mergeState: (path: string) => invoke<MergeState>("merge_state", { path }),
+  conflictContent: (path: string, file: string) =>
+    invoke<ConflictContent>("conflict_content", { path, file }),
+  resolveConflict: (path: string, file: string, content: string) =>
+    invoke<void>("resolve_conflict", { path, file, content }),
   listRefs: (path: string) => invoke<RefEntry[]>("list_refs", { path }),
 };

@@ -1,13 +1,20 @@
 import { memo, type ReactElement } from "react";
 import type { RowLayout } from "@/lib/graph";
 
-const HUE_VARS = [
-  "var(--branch-1)",
-  "var(--branch-2)",
-  "var(--branch-3)",
-  "var(--branch-4)",
-  "var(--branch-5)",
+// Resolve to literal HSL strings so SVG `stroke=` works in all WebViews.
+// Keep these in sync with --branch-* tokens in src/styles/globals.css.
+const BRANCH_COLORS = [
+  "hsl(199 89% 60%)", // branch-1 (cyan/blue)
+  "hsl(280 70% 70%)", // branch-2 (purple)
+  "hsl(40 95% 60%)", // branch-3 (yellow/gold)
+  "hsl(142 70% 55%)", // branch-4 (green)
+  "hsl(0 75% 65%)", // branch-5 (red)
+  "hsl(170 70% 60%)", // branch-6 (teal — extra fallback)
 ];
+
+function colorOf(idx: number): string {
+  return BRANCH_COLORS[idx % BRANCH_COLORS.length] ?? BRANCH_COLORS[0];
+}
 
 const COL_W = 14;
 const ROW_H = 28;
@@ -15,6 +22,7 @@ const DOT_R = 4.5;
 
 interface Props {
   row: RowLayout;
+  cols?: number;
   height?: number;
 }
 
@@ -23,8 +31,9 @@ interface Props {
  * Lines from the previous row come in at the top center; lines to the next
  * row go out at the bottom center.
  */
-export const GraphRow = memo(function GraphRow({ row, height = ROW_H }: Props) {
-  const width = Math.max(2, row.width) * COL_W;
+export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H }: Props) {
+  const totalCols = Math.max(cols ?? row.width, row.width, 1);
+  const width = totalCols * COL_W;
   const xOf = (col: number) => col * COL_W + COL_W / 2;
   const top = 0;
   const mid = height / 2;
@@ -42,15 +51,14 @@ export const GraphRow = memo(function GraphRow({ row, height = ROW_H }: Props) {
         y1={top}
         x2={x}
         y2={bot}
-        stroke={`hsl(${HUE_VARS[seg.color]})`}
+        stroke={colorOf(seg.color)}
         strokeWidth={2}
       />,
     );
   }
 
-  // 2) Curves: from dot to parents (lower half) and incoming line (upper half).
-  // We always draw the *upper* half of the dot column from top to mid using the
-  // dot's color so the line is visually continuous from the previous row.
+  // 2) Upper half of the dot column: visually continues the line from the
+  // previous row down to the dot.
   const dotX = xOf(row.dotCol);
   elements.push(
     <line
@@ -59,16 +67,16 @@ export const GraphRow = memo(function GraphRow({ row, height = ROW_H }: Props) {
       y1={top}
       x2={dotX}
       y2={mid}
-      stroke={`hsl(${HUE_VARS[row.dotColor]})`}
+      stroke={colorOf(row.dotColor)}
       strokeWidth={2}
     />,
   );
 
-  // Lower half: one segment per curve (commit -> parent).
+  // 3) Lower half: one segment per parent curve.
   for (const c of row.curves) {
     const x1 = xOf(c.fromCol);
     const x2 = xOf(c.toCol);
-    const color = `hsl(${HUE_VARS[c.color]})`;
+    const stroke = colorOf(c.color);
     if (c.kind === "straight" || x1 === x2) {
       elements.push(
         <line
@@ -77,33 +85,32 @@ export const GraphRow = memo(function GraphRow({ row, height = ROW_H }: Props) {
           y1={mid}
           x2={x2}
           y2={bot}
-          stroke={color}
+          stroke={stroke}
           strokeWidth={2}
         />,
       );
     } else {
-      // Cubic curve from (x1, mid) to (x2, bot).
       elements.push(
         <path
           key={`curve-${c.fromCol}-${c.toCol}`}
           d={`M ${x1} ${mid} C ${x1} ${(mid + bot) / 2}, ${x2} ${(mid + bot) / 2}, ${x2} ${bot}`}
           fill="none"
-          stroke={color}
+          stroke={stroke}
           strokeWidth={2}
         />,
       );
     }
   }
 
-  // 3) The dot.
+  // 4) The dot.
   elements.push(
     <circle
       key="dot"
       cx={dotX}
       cy={mid}
       r={DOT_R}
-      fill={`hsl(${HUE_VARS[row.dotColor]})`}
-      stroke="hsl(var(--background))"
+      fill={colorOf(row.dotColor)}
+      stroke="hsl(220 13% 9%)"
       strokeWidth={2}
     />,
   );

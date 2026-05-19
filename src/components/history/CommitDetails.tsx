@@ -29,6 +29,7 @@ export function CommitDetails() {
   });
   const files = useApp((s) => s.history.files);
   const filesLoading = useApp((s) => s.history.filesLoading);
+  const openDiff = useApp((s) => s.openDiff);
 
   const fullMessage = useMemo(() => commit?.summary ?? "", [commit]);
 
@@ -91,6 +92,7 @@ export function CommitDetails() {
           files.map((f) => (
             <div
               key={`${f.old_path ?? ""}->${f.path}`}
+              onClick={() => commit && openDiff(commit.oid, f.path, files)}
               className="flex cursor-pointer items-center gap-2 px-3.5 py-1 hover:bg-accent/50"
             >
               <span

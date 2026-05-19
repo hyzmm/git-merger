@@ -50,6 +50,22 @@ pub fn conflicts(path: String) -> R<Vec<git::ConflictFile>> {
 }
 
 #[tauri::command]
+pub fn merge_state(path: String) -> R<git::MergeState> {
+    Ok(git::merge::merge_state(&path)?)
+}
+
+#[tauri::command]
+pub fn conflict_content(path: String, file: String) -> R<git::ConflictContent> {
+    Ok(git::merge::conflict_content(&path, &file)?)
+}
+
+#[tauri::command]
+pub fn resolve_conflict(path: String, file: String, content: String) -> R<()> {
+    git::merge::resolve_conflict(&path, &file, &content)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_refs(path: String) -> R<Vec<git::RefEntry>> {
     Ok(git::refs::list_refs(&path)?)
 }

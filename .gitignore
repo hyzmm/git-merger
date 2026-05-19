@@ -33,3 +33,15 @@ src-tauri/gen
 # Misc
 *.tsbuildinfo
 .tsbuild/
+
+# Local helper files (dev/build logs, demo conflicts)
+.tauri-dev.log*
+.tauri-build.log*
+.design-preview.log*
+.gh-login.log*
+conflict-demo.txt
+
+# Lockfiles policy: keep bun.lock + Cargo.lock; ignore other tools' lockfiles
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

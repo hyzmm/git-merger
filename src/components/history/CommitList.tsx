@@ -31,6 +31,9 @@ export function CommitList() {
     [filtered],
   );
 
+  // Use the maximum lane count across all rows so dot columns line up vertically.
+  const graphCols = useMemo(() => Math.max(2, ...layout.map((r) => r.width)), [layout]);
+
   return (
     <section className="flex min-w-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
@@ -54,10 +57,12 @@ export function CommitList() {
                 selected && "bg-accent",
               )}
               style={{
-                gridTemplateColumns: `${Math.max(2, row?.width ?? 2) * 14}px 1fr 180px 110px 80px`,
+                gridTemplateColumns: `${graphCols * 14}px 1fr 180px 110px 80px`,
               }}
             >
-              <div className="flex h-7 items-center">{row && <GraphRow row={row} />}</div>
+              <div className="flex h-7 items-center">
+                {row && <GraphRow row={row} cols={graphCols} />}
+              </div>
               <div className="flex min-w-0 items-center gap-1.5">
                 <RefBadges refs={c.refs} />
                 <span className="truncate">{c.summary}</span>

@@ -6,6 +6,7 @@ pub mod merge;
 pub mod refs;
 pub mod repo;
 
+pub use merge::{ConflictContent, MergeState};
 pub use refs::{RefEntry, RefKind};
 
 use serde::{Deserialize, Serialize};

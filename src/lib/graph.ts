@@ -7,45 +7,26 @@
  *   - the set of "lane lines" passing through this row (top->bottom segments)
  *   - the set of curves: from this commit's dot to each parent, possibly
  *     switching lanes
- *
- * Algorithm: maintain an array `lanes`, where lanes[i] is the parent oid that
- * the lane is currently waiting for. When we visit a commit C with oid O:
- *   1. Find the lane index `col` whose value === O. If none, append a new lane.
- *   2. Output a dot at (row, col).
- *   3. For each parent P of C (in order):
- *      - If first parent: replace lanes[col] = P.
- *      - Else: try to find an existing lane already waiting for P (merge
- *        target); otherwise allocate a new lane on the right.
- *   4. If C had no parents (root), free `lanes[col] = null`.
  */
 
 export interface LaneSegment {
-  /** lane indices the line passes through this row vertically (top->bottom). */
   col: number;
-  color: number; // hue index 0..N
+  color: number;
 }
 
 export interface LaneCurve {
-  /** Where the curve starts (top of the row). */
   fromCol: number;
-  /** Where the curve ends (bottom of the row). */
   toCol: number;
   color: number;
-  /** "down": straight, "merge": merge into fromCol, "branch": branch off fromCol. */
   kind: "straight" | "merge" | "branch";
 }
 
 export interface RowLayout {
   oid: string;
-  /** column of the dot on this row */
   dotCol: number;
-  /** color index of the dot */
   dotColor: number;
-  /** straight vertical segments passing through (lane index + color) */
   through: LaneSegment[];
-  /** curves drawn for this row (commit->parent) */
   curves: LaneCurve[];
-  /** total lanes occupied at this row, used for SVG width */
   width: number;
 }
 
@@ -54,9 +35,9 @@ interface CommitInput {
   parents: string[];
 }
 
+type Lane = { waiting: string; color: number } | null;
+
 export function layoutGraph(commits: CommitInput[]): RowLayout[] {
-  /** Each lane stores either null (free) or { waiting: parentOid, color }. */
-  type Lane = { waiting: string; color: number } | null;
   const lanes: Lane[] = [];
   const oidColor = new Map<string, number>();
   let nextColor = 0;
@@ -79,27 +60,31 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
   const out: RowLayout[] = [];
 
   for (const c of commits) {
-    // Snapshot lanes at top of row.
-    const lanesBefore = lanes.map((l) => (l ? { ...l } : null));
-
-    // Find this commit's lane (some lane is waiting for it). If none, allocate.
+    // 1) Determine the dot column. If some lane is already waiting for this
+    //    commit, reuse it; otherwise allocate a fresh lane.
     let col = lanes.findIndex((l) => l !== null && l.waiting === c.oid);
     let dotColor: number;
     if (col === -1) {
-      col = findFreeLane();
+      col = findFreeLane(); // may push a null entry
       dotColor = colorFor(c.oid);
+      lanes[col] = { waiting: c.oid, color: dotColor }; // placeholder so snapshot captures it
     } else {
       dotColor = lanes[col]!.color;
     }
 
-    // Process parents.
+    // 2) Snapshot the lanes BEFORE we mutate them for parents. Note: lanes now
+    //    contains an entry at `col` waiting for c.oid, which represents the
+    //    line *coming into* this row from above.
+    const lanesBefore: Lane[] = lanes.map((l) => (l ? { ...l } : null));
+
+    // 3) Process parents.
     const parents = c.parents;
-    // First parent continues the current lane.
     if (parents.length === 0) {
+      // Root commit: this lane terminates here.
       lanes[col] = null;
     } else {
+      // First parent continues this lane.
       lanes[col] = { waiting: parents[0], color: dotColor };
-      // Other parents allocate (or reuse if some other lane already waits for it).
       for (let i = 1; i < parents.length; i++) {
         const p = parents[i];
         const existing = lanes.findIndex((l) => l !== null && l.waiting === p);
@@ -107,41 +92,40 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
           const idx = findFreeLane();
           lanes[idx] = { waiting: p, color: colorFor(p) };
         }
-        // else: leave it as-is; the curve will merge there.
+        // else: that parent is already waited on by another lane; the curve
+        // will simply merge into it.
       }
     }
 
-    // Snapshot lanes at bottom of row.
-    const lanesAfter = lanes.map((l) => (l ? { ...l } : null));
+    // 4) Snapshot the lanes AFTER mutations.
+    const lanesAfter: Lane[] = lanes.map((l) => (l ? { ...l } : null));
 
-    // Build "through" segments: any lane that is non-null in BOTH before & after
-    // and not the dot column counts as passing through.
+    // 5) Build "through" segments — lanes that pass through this row vertically
+    //    (i.e. were occupied at top AND at bottom with same target, and are not
+    //    the dot column).
     const through: LaneSegment[] = [];
     const maxLen = Math.max(lanesBefore.length, lanesAfter.length);
     for (let i = 0; i < maxLen; i++) {
+      if (i === col) continue;
       const b = lanesBefore[i] ?? null;
       const a = lanesAfter[i] ?? null;
-      if (i === col) continue;
       if (b && a && b.waiting === a.waiting) {
         through.push({ col: i, color: b.color });
       }
     }
 
-    // Build curves.
+    // 6) Build curves — one per parent, going from `col` (top half of dot) to
+    //    the lane that ends up waiting for that parent (bottom half).
     const curves: LaneCurve[] = [];
-    // a) The "incoming" lane: if before had a lane !== col waiting for c.oid we'd
-    //    have used it as col already — so no incoming merge from a different col.
-    // b) For each parent of c, draw a curve from `col` to the lane that ends up
-    //    waiting for that parent.
     parents.forEach((p, i) => {
       const targetCol = lanes.findIndex((l) => l !== null && l.waiting === p);
       if (targetCol === -1) return;
+      const targetLane = lanes[targetCol];
+      if (!targetLane) return;
       if (i === 0) {
         if (targetCol === col) {
           curves.push({ fromCol: col, toCol: col, color: dotColor, kind: "straight" });
         } else {
-          // First parent shifted columns (rare, but possible if first parent was
-          // already in another lane). Treat as "merge" visually.
           curves.push({
             fromCol: col,
             toCol: targetCol,
@@ -150,26 +134,23 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
           });
         }
       } else {
-        // Secondary parent: branching out (or merging into existing lane).
-        const wasExisting =
-          lanesBefore[targetCol] !== null && lanesBefore[targetCol]!.waiting === p;
+        const before = lanesBefore[targetCol];
+        const wasExisting = !!before && before.waiting === p;
         curves.push({
           fromCol: col,
           toCol: targetCol,
-          color: lanes[targetCol]!.color,
+          color: targetLane.color,
           kind: wasExisting ? "merge" : "branch",
         });
       }
     });
 
-    // Trim trailing null lanes for tighter width estimate.
-    while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop();
-
     const width = Math.max(
+      1,
       lanesBefore.length,
       lanesAfter.length,
       col + 1,
-      ...curves.map((c) => Math.max(c.fromCol, c.toCol) + 1),
+      ...curves.map((cc) => Math.max(cc.fromCol, cc.toCol) + 1),
     );
 
     out.push({
