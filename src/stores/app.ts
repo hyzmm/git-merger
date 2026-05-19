@@ -198,7 +198,7 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ history: { ...s.history, loading: true, error: null } }));
     try {
       const [commits, refs] = await Promise.all([
-        git.log(repo.path, 500, 0),
+        git.log(repo.path, 5000, 0),
         git.listRefs(repo.path),
       ]);
       set((s) => ({
