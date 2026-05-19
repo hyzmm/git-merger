@@ -1,24 +1,29 @@
 import type { ReactNode } from "react";
 import { type WordToken } from "@/lib/wordDiff";
+import type { Token } from "@/lib/highlighter";
 import { cn } from "@/lib/utils";
 
 /** Render the visible content of a single diff line. */
 function LineContent({
   content,
   showWhitespace,
-  tokens,
+  wordTokens,
+  syntaxTokens,
 }: {
   content: string;
   showWhitespace: boolean;
-  tokens?: WordToken[];
+  /** Word-level diff highlights (take precedence over syntax highlighting). */
+  wordTokens?: WordToken[];
+  /** Shiki syntax highlight tokens (used only when wordTokens is absent). */
+  syntaxTokens?: Token[];
 }) {
   // Strip the trailing newline that git2 includes in line content.
   const text = content.replace(/\r?\n$/, "");
 
-  if (tokens && tokens.length > 0) {
+  if (wordTokens && wordTokens.length > 0) {
     return (
       <span>
-        {tokens.map((t, i) => (
+        {wordTokens.map((t, i) => (
           <span
             key={i}
             className={cn(
@@ -32,6 +37,26 @@ function LineContent({
       </span>
     );
   }
+
+  if (syntaxTokens && syntaxTokens.length > 0) {
+    return (
+      <span>
+        {syntaxTokens.map((t, i) => (
+          <span
+            key={i}
+            style={{
+              color: t.color,
+              fontStyle: t.italic ? "italic" : undefined,
+              fontWeight: t.bold ? 600 : undefined,
+            }}
+          >
+            {showWhitespace ? renderWhitespace(t.text) : t.text}
+          </span>
+        ))}
+      </span>
+    );
+  }
+
   return <span>{showWhitespace ? renderWhitespace(text) : text}</span>;
 }
 
@@ -63,13 +88,15 @@ export function DiffLineCell({
   origin,
   lineno,
   content,
-  tokens,
+  wordTokens,
+  syntaxTokens,
   showWhitespace,
 }: {
   origin: " " | "+" | "-" | null;
   lineno: number | null;
   content: string;
-  tokens?: WordToken[];
+  wordTokens?: WordToken[];
+  syntaxTokens?: Token[];
   showWhitespace: boolean;
 }) {
   const bg =
@@ -102,7 +129,12 @@ export function DiffLineCell({
         {origin === " " ? "" : (origin ?? "")}
       </span>
       <span className="overflow-x-auto whitespace-pre pr-3">
-        <LineContent content={content} showWhitespace={showWhitespace} tokens={tokens} />
+        <LineContent
+          content={content}
+          showWhitespace={showWhitespace}
+          wordTokens={wordTokens}
+          syntaxTokens={syntaxTokens}
+        />
       </span>
     </div>
   );

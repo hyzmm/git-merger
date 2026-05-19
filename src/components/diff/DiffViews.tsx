@@ -1,12 +1,39 @@
 import { useMemo } from "react";
 import { useApp } from "@/stores/app";
 import { DiffLineCell } from "./DiffPrimitives";
-import { pairLines } from "@/lib/pairLines";
+import { pairLines, type PairedLine } from "@/lib/pairLines";
+import { useHighlight } from "@/lib/useHighlight";
 import { cn } from "@/lib/utils";
+import type { DiffHunk } from "@/ipc/git";
+
+function stripNL(s: string): string {
+  return s.replace(/\r?\n$/, "");
+}
+
+/** Build per-side full source lines for syntax highlighting from a list of
+ *  paired lines. Empty (alignment) cells become empty strings so token
+ *  arrays stay 1:1 with rows. */
+function extractSidesFromPairs(pairs: PairedLine[]) {
+  const left: string[] = [];
+  const right: string[] = [];
+  for (const p of pairs) {
+    left.push(p.oldOrigin === null ? "" : stripNL(p.oldContent));
+    right.push(p.newOrigin === null ? "" : stripNL(p.newContent));
+  }
+  return { left, right };
+}
+
+function extractUnifiedSource(hunks: DiffHunk[]) {
+  // Each line independently. Context + add lines reflect the new file; del
+  // lines reflect the old file. For coloring purposes either is fine — we
+  // only need plausible language structure inside a hunk.
+  return hunks.flatMap((h) => h.lines.map((ln) => stripNL(ln.content)));
+}
 
 export function SideBySide() {
   const fileDiff = useApp((s) => s.diff.fileDiff);
   const showWhitespace = useApp((s) => s.diff.showWhitespace);
+  const filename = useApp((s) => s.diff.selectedFile ?? "");
 
   const hunks = useMemo(() => {
     if (!fileDiff) return [];
@@ -15,6 +42,24 @@ export function SideBySide() {
       pairs: pairLines(h.lines),
     }));
   }, [fileDiff]);
+
+  // Concatenate all hunks side-by-side; tokens come back as a flat 2D array
+  // and we slice it back per hunk.
+  const { leftLines, rightLines, hunkOffsets } = useMemo(() => {
+    const left: string[] = [];
+    const right: string[] = [];
+    const offsets: number[] = [];
+    for (const h of hunks) {
+      offsets.push(left.length);
+      const sides = extractSidesFromPairs(h.pairs);
+      left.push(...sides.left);
+      right.push(...sides.right);
+    }
+    return { leftLines: left, rightLines: right, hunkOffsets: offsets };
+  }, [hunks]);
+
+  const leftTokens = useHighlight(leftLines, filename);
+  const rightTokens = useHighlight(rightLines, filename);
 
   if (!fileDiff) return null;
   if (fileDiff.is_binary) {
@@ -27,16 +72,20 @@ export function SideBySide() {
         {hunks.map((h, hi) => (
           <div key={hi}>
             <HunkHeader text={h.header} />
-            {h.pairs.map((p, i) => (
-              <DiffLineCell
-                key={`L${hi}-${i}`}
-                origin={p.oldOrigin}
-                lineno={p.oldLineno}
-                content={p.oldContent}
-                tokens={p.leftTokens}
-                showWhitespace={showWhitespace}
-              />
-            ))}
+            {h.pairs.map((p, i) => {
+              const tokRow = leftTokens?.[hunkOffsets[hi] + i];
+              return (
+                <DiffLineCell
+                  key={`L${hi}-${i}`}
+                  origin={p.oldOrigin}
+                  lineno={p.oldLineno}
+                  content={p.oldContent}
+                  wordTokens={p.leftTokens}
+                  syntaxTokens={p.oldOrigin !== null ? tokRow : undefined}
+                  showWhitespace={showWhitespace}
+                />
+              );
+            })}
           </div>
         ))}
       </div>
@@ -44,16 +93,20 @@ export function SideBySide() {
         {hunks.map((h, hi) => (
           <div key={hi}>
             <HunkHeader text={h.header} />
-            {h.pairs.map((p, i) => (
-              <DiffLineCell
-                key={`R${hi}-${i}`}
-                origin={p.newOrigin}
-                lineno={p.newLineno}
-                content={p.newContent}
-                tokens={p.rightTokens}
-                showWhitespace={showWhitespace}
-              />
-            ))}
+            {h.pairs.map((p, i) => {
+              const tokRow = rightTokens?.[hunkOffsets[hi] + i];
+              return (
+                <DiffLineCell
+                  key={`R${hi}-${i}`}
+                  origin={p.newOrigin}
+                  lineno={p.newLineno}
+                  content={p.newContent}
+                  wordTokens={p.rightTokens}
+                  syntaxTokens={p.newOrigin !== null ? tokRow : undefined}
+                  showWhitespace={showWhitespace}
+                />
+              );
+            })}
           </div>
         ))}
       </div>
@@ -64,26 +117,36 @@ export function SideBySide() {
 export function Unified() {
   const fileDiff = useApp((s) => s.diff.fileDiff);
   const showWhitespace = useApp((s) => s.diff.showWhitespace);
+  const filename = useApp((s) => s.diff.selectedFile ?? "");
+
+  const hunks = useMemo(() => fileDiff?.hunks ?? [], [fileDiff]);
+  const flatLines = useMemo(() => extractUnifiedSource(hunks), [hunks]);
+  const tokens = useHighlight(flatLines, filename);
 
   if (!fileDiff) return null;
   if (fileDiff.is_binary) {
     return <div className="p-4 text-xs text-muted-foreground">Binary file — no preview.</div>;
   }
 
+  let cursor = 0;
   return (
     <div className="h-full min-h-0 overflow-auto bg-background text-[12px]">
-      {fileDiff.hunks.map((h, hi) => (
+      {hunks.map((h, hi) => (
         <div key={hi}>
           <HunkHeader text={h.header} />
-          {h.lines.map((ln, i) => (
-            <DiffLineCell
-              key={`U${hi}-${i}`}
-              origin={ln.origin}
-              lineno={ln.origin === "-" ? ln.old_lineno : ln.new_lineno}
-              content={ln.content}
-              showWhitespace={showWhitespace}
-            />
-          ))}
+          {h.lines.map((ln, i) => {
+            const tokRow = tokens?.[cursor++];
+            return (
+              <DiffLineCell
+                key={`U${hi}-${i}`}
+                origin={ln.origin}
+                lineno={ln.origin === "-" ? ln.old_lineno : ln.new_lineno}
+                content={ln.content}
+                syntaxTokens={tokRow}
+                showWhitespace={showWhitespace}
+              />
+            );
+          })}
         </div>
       ))}
     </div>
