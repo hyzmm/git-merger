@@ -91,6 +91,18 @@ export interface ConflictContent {
   working: string | null;
 }
 
+export interface BlameLine {
+  line: number;
+  oid: string;
+  short_oid: string;
+  summary: string;
+  author_name: string;
+  author_email: string;
+  /** unix seconds */
+  time: number;
+  content: string;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -110,4 +122,5 @@ export const git = {
   commitMerge: (path: string, message?: string) =>
     invoke<string>("commit_merge", { path, message: message ?? null }),
   listRefs: (path: string) => invoke<RefEntry[]>("list_refs", { path }),
+  blameFile: (path: string, file: string) => invoke<BlameLine[]>("blame_file", { path, file }),
 };

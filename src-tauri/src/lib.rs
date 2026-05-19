@@ -18,6 +18,7 @@ pub fn run() {
             commands::abort_merge,
             commands::commit_merge,
             commands::list_refs,
+            commands::blame_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   git,
+  type BlameLine,
   type CommitSummary,
   type ConflictContent,
   type ConflictFile,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 
-export type ViewKey = "history" | "diff" | "merge";
+export type ViewKey = "history" | "diff" | "merge" | "blame";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -59,6 +60,13 @@ interface MergeView {
   error: string | null;
 }
 
+interface BlameView {
+  file: string | null;
+  lines: BlameLine[];
+  loading: boolean;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -68,6 +76,7 @@ interface AppState {
   history: HistoryState;
   diff: DiffState;
   merge: MergeView;
+  blame: BlameView;
 
   recentRepos: RecentRepo[];
 
@@ -96,6 +105,9 @@ interface AppState {
   resolveCurrentFile: () => Promise<void>;
   abortMerge: () => Promise<void>;
   commitMerge: (message?: string) => Promise<void>;
+
+  // blame
+  openBlame: (file: string) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -131,6 +143,13 @@ const emptyMerge: MergeView = {
   error: null,
 };
 
+const emptyBlame: BlameView = {
+  file: null,
+  lines: [],
+  loading: false,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -139,6 +158,7 @@ export const useApp = create<AppState>((set, get) => ({
   history: { ...emptyHistory },
   diff: { ...emptyDiff },
   merge: { ...emptyMerge, resolvedFiles: new Set() },
+  blame: { ...emptyBlame },
 
   recentRepos: loadRecent(),
 
@@ -395,6 +415,21 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadHistory();
     } catch (e) {
       set((s) => ({ merge: { ...s.merge, loading: false, error: String(e) } }));
+    }
+  },
+
+  openBlame: async (file: string) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({
+      view: "blame",
+      blame: { ...s.blame, file, loading: true, error: null, lines: [] },
+    }));
+    try {
+      const lines = await git.blameFile(repo.path, file);
+      set((s) => (s.blame.file === file ? { blame: { ...s.blame, lines, loading: false } } : s));
+    } catch (e) {
+      set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
     }
   },
 }));

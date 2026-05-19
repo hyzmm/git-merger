@@ -1,11 +1,13 @@
 //! Shared types + module exports for the git layer.
 
+pub mod blame;
 pub mod diff;
 pub mod log;
 pub mod merge;
 pub mod refs;
 pub mod repo;
 
+pub use blame::BlameLine;
 pub use merge::{ConflictContent, MergeState};
 pub use refs::{RefEntry, RefKind};
 

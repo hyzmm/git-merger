@@ -12,6 +12,7 @@ export function DiffViewer() {
   const setMode = useApp((s) => s.setDiffMode);
   const showWhitespace = useApp((s) => s.diff.showWhitespace);
   const toggleWhitespace = useApp((s) => s.toggleWhitespace);
+  const openBlame = useApp((s) => s.openBlame);
 
   if (!oid || !file) {
     return (
@@ -35,6 +36,17 @@ export function DiffViewer() {
           </SegBtn>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => file && openBlame(file)}
+            disabled={!file}
+            className={cn(
+              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+              !file && "cursor-not-allowed opacity-50",
+            )}
+            title="Show git blame for this file"
+          >
+            Blame
+          </button>
           <button
             onClick={toggleWhitespace}
             className={cn(

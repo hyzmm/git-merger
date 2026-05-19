@@ -5,6 +5,7 @@ import { Topbar } from "@/components/Topbar";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
+import { BlamePage } from "@/pages/BlamePage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -15,8 +16,6 @@ export default function App() {
   const applyResolution = useApp((s) => s.applyResolution);
   const chunks = useApp((s) => s.merge.chunks);
 
-  // Find the conflict-chunk index in `chunks` that is currently first pending,
-  // for shortcut-based navigation. Memoized so we don't recompute every key press.
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
       if (c.kind === "conflict" && c.resolution === "pending") return c.index;
@@ -52,8 +51,10 @@ export default function App() {
             <HistoryPage />
           ) : view === "diff" ? (
             <DiffPage />
-          ) : (
+          ) : view === "merge" ? (
             <MergePage />
+          ) : (
+            <BlamePage />
           )}
         </main>
       </div>

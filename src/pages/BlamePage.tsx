@@ -1,0 +1,179 @@
+import { useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useApp } from "@/stores/app";
+import { useHighlight } from "@/lib/useHighlight";
+import { timeAgo } from "@/lib/time";
+import { cn } from "@/lib/utils";
+import type { BlameLine } from "@/ipc/git";
+
+const ROW_HEIGHT = 20;
+
+export function BlamePage() {
+  const file = useApp((s) => s.blame.file);
+  const lines = useApp((s) => s.blame.lines);
+  const loading = useApp((s) => s.blame.loading);
+  const error = useApp((s) => s.blame.error);
+  const setView = useApp((s) => s.setView);
+  const selectCommit = useApp((s) => s.selectCommit);
+
+  // Group consecutive lines from the same commit so we only render blame
+  // metadata once per group (IDEA-style).
+  const groups = useMemo(() => groupByCommit(lines), [lines]);
+
+  const sourceLines = useMemo(() => lines.map((l) => l.content), [lines]);
+  const tokens = useHighlight(sourceLines, file ?? "");
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const virtualizer = useVirtualizer({
+    count: lines.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 30,
+  });
+
+  if (!file) {
+    return (
+      <section className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        Open a file from the Diff view, then click{" "}
+        <span className="ml-1 mr-1 font-mono">Blame</span> to inspect line-by-line history.
+      </section>
+    );
+  }
+
+  return (
+    <section className="flex h-full min-w-0 flex-col">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
+        <span className="truncate font-mono">{file}</span>
+        <span className="text-[10.5px] text-muted-foreground">
+          {lines.length} lines · {groups.length} commits
+        </span>
+        {loading && <span className="text-[10.5px] text-muted-foreground">loading...</span>}
+        {error && <span className="ml-2 text-[10.5px] text-destructive">{error}</span>}
+        <div className="ml-auto">
+          <button
+            onClick={() => setView("diff")}
+            className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+          >
+            Back to Diff
+          </button>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-background">
+        <div
+          style={{
+            height: virtualizer.getTotalSize(),
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const i = vRow.index;
+            const ln = lines[i];
+            if (!ln) return null;
+            const groupHead = i === 0 || lines[i - 1].oid !== ln.oid;
+            const tokRow = tokens?.[i];
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "absolute left-0 top-0 grid w-full font-mono text-[12px] leading-[20px]",
+                  groupHead && "border-t border-border/40",
+                )}
+                style={{
+                  height: ROW_HEIGHT,
+                  transform: `translateY(${vRow.start}px)`,
+                  gridTemplateColumns: "120px 110px 70px 50px 1fr",
+                  columnGap: 8,
+                }}
+              >
+                {/* Author */}
+                <div
+                  className={cn(
+                    "truncate px-2 text-[11px] text-muted-foreground",
+                    !groupHead && "opacity-0",
+                  )}
+                  title={`${ln.author_name} <${ln.author_email}>`}
+                >
+                  {ln.author_name}
+                </div>
+
+                {/* Time */}
+                <div
+                  className={cn(
+                    "truncate text-[11px] text-muted-foreground",
+                    !groupHead && "opacity-0",
+                  )}
+                >
+                  {timeAgo(ln.time)}
+                </div>
+
+                {/* Short oid (clickable) */}
+                <button
+                  onClick={() => {
+                    void selectCommit(ln.oid);
+                    setView("history");
+                  }}
+                  className={cn(
+                    "truncate text-left text-[11px] text-[hsl(var(--branch-1))] hover:underline",
+                    !groupHead && "opacity-0",
+                  )}
+                  title={`${ln.oid}\n${ln.summary}`}
+                >
+                  {ln.short_oid}
+                </button>
+
+                {/* Line number */}
+                <div className="select-none bg-[hsl(var(--diff-gutter,220_13%_13%))] pr-2 text-right text-[11px] text-muted-foreground">
+                  {ln.line}
+                </div>
+
+                {/* Content */}
+                <div className="overflow-x-auto whitespace-pre pr-3">
+                  {tokRow ? (
+                    tokRow.map((t, ti) => (
+                      <span
+                        key={ti}
+                        style={{
+                          color: t.color,
+                          fontStyle: t.italic ? "italic" : undefined,
+                          fontWeight: t.bold ? 600 : undefined,
+                        }}
+                      >
+                        {t.text}
+                      </span>
+                    ))
+                  ) : (
+                    <span>{ln.content}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+interface BlameGroup {
+  oid: string;
+  start: number;
+  end: number;
+  /** kept for the head row */
+  head: BlameLine;
+}
+
+function groupByCommit(lines: BlameLine[]): BlameGroup[] {
+  const out: BlameGroup[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    const last = out[out.length - 1];
+    if (last && last.oid === ln.oid) {
+      last.end = i;
+    } else {
+      out.push({ oid: ln.oid, start: i, end: i, head: ln });
+    }
+  }
+  return out;
+}

@@ -80,3 +80,8 @@ pub fn commit_merge(path: String, message: Option<String>) -> R<String> {
 pub fn list_refs(path: String) -> R<Vec<git::RefEntry>> {
     Ok(git::refs::list_refs(&path)?)
 }
+
+#[tauri::command]
+pub fn blame_file(path: String, file: String) -> R<Vec<git::BlameLine>> {
+    Ok(git::blame::blame_file(&path, &file)?)
+}
