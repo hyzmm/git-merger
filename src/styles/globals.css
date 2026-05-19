@@ -2,9 +2,23 @@
 
 /* ---- shadcn/ui design tokens (Tailwind v4 CSS-first config) ---- */
 @theme {
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Sans-serif: prefer the platform native UI font; CJK falls back to a
+     platform-appropriate Han Sans so Chinese/Japanese/Korean glyphs render
+     well even though we ship no font files. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Inter", system-ui,
+    "Roboto", "Helvetica Neue", "Helvetica", "Arial", "PingFang SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Source Han Sans SC", "Source Han Sans CN", "Noto Sans CJK SC",
+    "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji";
+
+  /* Monospace: same idea — pick the best system mono first, then provide a
+     CJK mono fallback so 中文 columns line up with code. */
   --font-mono:
-    "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    ui-monospace, "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Fira Code", SFMono-Regular,
+    "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Courier New", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans Mono CJK SC",
+    monospace;
 
   --radius-lg: 0.75rem;
   --radius-md: 0.5rem;
@@ -103,6 +117,28 @@ body,
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Prefer fixed-width digits so commit times / line numbers / +N/-N stats
+     line up across rows, even in proportional fonts. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Anything tagged as code / monospace also gets common-ligatures + tabular
+   numerics so things like `=>`, `!=`, `>=` look modern when the system
+   font supports them (Cascadia Code, SF Mono, JetBrains Mono, Fira Code). */
+code,
+kbd,
+pre,
+samp,
+.font-mono,
+[class*="font-mono"] {
+  font-family: var(--font-mono);
+  font-feature-settings:
+    "calt" 1,
+    "liga" 1,
+    "tnum" 1,
+    "zero" 1; /* slashed zero for clearer 0/O distinction */
 }
 
 /* Native-feeling scrollbars */
