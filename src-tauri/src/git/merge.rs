@@ -143,3 +143,80 @@ pub fn resolve_conflict(path: &str, file: &str, content: &str) -> Result<(), git
     index.write()?;
     Ok(())
 }
+
+/// Read MERGE_HEAD (one line per parent oid) so we know what the user is
+/// merging in.
+fn read_merge_heads(repo: &Repository) -> Result<Vec<git2::Oid>, git2::Error> {
+    let path = repo.path().join("MERGE_HEAD");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| git2::Error::from_str(&format!("read MERGE_HEAD failed: {e}")))?;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        out.push(git2::Oid::from_str(trimmed)?);
+    }
+    Ok(out)
+}
+
+/// Read MERGE_MSG to use as the default commit message body.
+fn read_merge_msg(repo: &Repository) -> Option<String> {
+    let path = repo.path().join("MERGE_MSG");
+    std::fs::read_to_string(&path).ok()
+}
+
+/// Abort the in-progress merge: hard-reset the working tree and index back to
+/// HEAD, and clean up `.git/MERGE_*` markers.
+pub fn abort_merge(path: &str) -> Result<(), git2::Error> {
+    let repo = Repository::discover(path)?;
+    let head = repo.head()?.peel_to_commit()?;
+    repo.reset(head.as_object(), git2::ResetType::Hard, None)?;
+    repo.cleanup_state()?;
+    Ok(())
+}
+
+/// Commit the resolved merge: requires that the index has no conflicts,
+/// uses HEAD + MERGE_HEAD as parents, and `MERGE_MSG` (or a default) as the
+/// commit message. Returns the new commit oid as a hex string.
+pub fn commit_merge(path: &str, message: Option<&str>) -> Result<String, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let mut index = repo.index()?;
+    if index.has_conflicts() {
+        return Err(git2::Error::from_str(
+            "index still has conflicts; resolve all of them before committing",
+        ));
+    }
+
+    // Build the new tree from the index.
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+
+    // Parents: HEAD + every MERGE_HEAD oid.
+    let head_commit = repo.head()?.peel_to_commit()?;
+    let merge_heads = read_merge_heads(&repo)?;
+    let mut parents: Vec<git2::Commit<'_>> = Vec::with_capacity(1 + merge_heads.len());
+    parents.push(head_commit);
+    for oid in &merge_heads {
+        parents.push(repo.find_commit(*oid)?);
+    }
+    let parents_ref: Vec<&git2::Commit<'_>> = parents.iter().collect();
+
+    // Commit message: explicit > MERGE_MSG > generic.
+    let msg_owned = match message.map(str::to_string) {
+        Some(s) if !s.trim().is_empty() => s,
+        _ => read_merge_msg(&repo).unwrap_or_else(|| "Merge".to_string()),
+    };
+    let msg = msg_owned.trim();
+
+    // Author / committer come from the user's git config.
+    let sig = repo.signature()?;
+
+    let new_oid = repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents_ref)?;
+
+    // Clean up MERGE_HEAD / MERGE_MSG / etc.
+    repo.cleanup_state()?;
+
+    Ok(new_oid.to_string())
+}

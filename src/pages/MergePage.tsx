@@ -1,6 +1,7 @@
 import { useApp } from "@/stores/app";
 import { ConflictsList } from "@/components/merge/ConflictsList";
 import { ThreeWayEditor } from "@/components/merge/ThreeWayEditor";
+import { cn } from "@/lib/utils";
 
 const STATE_LABEL: Record<string, string> = {
   clean: "Clean — no merge in progress",
@@ -18,8 +19,16 @@ const STATE_LABEL: Record<string, string> = {
 export function MergePage() {
   const state = useApp((s) => s.merge.state);
   const conflicts = useApp((s) => s.merge.conflicts);
+  const resolvedFiles = useApp((s) => s.merge.resolvedFiles);
   const error = useApp((s) => s.merge.error);
   const loading = useApp((s) => s.merge.loading);
+  const abortMerge = useApp((s) => s.abortMerge);
+  const commitMerge = useApp((s) => s.commitMerge);
+
+  // Commit-merge becomes available once every conflict has been staged.
+  // git2's index reload (after resolve_conflict) will eventually report the
+  // empty conflicts list; we treat conflicts.length === 0 as the trigger.
+  const allResolved = conflicts.length === 0 && state !== "clean";
 
   if (state === "clean" && conflicts.length === 0 && !loading) {
     return (
@@ -41,6 +50,20 @@ export function MergePage() {
     );
   }
 
+  async function onAbort() {
+    if (
+      !confirm(
+        "Abort the in-progress merge? This will discard the merged changes and reset the working tree to HEAD.",
+      )
+    )
+      return;
+    await abortMerge();
+  }
+
+  async function onCommit() {
+    await commitMerge();
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
@@ -54,9 +77,40 @@ export function MergePage() {
         >
           {STATE_LABEL[state] ?? state}
         </span>
-        <span className="text-muted-foreground">{conflicts.length} conflict files</span>
+        <span className="text-muted-foreground">
+          {conflicts.length} conflict file{conflicts.length === 1 ? "" : "s"}
+        </span>
+        {resolvedFiles.size > 0 && (
+          <span className="text-muted-foreground">· {resolvedFiles.size} staged</span>
+        )}
         {loading && <span className="text-muted-foreground">· loading...</span>}
-        {error && <span className="ml-auto text-destructive">{error}</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {error && <span className="text-destructive">{error}</span>}
+          <button
+            onClick={onAbort}
+            disabled={loading || state === "clean"}
+            className={cn(
+              "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
+              (loading || state === "clean") && "cursor-not-allowed opacity-60",
+            )}
+            title="Abort merge — reset working tree to HEAD and clear MERGE_HEAD"
+          >
+            Abort merge
+          </button>
+          <button
+            onClick={onCommit}
+            disabled={loading || !allResolved}
+            className={cn(
+              "h-7 rounded-md px-3 text-xs font-medium",
+              allResolved && !loading
+                ? "bg-primary text-primary-foreground hover:opacity-90"
+                : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
+            )}
+            title="Commit the merge using HEAD + MERGE_HEAD as parents"
+          >
+            Commit merge
+          </button>
+        </div>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr]">
         <div className="min-h-0 border-r border-border">

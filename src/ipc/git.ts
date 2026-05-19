@@ -106,5 +106,8 @@ export const git = {
     invoke<ConflictContent>("conflict_content", { path, file }),
   resolveConflict: (path: string, file: string, content: string) =>
     invoke<void>("resolve_conflict", { path, file, content }),
+  abortMerge: (path: string) => invoke<void>("abort_merge", { path }),
+  commitMerge: (path: string, message?: string) =>
+    invoke<string>("commit_merge", { path, message: message ?? null }),
   listRefs: (path: string) => invoke<RefEntry[]>("list_refs", { path }),
 };

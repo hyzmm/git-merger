@@ -15,6 +15,8 @@ pub fn run() {
             commands::merge_state,
             commands::conflict_content,
             commands::resolve_conflict,
+            commands::abort_merge,
+            commands::commit_merge,
             commands::list_refs,
         ])
         .run(tauri::generate_context!())

@@ -94,6 +94,8 @@ interface AppState {
   applyResolution: (chunkIndex: number, choice: Resolution) => void;
   setResultText: (chunkIndex: number, text: string) => void;
   resolveCurrentFile: () => Promise<void>;
+  abortMerge: () => Promise<void>;
+  commitMerge: (message?: string) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -361,6 +363,38 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadMerge();
     } catch (e) {
       set((s) => ({ merge: { ...s.merge, error: String(e) } }));
+    }
+  },
+
+  abortMerge: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ merge: { ...s.merge, loading: true, error: null } }));
+    try {
+      await git.abortMerge(repo.path);
+      set({
+        merge: { ...emptyMerge, resolvedFiles: new Set() },
+      });
+      void get().loadMerge();
+      void get().loadHistory();
+    } catch (e) {
+      set((s) => ({ merge: { ...s.merge, loading: false, error: String(e) } }));
+    }
+  },
+
+  commitMerge: async (message?: string) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ merge: { ...s.merge, loading: true, error: null } }));
+    try {
+      await git.commitMerge(repo.path, message);
+      set({
+        merge: { ...emptyMerge, resolvedFiles: new Set() },
+      });
+      void get().loadMerge();
+      void get().loadHistory();
+    } catch (e) {
+      set((s) => ({ merge: { ...s.merge, loading: false, error: String(e) } }));
     }
   },
 }));

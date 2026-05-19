@@ -66,6 +66,17 @@ pub fn resolve_conflict(path: String, file: String, content: String) -> R<()> {
 }
 
 #[tauri::command]
+pub fn abort_merge(path: String) -> R<()> {
+    git::merge::abort_merge(&path)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn commit_merge(path: String, message: Option<String>) -> R<String> {
+    Ok(git::merge::commit_merge(&path, message.as_deref())?)
+}
+
+#[tauri::command]
 pub fn list_refs(path: String) -> R<Vec<git::RefEntry>> {
     Ok(git::refs::list_refs(&path)?)
 }
