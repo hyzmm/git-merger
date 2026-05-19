@@ -119,6 +119,13 @@ export interface WorkingFile {
   status: WorkingStatus;
 }
 
+export interface GitCmdResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  code: number;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -145,4 +152,14 @@ export const git = {
   discardFiles: (path: string, paths: string[]) => invoke<void>("discard_files", { path, paths }),
   commitChanges: (path: string, message: string) =>
     invoke<string>("commit_changes", { path, message }),
+  fetch: (path: string, remote?: string) =>
+    invoke<GitCmdResult>("git_fetch", { path, remote: remote ?? null }),
+  pull: (path: string) => invoke<GitCmdResult>("git_pull", { path }),
+  push: (path: string, opts?: { remote?: string; branch?: string; setUpstream?: boolean }) =>
+    invoke<GitCmdResult>("git_push", {
+      path,
+      remote: opts?.remote ?? null,
+      branch: opts?.branch ?? null,
+      setUpstream: opts?.setUpstream ?? false,
+    }),
 };

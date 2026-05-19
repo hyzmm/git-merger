@@ -113,3 +113,28 @@ pub fn discard_files(path: String, paths: Vec<String>) -> R<()> {
 pub fn commit_changes(path: String, message: String) -> R<String> {
     Ok(git::workspace::commit_changes(&path, &message)?)
 }
+
+#[tauri::command]
+pub fn git_fetch(path: String, remote: Option<String>) -> R<git::GitCmdResult> {
+    Ok(git::remote::fetch(&path, remote.as_deref())?)
+}
+
+#[tauri::command]
+pub fn git_pull(path: String) -> R<git::GitCmdResult> {
+    Ok(git::remote::pull(&path)?)
+}
+
+#[tauri::command]
+pub fn git_push(
+    path: String,
+    remote: Option<String>,
+    branch: Option<String>,
+    set_upstream: bool,
+) -> R<git::GitCmdResult> {
+    Ok(git::remote::push(
+        &path,
+        remote.as_deref(),
+        branch.as_deref(),
+        set_upstream,
+    )?)
+}

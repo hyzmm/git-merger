@@ -312,6 +312,77 @@ git merge --abort
 
 ---
 
+### 3.4 Changes（工作树面板）
+
+按 `Ctrl + 4` 或点 sidebar 第二个图标（FilePlus2）进入。
+
+```
+┌─[N changes  · M staged  · K unmerged]──[Select all][Clear][Stage][Unstage][Discard]─┐
+├──────────────────────────────────────────────────────┬──────────────────────────────┤
+│ UNMERGED (K)                                         │ Commit staged changes        │
+│ ☐ ! src/x.ts                       conflict          │                              │
+│                                                      │ ┌────────────────────────┐   │
+│ STAGED CHANGES (M)                                   │ │ Commit message         │   │
+│ ☑ M src/foo.ts                     staged            │ │                        │   │
+│ ☐ A src/lib/new.ts                 staged            │ │ Optional longer body…  │   │
+│                                                      │ └────────────────────────┘   │
+│ UNSTAGED CHANGES (...)                               │                              │
+│ ☐ M README.md                      unstaged          │ [Commit M files]             │
+│ ☐ ? .env.local                     untracked         │                              │
+└──────────────────────────────────────────────────────┴──────────────────────────────┘
+```
+
+操作流程：
+
+| 想做什么                       | 怎么做                                            |
+| ------------------------------ | ------------------------------------------------- |
+| 把单个文件加入暂存             | 勾选它 → 点 **Stage**                             |
+| 一次性暂存所有                 | **Select all** → **Stage**                        |
+| 把暂存的撤回到工作区           | 勾选 → **Unstage**                                |
+| 丢弃工作区改动（注意：不可逆） | 勾选 → **Discard** → 确认对话框                   |
+| 提交已暂存的内容               | 在右栏输入 commit message → 点 **Commit M files** |
+
+**状态字母**（A/M/D/R/T/?/!）跟 git 一致，行尾的 `staged` / `unstaged` / `both` / `untracked` / `conflict` 标签说明该文件在 index 和 working tree 中的位置。
+
+---
+
+### 3.5 Blame（行级历史）
+
+入口：在 **Diff 视图** toolbar 上点 **Blame** 按钮。
+
+```
+┌─src/lib/graph.ts  124 lines · 6 commits  [Back to Diff]──────────────────────────┐
+│ Alice    a day ago     6549119  │ 42 │ export function layoutGraph(...)         │
+│                                 │ 43 │   const lanes: Lane[] = [];               │
+│                                 │ 44 │   ...                                     │
+│ Bob      3 days ago    7f2bd84  │ 45 │   for (const c of commits) {              │
+│                                 │ 46 │     ...                                   │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- 同一 commit 修改的连续行**只在第一行显示作者/时间/oid**（IDEA 风格分组）
+- 短 oid **可点击** → 跳转到 History 视图并选中该 commit
+- 整列虚拟滚动 + Shiki 语法高亮
+
+---
+
+### 3.6 远程操作（Topbar 上的 Cloud / ↓ / ↑ 按钮）
+
+打开仓库后，topbar 出现 3 个按钮：
+
+| 按钮      | 实际命令                  |
+| --------- | ------------------------- |
+| **Fetch** | `git fetch --all --prune` |
+| **Pull**  | `git pull --ff-only`      |
+| **Push**  | `git push`                |
+
+- **凭据/SSH key 怎么处理**？这一版**直接调用您系统里的 `git`**（通过 `child_process`），所以**用户已配置的 git credential helper、SSH agent、2FA token 全部自然继承**——不需要在应用里再输一次密码
+- 命令完成后**会显示一个 banner**（绿色成功 / 红色失败），含完整 stdout/stderr，方便你看 git 的真实输出
+- 出错或成功时点 banner 右侧 **Dismiss** 关闭
+- **要求**：系统 PATH 里能找到 `git`（在 Windows 装了 git for Windows 即可）
+
+---
+
 ## 四、键盘快捷键
 
 | 快捷键             | 作用                                      | 适用视图 |
@@ -319,6 +390,7 @@ git merge --abort
 | `Ctrl + 1`         | 切到 History                              | 全局     |
 | `Ctrl + 2`         | 切到 Diff                                 | 全局     |
 | `Ctrl + 3`         | 切到 Merge                                | 全局     |
+| `Ctrl + 4`         | 切到 Changes（工作树）                    | 全局     |
 | `F5` 或 `Ctrl + R` | 刷新当前视图（重新拉取数据）              | 全局     |
 | `Alt + 1`          | 对**第一个 pending 冲突**执行 Accept Left | Merge    |
 | `Alt + 2`          | Accept Right（同上）                      | Merge    |

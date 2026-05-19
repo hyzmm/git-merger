@@ -24,6 +24,9 @@ pub fn run() {
             commands::unstage_files,
             commands::discard_files,
             commands::commit_changes,
+            commands::git_fetch,
+            commands::git_pull,
+            commands::git_push,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
