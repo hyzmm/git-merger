@@ -2,6 +2,8 @@
 
 IDEA-style **History / Diff / Merge** for any local Git repository, packaged as a cross-platform desktop app.
 
+> 👉 **End-user docs**: see [`USAGE.md`](./USAGE.md) for installation, keyboard shortcuts, typical workflows and FAQ.
+
 ## Tech stack (latest as of 2026-05)
 
 | Layer             | Choice                                                  |
@@ -84,12 +86,26 @@ G:\GitTools
 
 ## Roadmap
 
+### v0.1.0 — Shipped
+
 1. ✅ Skeleton (Tauri 2 + React 19 + Tailwind v4 + shadcn-ish tokens)
-2. 🚧 Rust git layer (log/diff/merge wired through git2-rs) — basic commands stubbed in
-3. ⏳ History page: commit DAG, filters, details panel
-4. ⏳ Diff page: side-by-side & unified, line/word-level highlighting, syntax highlighting (Shiki)
-5. ⏳ Merge page: 3-pane conflict editor, navigation, Accept Left/Right/Both
-6. ⏳ Open Design driven UI polish (per page HTML drafts under `design/`)
+2. ✅ Rust git layer — `repo` / `log` / `diff` / `merge` / `refs` fully wired through git2-rs (vendored libgit2). 10 typed `#[tauri::command]`s exposed.
+3. ✅ History page — DAG with 5-color lane assignment, ref chips (HEAD/branch/remote/tag), filter (message / author / oid / ref), commit details panel with file list (A/M/D/R/C/T + line stats) and full message.
+4. ✅ Diff page — side-by-side & unified modes, line-level coloring, **word-level** LCS-based highlighting on replace pairs, whitespace visualization (`·` / `→`), file tree grouped by directory.
+5. ✅ Merge page — 3-pane conflict editor (LEFT ours / RESULT editable / RIGHT theirs), conflict block parsing (`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`, diff3-aware), Accept Left/Right/Both per block, manual editing, "Mark resolved & stage" (writes file + `git add`).
+6. ✅ Global UX — global keyboard shortcuts (`Ctrl+1/2/3` switch view, `F5`/`Ctrl+R` refresh, `Alt+1/2/3` accept in merge), Refresh button, Recent repositories (localStorage), top-level `ErrorBoundary`, IDEA-style dark theme.
+7. ✅ Open Design driven UI — per-page HTML drafts in `design/` (history.html / diff.html / merge.html / index.html sharing `design.css`); the React implementation is a 1:1 port of those drafts.
+8. ✅ Distribution — `bun run tauri:build` produces signed-ready Windows MSI (~2.7 MB) and NSIS (~2.0 MB) installers; release-profile binary is ~5.4 MB after LTO + strip. macOS `.dmg` / Linux `.deb`/`.rpm`/`.AppImage` build from the same source on those platforms.
+
+### Backlog (post-v0.1.0)
+
+- ⏳ Syntax highlighting in the diff viewer (Shiki) — token slots already reserved in CSS.
+- ⏳ Blame view — `git2::Blame` already available, only UI missing.
+- ⏳ Stage / Unstage / Stash workspace panel (IDEA "Local Changes" equivalent).
+- ⏳ Pull / Push / Fetch via `git2::Remote`.
+- ⏳ Built-in "Abort merge" / "Commit merge" buttons (today: drop to terminal).
+- ⏳ Virtual scrolling for very large repos (>100k commits).
+- ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 
 ## Cross-platform notes
 
