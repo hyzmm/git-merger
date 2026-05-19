@@ -10,6 +10,7 @@ import {
   type MergeState,
   type RefEntry,
   type RepoInfo,
+  type WorkingFile,
 } from "@/ipc/git";
 import {
   joinChunks,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 
-export type ViewKey = "history" | "diff" | "merge" | "blame";
+export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -67,6 +68,15 @@ interface BlameView {
   error: string | null;
 }
 
+interface ChangesView {
+  files: WorkingFile[];
+  selected: Set<string>;
+  message: string;
+  loading: boolean;
+  committing: boolean;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -77,6 +87,7 @@ interface AppState {
   diff: DiffState;
   merge: MergeView;
   blame: BlameView;
+  changes: ChangesView;
 
   recentRepos: RecentRepo[];
 
@@ -108,6 +119,17 @@ interface AppState {
 
   // blame
   openBlame: (file: string) => Promise<void>;
+
+  // changes (working tree)
+  loadChanges: () => Promise<void>;
+  toggleChange: (path: string) => void;
+  selectAllChanges: () => void;
+  clearChangeSelection: () => void;
+  stageSelected: () => Promise<void>;
+  unstageSelected: () => Promise<void>;
+  discardSelected: () => Promise<void>;
+  setCommitMessage: (m: string) => void;
+  commitWorking: () => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -150,6 +172,15 @@ const emptyBlame: BlameView = {
   error: null,
 };
 
+const emptyChanges: ChangesView = {
+  files: [],
+  selected: new Set(),
+  message: "",
+  loading: false,
+  committing: false,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -159,12 +190,14 @@ export const useApp = create<AppState>((set, get) => ({
   diff: { ...emptyDiff },
   merge: { ...emptyMerge, resolvedFiles: new Set() },
   blame: { ...emptyBlame },
+  changes: { ...emptyChanges, selected: new Set() },
 
   recentRepos: loadRecent(),
 
   setView: (v) => {
     set({ view: v });
     if (v === "merge") void get().loadMerge();
+    if (v === "changes") void get().loadChanges();
   },
 
   openRepo: async (path) => {
@@ -430,6 +463,108 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => (s.blame.file === file ? { blame: { ...s.blame, lines, loading: false } } : s));
     } catch (e) {
       set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
+    }
+  },
+
+  // ---------- Changes (working tree) ----------
+  loadChanges: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ changes: { ...s.changes, loading: true, error: null } }));
+    try {
+      const files = await git.workingChanges(repo.path);
+      const valid = new Set(files.map((f) => f.path));
+      const newSelected = new Set(Array.from(get().changes.selected).filter((p) => valid.has(p)));
+      set((s) => ({
+        changes: { ...s.changes, files, selected: newSelected, loading: false },
+      }));
+    } catch (e) {
+      set((s) => ({ changes: { ...s.changes, loading: false, error: String(e) } }));
+    }
+  },
+
+  toggleChange: (path: string) =>
+    set((s) => {
+      const next = new Set(s.changes.selected);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return { changes: { ...s.changes, selected: next } };
+    }),
+
+  selectAllChanges: () =>
+    set((s) => ({
+      changes: {
+        ...s.changes,
+        selected: new Set(s.changes.files.map((f) => f.path)),
+      },
+    })),
+
+  clearChangeSelection: () => set((s) => ({ changes: { ...s.changes, selected: new Set() } })),
+
+  stageSelected: async () => {
+    const repo = get().repo;
+    const { changes } = get();
+    if (!repo || changes.selected.size === 0) return;
+    try {
+      await git.stageFiles(repo.path, Array.from(changes.selected));
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ changes: { ...s.changes, error: String(e) } }));
+    }
+  },
+
+  unstageSelected: async () => {
+    const repo = get().repo;
+    const { changes } = get();
+    if (!repo || changes.selected.size === 0) return;
+    try {
+      await git.unstageFiles(repo.path, Array.from(changes.selected));
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ changes: { ...s.changes, error: String(e) } }));
+    }
+  },
+
+  discardSelected: async () => {
+    const repo = get().repo;
+    const { changes } = get();
+    if (!repo || changes.selected.size === 0) return;
+    if (!confirm(`Discard ${changes.selected.size} file(s)? This cannot be undone.`)) return;
+    try {
+      await git.discardFiles(repo.path, Array.from(changes.selected));
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ changes: { ...s.changes, error: String(e) } }));
+    }
+  },
+
+  setCommitMessage: (m) => set((s) => ({ changes: { ...s.changes, message: m } })),
+
+  commitWorking: async () => {
+    const repo = get().repo;
+    const { changes } = get();
+    if (!repo) return;
+    if (!changes.message.trim()) {
+      set((s) => ({ changes: { ...s.changes, error: "Commit message is required." } }));
+      return;
+    }
+    set((s) => ({ changes: { ...s.changes, committing: true, error: null } }));
+    try {
+      await git.commitChanges(repo.path, changes.message);
+      set((s) => ({
+        changes: {
+          ...s.changes,
+          message: "",
+          selected: new Set(),
+          committing: false,
+        },
+      }));
+      void get().loadChanges();
+      void get().loadHistory();
+    } catch (e) {
+      set((s) => ({
+        changes: { ...s.changes, committing: false, error: String(e) },
+      }));
     }
   },
 }));

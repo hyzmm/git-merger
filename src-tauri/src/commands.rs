@@ -85,3 +85,31 @@ pub fn list_refs(path: String) -> R<Vec<git::RefEntry>> {
 pub fn blame_file(path: String, file: String) -> R<Vec<git::BlameLine>> {
     Ok(git::blame::blame_file(&path, &file)?)
 }
+
+#[tauri::command]
+pub fn working_changes(path: String) -> R<Vec<git::WorkingFile>> {
+    Ok(git::workspace::working_changes(&path)?)
+}
+
+#[tauri::command]
+pub fn stage_files(path: String, paths: Vec<String>) -> R<()> {
+    git::workspace::stage_files(&path, &paths)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn unstage_files(path: String, paths: Vec<String>) -> R<()> {
+    git::workspace::unstage_files(&path, &paths)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn discard_files(path: String, paths: Vec<String>) -> R<()> {
+    git::workspace::discard_files(&path, &paths)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn commit_changes(path: String, message: String) -> R<String> {
+    Ok(git::workspace::commit_changes(&path, &message)?)
+}

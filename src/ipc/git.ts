@@ -103,6 +103,22 @@ export interface BlameLine {
   content: string;
 }
 
+export type WorkingFlag = "unstaged" | "staged" | "both" | "untracked" | "conflict" | "ignored";
+export type WorkingStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "typechange"
+  | "untracked"
+  | "conflict";
+
+export interface WorkingFile {
+  path: string;
+  flag: WorkingFlag;
+  status: WorkingStatus;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -123,4 +139,10 @@ export const git = {
     invoke<string>("commit_merge", { path, message: message ?? null }),
   listRefs: (path: string) => invoke<RefEntry[]>("list_refs", { path }),
   blameFile: (path: string, file: string) => invoke<BlameLine[]>("blame_file", { path, file }),
+  workingChanges: (path: string) => invoke<WorkingFile[]>("working_changes", { path }),
+  stageFiles: (path: string, paths: string[]) => invoke<void>("stage_files", { path, paths }),
+  unstageFiles: (path: string, paths: string[]) => invoke<void>("unstage_files", { path, paths }),
+  discardFiles: (path: string, paths: string[]) => invoke<void>("discard_files", { path, paths }),
+  commitChanges: (path: string, message: string) =>
+    invoke<string>("commit_changes", { path, message }),
 };

@@ -6,6 +6,7 @@ import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
 import { BlamePage } from "@/pages/BlamePage";
+import { ChangesPage } from "@/pages/ChangesPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -28,6 +29,7 @@ export default function App() {
       "ctrl+1": () => repo && setView("history"),
       "ctrl+2": () => repo && setView("diff"),
       "ctrl+3": () => repo && setView("merge"),
+      "ctrl+4": () => repo && setView("changes"),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
@@ -53,6 +55,8 @@ export default function App() {
             <DiffPage />
           ) : view === "merge" ? (
             <MergePage />
+          ) : view === "changes" ? (
+            <ChangesPage />
           ) : (
             <BlamePage />
           )}

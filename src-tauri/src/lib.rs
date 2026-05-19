@@ -19,6 +19,11 @@ pub fn run() {
             commands::commit_merge,
             commands::list_refs,
             commands::blame_file,
+            commands::working_changes,
+            commands::stage_files,
+            commands::unstage_files,
+            commands::discard_files,
+            commands::commit_changes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,10 +6,12 @@ pub mod log;
 pub mod merge;
 pub mod refs;
 pub mod repo;
+pub mod workspace;
 
 pub use blame::BlameLine;
 pub use merge::{ConflictContent, MergeState};
 pub use refs::{RefEntry, RefKind};
+pub use workspace::{WorkingFile, WorkingFlag, WorkingStatus};
 
 use serde::{Deserialize, Serialize};
 
