@@ -1,5 +1,5 @@
 mod commands;
-mod git;
+pub mod git;
 
 pub fn run() {
     tauri::Builder::default()

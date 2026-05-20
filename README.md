@@ -142,10 +142,15 @@ G:\GitTools
 
 1. ✅ **File History view** — `git log --follow -- <path>` equivalent. Walks HEAD backwards collecting commits that touch a tracked path; on each step uses libgit2's `Diff::find_similar` (renames + copies) to detect when a commit is a rename and switches the tracked path to the old name to keep following the chain. Each entry carries the path-at-that-commit, the change status (added / modified / deleted / renamed / copied / typechange), and per-file +/- line stats. Two-pane page: left commit list with rename arrows, right diff of the file's version at the selected commit (Side-by-side / Unified mode toggle, reuses the existing diff renderer). Entry points: Diff toolbar **History** button, Blame toolbar **File history** button, and a right-click on any file in Commit Details (also offers "Open diff at this commit" / "Blame current version" / "Copy path").
 
-### Backlog (post-v0.8.0)
+### v0.9.0 — Shipped
+
+1. ✅ **Test suite** — Frontend: `bun test` over `lib/` covering `fuzzy.ts` (subsequence matcher + highlight), `wordDiff.ts` (LCS + tokenization edge cases), `conflictParser.ts` (parse / resolveText / joinChunks / chunkSummary, including diff3-style and multi-conflict files), `graph.ts` (lane assignment, branch+merge, root commit, through-segments). 42 tests, ~60 ms. Backend: `cargo test --test git_layer` with a `tempfile`-based `TempRepo` helper that builds throwaway repos in temp dirs, covering `log` (pathspec filter), `refs_ops` (create/rename/delete branches + lightweight & annotated tags), `commit_ops` (`reset --hard` + invalid mode error), `stash` (save→apply→drop round trip), `reflog`, `file_history` (basic + **rename-following**), and `rebase` (pick reorder, drop, abort restore). 14 tests across 9 modules, ~200 ms.
+2. ✅ **Bug found by file_history test** — fixed `git/file_history.rs`: the per-step diff used `DiffOptions::pathspec(&tracked)` _before_ `find_similar`, which prevented libgit2 from pairing the deleted old path with the added new path on a rename commit. Removed the pathspec restriction; we filter to `tracked` ourselves once similarity is resolved. v0.8.0's "follows renames" claim now actually holds.
+3. ✅ **CI integration** — `ci.yml` runs `bun run test` after lint + format-check on the frontend job, and `cargo test --all-features` after `cargo clippy --tests` on the backend job. `tsconfig.json` excludes `*.test.ts` so test files don't pollute production type-checking.
+
+### Backlog (post-v0.9.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts`, `lib/fuzzy.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
 
 ## Cross-platform notes
 

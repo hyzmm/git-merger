@@ -63,10 +63,11 @@ pub fn file_history(
         };
         let new_tree = commit.tree()?;
 
-        let mut opts = DiffOptions::new();
-        opts.pathspec(&tracked);
-        let mut diff: Diff =
-            repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
+        // Important: do NOT pathspec-restrict the diff before rename detection,
+        // because find_similar needs to see the deleted *old* path to pair it
+        // with the added *new* path. We filter to `tracked` ourselves once
+        // similarity is resolved.
+        let mut diff: Diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&new_tree), None)?;
 
         let mut find = DiffFindOptions::new();
         find.renames(true).copies(true);

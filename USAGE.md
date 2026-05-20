@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.8.0  
+> 适用版本：v0.9.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -476,9 +476,11 @@ bun run typecheck                # tsc -b
 bun run lint                     # eslint
 bun run format                   # prettier --write
 bun run format:check             # prettier --check（CI 用）
+bun run test                     # bun test src/lib —— 前端单测 (v0.9.0)
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo check --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml --no-deps -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --tests --no-deps -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml   # 后端集成测试 (v0.9.0)
 ```
 
 CI 配置（`.github/workflows/ci.yml`）会在每次 push 跑全部门；`release.yml` 在 tag push 时为 4 个平台并行打包并 draft 一个 GitHub Release。
@@ -701,6 +703,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                             |
 | v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                   |
 | v0.8.0 | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                         |
+| v0.9.0 | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                         |
 
 ---
 

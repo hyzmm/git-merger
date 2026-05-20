@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test": "bun test src/lib"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",
