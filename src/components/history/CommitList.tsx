@@ -47,6 +47,7 @@ export function CommitList() {
   const cherryPick = useApp((s) => s.cherryPick);
   const revertCommit = useApp((s) => s.revertCommit);
   const resetTo = useApp((s) => s.resetTo);
+  const openRebasePlan = useApp((s) => s.openRebasePlan);
   const createBranch = useApp((s) => s.createBranch);
   const createTag = useApp((s) => s.createTag);
 
@@ -145,6 +146,16 @@ export function CommitList() {
         label: "Hard (discard everything)",
         danger: true,
         onClick: () => void resetTo(c.oid, "hard"),
+      },
+      { separator: true, label: "" },
+      {
+        label: c.parents[0]
+          ? `Rebase interactively from here (${c.short_oid}^)`
+          : "Rebase interactively from here (root commit — n/a)",
+        disabled: !c.parents[0],
+        onClick: () => {
+          if (c.parents[0]) void openRebasePlan(c.parents[0]);
+        },
       },
       { separator: true, label: "" },
       {

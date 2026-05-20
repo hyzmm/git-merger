@@ -1,4 +1,13 @@
-import { History, GitCompare, GitMerge, FilePlus2, Archive, Undo2, Box } from "lucide-react";
+import {
+  History,
+  GitCompare,
+  GitMerge,
+  FilePlus2,
+  Archive,
+  Undo2,
+  Box,
+  ListOrdered,
+} from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -9,6 +18,7 @@ const items: { key: ViewKey; labelKey: TKey; Icon: typeof History }[] = [
   { key: "stash", labelKey: "sidebar.stash", Icon: Archive },
   { key: "reflog", labelKey: "sidebar.reflog", Icon: Undo2 },
   { key: "submodules", labelKey: "sidebar.submodules", Icon: Box },
+  { key: "rebase", labelKey: "sidebar.rebase", Icon: ListOrdered },
   { key: "diff", labelKey: "sidebar.diff", Icon: GitCompare },
   { key: "merge", labelKey: "sidebar.merge", Icon: GitMerge },
 ];

@@ -6,6 +6,7 @@ pub mod config;
 pub mod diff;
 pub mod log;
 pub mod merge;
+pub mod rebase;
 pub mod reflog;
 pub mod refs;
 pub mod refs_ops;
@@ -17,6 +18,7 @@ pub mod workspace;
 
 pub use blame::{BlameLine, PrevFile};
 pub use merge::{ConflictContent, MergeState};
+pub use rebase::{RebaseStatus, RebaseStep};
 pub use reflog::ReflogEntry;
 pub use refs::RefEntry;
 pub use remote::{CredReply, RemoteOpResult};

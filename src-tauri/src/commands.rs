@@ -330,3 +330,39 @@ pub fn config_set(path: String, key: String, value: String, scope: String) -> R<
     git::config::set(&path, &key, &value, &scope)?;
     Ok(())
 }
+
+// ---------- Interactive Rebase ----------
+
+#[tauri::command]
+pub fn rebase_plan(path: String, base_oid: String) -> R<Vec<git::RebaseStep>> {
+    Ok(git::rebase::plan(&path, &base_oid)?)
+}
+
+#[tauri::command]
+pub fn rebase_start(
+    path: String,
+    base_oid: String,
+    steps: Vec<git::RebaseStep>,
+) -> R<git::RebaseStatus> {
+    Ok(git::rebase::start(&path, &base_oid, steps)?)
+}
+
+#[tauri::command]
+pub fn rebase_next(path: String) -> R<git::RebaseStatus> {
+    Ok(git::rebase::next_step(&path)?)
+}
+
+#[tauri::command]
+pub fn rebase_continue(path: String) -> R<git::RebaseStatus> {
+    Ok(git::rebase::cont(&path)?)
+}
+
+#[tauri::command]
+pub fn rebase_abort(path: String) -> R<git::RebaseStatus> {
+    Ok(git::rebase::abort(&path)?)
+}
+
+#[tauri::command]
+pub fn rebase_status(path: String) -> R<git::RebaseStatus> {
+    Ok(git::rebase::status(&path)?)
+}

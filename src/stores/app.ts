@@ -8,6 +8,9 @@ import {
   type FileChange,
   type FileDiff,
   type MergeState,
+  type RebaseStateInfo,
+  type RebaseStatus,
+  type RebaseStep,
   type RefEntry,
   type ReflogEntry,
   type RepoInfo,
@@ -33,7 +36,8 @@ export type ViewKey =
   | "changes"
   | "stash"
   | "reflog"
-  | "submodules";
+  | "submodules"
+  | "rebase";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -128,6 +132,20 @@ interface SubmodulesView {
   error: string | null;
 }
 
+interface RebaseView {
+  /** Drafted plan before `start` is invoked. Empty when no plan is open. */
+  plan: RebaseStep[];
+  /** Base commit oid the plan is built against. */
+  baseOid: string | null;
+  /** Persistent backend state during execution; null between sessions. */
+  state: RebaseStateInfo | null;
+  /** UI flag: backend reported the last step left conflicts. */
+  conflicted: boolean;
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -142,6 +160,7 @@ interface AppState {
   stash: StashView;
   reflog: ReflogView;
   submodules: SubmodulesView;
+  rebase: RebaseView;
 
   recentRepos: RecentRepo[];
 
@@ -226,6 +245,18 @@ interface AppState {
   initSubmodule: (name: string) => Promise<void>;
   updateSubmodule: (name: string) => Promise<void>;
   syncSubmodule: (name: string) => Promise<void>;
+
+  // interactive rebase
+  openRebasePlan: (baseOid: string) => Promise<void>;
+  setRebasePlan: (plan: RebaseStep[]) => void;
+  updateRebaseStep: (index: number, patch: Partial<RebaseStep>) => void;
+  moveRebaseStep: (index: number, dir: -1 | 1) => void;
+  startRebase: () => Promise<void>;
+  rebaseAdvance: () => Promise<void>;
+  rebaseContinue: () => Promise<void>;
+  rebaseAbort: () => Promise<void>;
+  refreshRebaseStatus: () => Promise<void>;
+  closeRebasePlan: () => void;
 }
 
 const emptyHistory: HistoryState = {
@@ -307,6 +338,16 @@ const emptySubmodules: SubmodulesView = {
   error: null,
 };
 
+const emptyRebase: RebaseView = {
+  plan: [],
+  baseOid: null,
+  state: null,
+  conflicted: false,
+  busy: false,
+  status: null,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -320,6 +361,7 @@ export const useApp = create<AppState>((set, get) => ({
   stash: { ...emptyStash },
   reflog: { ...emptyReflog },
   submodules: { ...emptySubmodules },
+  rebase: { ...emptyRebase },
 
   recentRepos: loadRecent(),
 
@@ -330,6 +372,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "stash") void get().loadStash();
     if (v === "reflog") void get().loadReflog();
     if (v === "submodules") void get().loadSubmodules();
+    if (v === "rebase") void get().refreshRebaseStatus();
   },
 
   openRepo: async (path) => {
@@ -347,8 +390,10 @@ export const useApp = create<AppState>((set, get) => ({
         stash: { ...emptyStash },
         reflog: { ...emptyReflog },
         submodules: { ...emptySubmodules },
+        rebase: { ...emptyRebase },
       });
       void get().loadHistory();
+      void get().refreshRebaseStatus();
     } catch (e) {
       set({ loading: false, error: String(e) });
     }
@@ -364,6 +409,7 @@ export const useApp = create<AppState>((set, get) => ({
       stash: { ...emptyStash },
       reflog: { ...emptyReflog },
       submodules: { ...emptySubmodules },
+      rebase: { ...emptyRebase },
     }),
 
   refresh: async () => {
@@ -1123,4 +1169,174 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
     }
   },
+
+  // ---------- Interactive Rebase ----------
+  openRebasePlan: async (baseOid: string) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ view: "rebase", rebase: { ...s.rebase, busy: true, error: null } }));
+    try {
+      const plan = await git.rebasePlan(repo.path, baseOid);
+      set((s) => ({
+        rebase: {
+          ...s.rebase,
+          plan,
+          baseOid,
+          busy: false,
+          status: null,
+          state: null,
+          conflicted: false,
+          error: plan.length === 0 ? "Nothing to rebase — HEAD is already at base." : null,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({ rebase: { ...s.rebase, busy: false, error: String(e) } }));
+    }
+  },
+
+  setRebasePlan: (plan) => set((s) => ({ rebase: { ...s.rebase, plan } })),
+
+  updateRebaseStep: (index, patch) =>
+    set((s) => ({
+      rebase: {
+        ...s.rebase,
+        plan: s.rebase.plan.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+      },
+    })),
+
+  moveRebaseStep: (index, dir) =>
+    set((s) => {
+      const plan = s.rebase.plan.slice();
+      const j = index + dir;
+      if (j < 0 || j >= plan.length) return s;
+      [plan[index], plan[j]] = [plan[j], plan[index]];
+      return { rebase: { ...s.rebase, plan } };
+    }),
+
+  startRebase: async () => {
+    const repo = get().repo;
+    const { rebase } = get();
+    if (!repo || !rebase.baseOid || rebase.plan.length === 0) return;
+    set((s) => ({ rebase: { ...s.rebase, busy: true, error: null, status: null } }));
+    try {
+      const status = await git.rebaseStart(repo.path, rebase.baseOid, rebase.plan);
+      applyRebaseStatus(set, get, status);
+      // Drive the plan forward step-by-step until we hit a conflict, finish,
+      // or get cancelled.
+      void get().rebaseAdvance();
+    } catch (e) {
+      set((s) => ({ rebase: { ...s.rebase, busy: false, error: String(e) } }));
+    }
+  },
+
+  rebaseAdvance: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    // Run steps in a loop, yielding to React between each so the UI updates.
+    while (true) {
+      const r = get().rebase;
+      if (r.conflicted || !r.state || r.state.remaining.length === 0) break;
+      try {
+        const status = await git.rebaseNext(repo.path);
+        applyRebaseStatus(set, get, status);
+        if (status.kind !== "running") break;
+      } catch (e) {
+        set((s) => ({ rebase: { ...s.rebase, busy: false, error: String(e) } }));
+        return;
+      }
+    }
+  },
+
+  rebaseContinue: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ rebase: { ...s.rebase, busy: true, error: null } }));
+    try {
+      const status = await git.rebaseContinue(repo.path);
+      applyRebaseStatus(set, get, status);
+      if (status.kind === "running") void get().rebaseAdvance();
+    } catch (e) {
+      set((s) => ({ rebase: { ...s.rebase, busy: false, error: String(e) } }));
+    }
+  },
+
+  rebaseAbort: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm("Abort the rebase and restore the original branch tip?")) return;
+    set((s) => ({ rebase: { ...s.rebase, busy: true, error: null } }));
+    try {
+      await git.rebaseAbort(repo.path);
+      set((s) => ({
+        rebase: { ...emptyRebase, status: "Rebase aborted." },
+        view: s.view === "rebase" ? "history" : s.view,
+      }));
+      void get().loadHistory();
+      void get().loadChanges();
+      void get().loadMerge();
+    } catch (e) {
+      set((s) => ({ rebase: { ...s.rebase, busy: false, error: String(e) } }));
+    }
+  },
+
+  refreshRebaseStatus: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    try {
+      const status = await git.rebaseStatus(repo.path);
+      applyRebaseStatus(set, get, status);
+    } catch {
+      // ignore — repo may not be openable yet.
+    }
+  },
+
+  closeRebasePlan: () =>
+    set((s) => ({
+      rebase: { ...emptyRebase },
+      view: s.view === "rebase" ? "history" : s.view,
+    })),
 }));
+
+// Helper used by the rebase actions to fold a backend status into the store.
+// Uses `useApp.setState` directly so we get Zustand's permissive partial type
+// rather than rolling our own.
+function applyRebaseStatus(_set: unknown, get: () => AppState, status: RebaseStatus) {
+  if (status.kind === "idle") {
+    useApp.setState((s) => ({
+      rebase: { ...s.rebase, state: null, conflicted: false, busy: false },
+    }));
+    return;
+  }
+  if (status.kind === "done") {
+    useApp.setState((s) => ({
+      rebase: {
+        ...emptyRebase,
+        status: `Rebase complete — rewrote ${status.rewritten} commit(s).`,
+      },
+      view: s.view === "rebase" ? ("history" as ViewKey) : s.view,
+    }));
+    void get().loadHistory();
+    void get().loadChanges();
+    void get().loadMerge();
+    return;
+  }
+  // running | conflicted
+  useApp.setState((s) => ({
+    rebase: {
+      ...s.rebase,
+      state: status.state,
+      // Keep the planner UI in sync with the executor's remaining list so
+      // users always see "what's next".
+      plan: status.state.remaining,
+      conflicted: status.kind === "conflicted",
+      busy: status.kind === "running",
+      error: null,
+    },
+  }));
+  if (status.kind === "conflicted") {
+    // Surface the merge view so the user can resolve.
+    useApp.setState((s) => ({ view: s.view === "rebase" ? s.view : ("merge" as ViewKey) }));
+    void get().loadMerge();
+    void get().loadChanges();
+  }
+}

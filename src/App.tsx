@@ -11,6 +11,7 @@ import { ChangesPage } from "@/pages/ChangesPage";
 import { StashPage } from "@/pages/StashPage";
 import { ReflogPage } from "@/pages/ReflogPage";
 import { SubmodulesPage } from "@/pages/SubmodulesPage";
+import { RebasePage } from "@/pages/RebasePage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -37,6 +38,7 @@ export default function App() {
       "ctrl+5": () => repo && setView("submodules"),
       "ctrl+6": () => repo && setView("diff"),
       "ctrl+7": () => repo && setView("merge"),
+      "ctrl+8": () => repo && setView("rebase"),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
@@ -70,6 +72,8 @@ export default function App() {
             <ReflogPage />
           ) : view === "submodules" ? (
             <SubmodulesPage />
+          ) : view === "rebase" ? (
+            <RebasePage />
           ) : (
             <BlamePage />
           )}

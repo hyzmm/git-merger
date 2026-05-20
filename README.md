@@ -130,9 +130,12 @@ G:\GitTools
 2. ✅ **Live remote progress** — `transfer_progress` / sideband / `push_transfer_progress` / `push_update_reference` callbacks emit `git://progress` events; the Topbar shows "Receiving 1234/5678", "Indexing", "Pushing", and per-ref push status in real time.
 3. ✅ **Credential dialog** — when libgit2 needs `USER_PASS_PLAINTEXT` and no credential helper / SSH key satisfies it, the backend `emit`s a `git://credentials-needed` event; a modal collects the username + token and the libgit2 callback unblocks via a `Condvar`. Resolution order: SSH agent → default `~/.ssh/id_{ed25519,rsa,ecdsa}` keys → `Cred::credential_helper` (HTTPS) → user prompt (≤3 retries, 2-min timeout).
 
-### Backlog (post-v0.5.0)
+### v0.6.0 — Shipped
 
-- ⏳ Interactive Rebase (drag-to-reorder, pick / squash / reword / drop).
+1. ✅ **Interactive Rebase** — right-click a commit in History → "Rebase interactively from here". The Rebase page lists `base..HEAD` with per-commit action selectors (pick / reword / squash / fixup / drop) and ↑/↓ reorder buttons. Reword / squash steps expose an inline message editor. Once started, the executor cherry-picks each step in order; on conflict it pauses, the Topbar shows the progress bar with conflict tone, and the user resolves via the Merge view and clicks **Continue**. **Abort** restores the original branch tip from the saved state. Plan + state are persisted to `.git/gittools-rebase/state.json` so a closed window doesn't lose progress.
+
+### Backlog (post-v0.6.0)
+
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 - ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
 

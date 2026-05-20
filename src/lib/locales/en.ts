@@ -9,6 +9,7 @@ export const en = {
   "sidebar.stash": "Stash",
   "sidebar.reflog": "Reflog (HEAD history)",
   "sidebar.submodules": "Submodules",
+  "sidebar.rebase": "Interactive Rebase",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
 
@@ -88,6 +89,22 @@ export const en = {
     "For GitHub / GitLab / Bitbucket, use a personal access token instead of your account password.",
   "creds.signIn": "Sign in",
   "creds.signingIn": "Signing in...",
+
+  // Interactive rebase
+  "rebase.empty.title": "No rebase plan open.",
+  "rebase.empty.subtitle":
+    "Right-click a commit in History → 'Rebase interactively from here' to start.",
+  "rebase.header.draft": "Draft plan",
+  "rebase.header.inProgress": "Rebase in progress",
+  "rebase.header.conflicted": "conflict — resolve in Merge view",
+  "rebase.start": "Start rebase",
+  "rebase.continue": "Continue",
+  "rebase.abort": "Abort",
+  "rebase.goMerge": "Open Merge view",
+  "rebase.moveUp": "Move up",
+  "rebase.moveDown": "Move down",
+  "rebase.reword.placeholder": "New commit message…",
+  "rebase.squash.placeholder": "Combined message (leave blank to concatenate)…",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

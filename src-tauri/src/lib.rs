@@ -55,6 +55,12 @@ pub fn run() {
             commands::submodule_sync,
             commands::config_get,
             commands::config_set,
+            commands::rebase_plan,
+            commands::rebase_start,
+            commands::rebase_next,
+            commands::rebase_continue,
+            commands::rebase_abort,
+            commands::rebase_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

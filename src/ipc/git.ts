@@ -189,6 +189,35 @@ export interface SubmoduleInfo {
   wd_dirty: boolean;
 }
 
+// ---------- Interactive Rebase ----------
+
+export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
+
+export interface RebaseStep {
+  action: RebaseAction;
+  oid: string;
+  short_oid: string;
+  summary: string;
+  /** New / combined message for `reword` & `squash` (optional). */
+  new_message: string;
+}
+
+export interface RebaseStateInfo {
+  /** Branch ref being rewritten, or null if started from detached HEAD. */
+  branch_ref: string | null;
+  original_head: string;
+  base: string;
+  remaining: RebaseStep[];
+  done: number;
+  total: number;
+}
+
+export type RebaseStatus =
+  | { kind: "idle" }
+  | { kind: "running"; state: RebaseStateInfo }
+  | { kind: "conflicted"; state: RebaseStateInfo }
+  | { kind: "done"; rewritten: number };
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -276,4 +305,12 @@ export const git = {
   configGet: (path: string, key: string) => invoke<string | null>("config_get", { path, key }),
   configSet: (path: string, key: string, value: string, scope: "local" | "global" = "local") =>
     invoke<void>("config_set", { path, key, value, scope }),
+  rebasePlan: (path: string, baseOid: string) =>
+    invoke<RebaseStep[]>("rebase_plan", { path, baseOid }),
+  rebaseStart: (path: string, baseOid: string, steps: RebaseStep[]) =>
+    invoke<RebaseStatus>("rebase_start", { path, baseOid, steps }),
+  rebaseNext: (path: string) => invoke<RebaseStatus>("rebase_next", { path }),
+  rebaseContinue: (path: string) => invoke<RebaseStatus>("rebase_continue", { path }),
+  rebaseAbort: (path: string) => invoke<RebaseStatus>("rebase_abort", { path }),
+  rebaseStatus: (path: string) => invoke<RebaseStatus>("rebase_status", { path }),
 };

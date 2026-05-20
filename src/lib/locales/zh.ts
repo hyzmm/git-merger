@@ -7,6 +7,7 @@ export const zh: Dict = {
   "sidebar.stash": "Stash",
   "sidebar.reflog": "Reflog（HEAD 历史）",
   "sidebar.submodules": "子模块",
+  "sidebar.rebase": "交互式 Rebase",
   "sidebar.diff": "Diff",
   "sidebar.merge": "合并",
 
@@ -85,4 +86,19 @@ export const zh: Dict = {
     "对于 GitHub / GitLab / Bitbucket，请使用个人访问令牌（PAT），不要使用账号密码。",
   "creds.signIn": "登录",
   "creds.signingIn": "登录中...",
+
+  // 交互式 Rebase
+  "rebase.empty.title": "暂无 Rebase 计划。",
+  "rebase.empty.subtitle": "在 History 中右键某个提交 → 「从此处开始交互式 Rebase」。",
+  "rebase.header.draft": "草稿计划",
+  "rebase.header.inProgress": "Rebase 进行中",
+  "rebase.header.conflicted": "存在冲突 — 请在 Merge 视图解决",
+  "rebase.start": "开始 Rebase",
+  "rebase.continue": "继续",
+  "rebase.abort": "中止",
+  "rebase.goMerge": "打开 Merge 视图",
+  "rebase.moveUp": "上移",
+  "rebase.moveDown": "下移",
+  "rebase.reword.placeholder": "新的提交信息…",
+  "rebase.squash.placeholder": "合并后的提交信息（留空则自动拼接）…",
 };
