@@ -148,7 +148,12 @@ G:\GitTools
 2. ✅ **Bug found by file_history test** — fixed `git/file_history.rs`: the per-step diff used `DiffOptions::pathspec(&tracked)` _before_ `find_similar`, which prevented libgit2 from pairing the deleted old path with the added new path on a rename commit. Removed the pathspec restriction; we filter to `tracked` ourselves once similarity is resolved. v0.8.0's "follows renames" claim now actually holds.
 3. ✅ **CI integration** — `ci.yml` runs `bun run test` after lint + format-check on the frontend job, and `cargo test --all-features` after `cargo clippy --tests` on the backend job. `tsconfig.json` excludes `*.test.ts` so test files don't pollute production type-checking.
 
-### Backlog (post-v0.9.0)
+### v0.9.1 — Shipped
+
+1. ✅ **HEAD pin in Refs panel** — `RefsPane.tsx` now renders a dedicated HEAD section above LOCAL/REMOTE/TAGS. When attached, shows the current branch name + short oid; when detached, shows `(detached)` with the short oid. Click to jump-to-HEAD-commit. Visually distinguished by a left edge accent bar and a half-opacity highlight background so the user always knows where HEAD is without scanning the branch list.
+2. ✅ **App menu (☰) in Topbar** — New `AppMenu.tsx` component replaces the previous "Open Repository" button at the top-left with a hamburger icon. The menu collapses low-frequency actions: **Open repository…** (`Ctrl+O`), **Recent repositories** (inline list, up to 8 entries, hover-to-remove with ×), **Close repository**, **About Git Tools** (modal showing app name + version + GitHub link), **Quit** (`Alt+F4`). High-frequency buttons (Refresh / Fetch / Pull / Push / Search / Settings / Updater) stay directly on the Topbar. Added global `Ctrl+O` shortcut to open the repository picker without opening the menu. New i18n keys: `topbar.menu`, `menu.*`, `about.*` for both `en` and `zh` locales.
+
+### Backlog (post-v0.9.1)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

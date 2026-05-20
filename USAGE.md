@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.9.0  
+> 适用版本：v0.9.1  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -24,6 +24,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.9 Interactive Rebase](#39-interactive-rebase)
   - [3.10 File History（单文件时间线 + 跟随重命名）](#310-file-history单文件时间线--跟随重命名)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
+  - [4.1 应用菜单（☰）](#41-应用菜单)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
@@ -102,6 +103,7 @@ bun run tauri:build
 
 **左 — Refs 面板**
 
+- **HEAD 置顶项（v0.9.1）**：列表最顶部独立一栏，显示当前 HEAD。已 attach 到分支时显示分支名 + 短 oid，左侧带主题色边条 + 半透明高亮背景；detached 状态显示 `(detached)` 提示。点击即跳转到 HEAD 所在 commit
 - **过滤栏（Filter Bar，v0.2.0 起）**：
   - 关键字框：按 message / author / email / oid 前缀 / ref 名 实时过滤
   - **作者下拉**（v0.2.0）：自动汇总所有 commit 的 author，按出现频率排序
@@ -285,10 +287,12 @@ bun run tauri:build
 ## 四、Topbar 与远程操作
 
 ```
-┌─[Open Repo]──[F5↻]──────────────[ Search Ctrl+K ]──[Cloud][↓Pull][↑Push]──[Updater]──[⚙]─┐
-│                  branch: main  G:\GitTools                                                │
-└───────────────────────────────────────────────────────────────────────────────────────────┘
+┌─[☰]──[F5↻]───────────────────[ Search Ctrl+K ]──[Cloud][↓Pull][↑Push]──[Updater]──[⚙]─┐
+│           branch: main  G:\GitTools                                                    │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> v0.9.1 起左上角由原 **Open Repository** 按钮替换为 ☰ **应用菜单**，把"打开仓库 / 最近仓库 / 关闭仓库 / 关于 / 退出"等低频项收进菜单，Topbar 只保留高频按钮。详见 [4.1 应用菜单](#41-应用菜单)。
 
 **Fetch / Pull / Push**（v0.5.0 起原生 libgit2，不再依赖系统 git）：
 
@@ -308,6 +312,22 @@ bun run tauri:build
 4. **应用内弹窗**：弹出"登录远端"对话框，填用户名 + token（GitHub / GitLab / Bitbucket 都已不支持密码，请用 PAT）。最多重试 3 次，2 分钟超时
 
 完成后顶部出现绿色 / 红色 banner，含 message 和 details，点 Dismiss 关闭。
+
+### 4.1 应用菜单（☰）
+
+v0.9.1 起 Topbar 最左侧的 ☰ 图标点开后弹出"应用菜单"：
+
+| 菜单项                  | 快捷键   | 行为                                                                      |
+| ----------------------- | -------- | ------------------------------------------------------------------------- |
+| **Open repository…**    | `Ctrl+O` | 等同 Welcome 页的打开按钮，弹出系统目录选择对话框                         |
+| **Recent repositories** | —        | 内联展开列表（最多 8 条），点击即打开；hover 行尾出现 `×`，可移除该条记录 |
+| **Close repository**    | —        | 关闭当前仓库回到 Welcome 页                                               |
+| **About Git Tools**     | —        | 弹出关于对话框：应用名 + 版本号 + GitHub 链接                             |
+| **Quit**                | `Alt+F4` | 退出应用                                                                  |
+
+设计原则：高频按钮（Refresh / Fetch / Pull / Push / Search / Settings / Updater）仍直接挂在 Topbar，低频管理项收进菜单，让顶栏更简洁。
+
+> `Ctrl+O` 是全局快捷键，无需打开菜单也能直接弹起目录选择。
 
 ---
 
@@ -390,6 +410,7 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+7`            | Merge                                 | 全局  |
 | `Ctrl+8`            | Interactive Rebase                    | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
+| `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
 | `n` / `p`           | 下一个 / 上一个 hunk                  | Diff  |
 | `Alt+1` / `2` / `3` | 第一个 pending 冲突的 Left/Right/Both | Merge |
@@ -693,17 +714,18 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 十四、版本历史一览
 
-| 版本   | 关键改动                                                                                                                     |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0 | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                     |
-| v0.2.0 | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤 |
-| v0.3.0 | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                       |
-| v0.4.0 | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）          |
-| v0.5.0 | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件               |
-| v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                             |
-| v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                   |
-| v0.8.0 | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                         |
-| v0.9.0 | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                         |
+| 版本   | 关键改动                                                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0 | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                         |
+| v0.2.0 | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤     |
+| v0.3.0 | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                           |
+| v0.4.0 | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）              |
+| v0.5.0 | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                   |
+| v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                 |
+| v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                       |
+| v0.8.0 | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                             |
+| v0.9.0 | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                             |
+| v0.9.1 | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键 |
 
 ---
 
