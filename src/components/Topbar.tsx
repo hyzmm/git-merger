@@ -13,6 +13,7 @@ import { useApp } from "@/stores/app";
 import { git, type GitCmdResult } from "@/ipc/git";
 import { cn } from "@/lib/utils";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { UpdateBadge } from "@/components/UpdateBadge";
 
 type RemoteOp = "fetch" | "pull" | "push";
 
@@ -119,6 +120,7 @@ export function Topbar() {
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           {loading && <span>Loading...</span>}
           {error && <span className="text-destructive">{error}</span>}
+          <UpdateBadge />
           <button
             onClick={() => setSettingsOpen(true)}
             title="Settings"

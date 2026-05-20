@@ -77,6 +77,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing keys — set as repo Secrets in Settings → Secrets:
+          #   TAURI_SIGNING_PRIVATE_KEY        (full content of gittools.key)
+          #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the password used at generate time)
+          # When unset, tauri-action skips updater signing — installers still build but
+          # auto-update will not work.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Honour user's bun in tauri-action's child invocations.
           TAURI_BUNDLER_DMG_IGNORE_CI: "true"
         with:
