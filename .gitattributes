@@ -1,0 +1,27 @@
+# Normalise all text files to LF on commit, regardless of OS.
+# This avoids the noisy "LF will be replaced by CRLF" warnings on Windows
+# and keeps blame / diff stable across platforms.
+
+* text=auto eol=lf
+
+# Binary assets — never touch.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.tar  binary
+*.exe  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+
+# Lockfiles — keep as-is.
+bun.lock  -text
+Cargo.lock -text

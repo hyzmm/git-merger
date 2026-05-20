@@ -1,5 +1,8 @@
 # Git Tools
 
+[![CI](https://github.com/hyzmm/git-merger/actions/workflows/ci.yml/badge.svg)](https://github.com/hyzmm/git-merger/actions/workflows/ci.yml)
+[![Release](https://github.com/hyzmm/git-merger/actions/workflows/release.yml/badge.svg)](https://github.com/hyzmm/git-merger/actions/workflows/release.yml)
+
 IDEA-style **History / Diff / Merge** for any local Git repository, packaged as a cross-platform desktop app.
 
 > 👉 **End-user docs**: see [`USAGE.md`](./USAGE.md) for installation, keyboard shortcuts, typical workflows and FAQ.
