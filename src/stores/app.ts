@@ -45,6 +45,7 @@ interface DiffState {
   loading: boolean;
   mode: DiffMode;
   showWhitespace: boolean;
+  ignoreWhitespace: boolean;
   error: string | null;
 }
 
@@ -118,6 +119,7 @@ interface AppState {
   selectDiffFile: (file: string) => Promise<void>;
   setDiffMode: (m: DiffMode) => void;
   toggleWhitespace: () => void;
+  toggleIgnoreWhitespace: () => void;
 
   // merge
   loadMerge: () => Promise<void>;
@@ -187,6 +189,7 @@ const emptyDiff: DiffState = {
   loading: false,
   mode: "sbs",
   showWhitespace: false,
+  ignoreWhitespace: false,
   error: null,
 };
 
@@ -368,7 +371,7 @@ export const useApp = create<AppState>((set, get) => ({
       },
     }));
     try {
-      const fd = await git.fileDiff(repo.path, oid, file);
+      const fd = await git.fileDiff(repo.path, oid, file, get().diff.ignoreWhitespace);
       set((s) =>
         s.diff.oid === oid && s.diff.selectedFile === file
           ? { diff: { ...s.diff, fileDiff: fd, loading: false } }
@@ -388,6 +391,13 @@ export const useApp = create<AppState>((set, get) => ({
   setDiffMode: (m) => set((s) => ({ diff: { ...s.diff, mode: m } })),
   toggleWhitespace: () =>
     set((s) => ({ diff: { ...s.diff, showWhitespace: !s.diff.showWhitespace } })),
+  toggleIgnoreWhitespace: () => {
+    set((s) => ({ diff: { ...s.diff, ignoreWhitespace: !s.diff.ignoreWhitespace } }));
+    const { diff } = get();
+    if (diff.oid && diff.selectedFile) {
+      void get().openDiff(diff.oid, diff.selectedFile, diff.files);
+    }
+  },
 
   // ---------- Merge ----------
   loadMerge: async () => {

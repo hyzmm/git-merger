@@ -36,13 +36,18 @@ pub fn commit_files(path: String, oid: String) -> R<Vec<git::FileChange>> {
 }
 
 #[tauri::command]
-pub fn file_diff(path: String, oid: String, file: String) -> R<git::FileDiff> {
-    Ok(git::diff::file_diff(&path, &oid, &file)?)
+pub fn file_diff(
+    path: String,
+    oid: String,
+    file: String,
+    ignore_whitespace: bool,
+) -> R<git::FileDiff> {
+    Ok(git::diff::file_diff(&path, &oid, &file, ignore_whitespace)?)
 }
 
 #[tauri::command]
-pub fn working_diff(path: String, file: String) -> R<git::FileDiff> {
-    Ok(git::diff::working_diff(&path, &file)?)
+pub fn working_diff(path: String, file: String, ignore_whitespace: bool) -> R<git::FileDiff> {
+    Ok(git::diff::working_diff(&path, &file, ignore_whitespace)?)
 }
 
 #[tauri::command]

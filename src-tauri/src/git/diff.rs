@@ -153,7 +153,12 @@ fn collect_file_diff(diff: &git2::Diff<'_>, target: &str) -> Result<FileDiff, gi
     Ok(result.into_inner())
 }
 
-pub fn file_diff(path: &str, oid: &str, file: &str) -> Result<FileDiff, git2::Error> {
+pub fn file_diff(
+    path: &str,
+    oid: &str,
+    file: &str,
+    ignore_whitespace: bool,
+) -> Result<FileDiff, git2::Error> {
     let repo = Repository::discover(path)?;
     let oid = Oid::from_str(oid)?;
     let commit = repo.find_commit(oid)?;
@@ -165,14 +170,24 @@ pub fn file_diff(path: &str, oid: &str, file: &str) -> Result<FileDiff, git2::Er
     };
     let mut opts = DiffOptions::new();
     opts.pathspec(file);
+    if ignore_whitespace {
+        opts.ignore_whitespace(true);
+    }
     let diff = repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
     collect_file_diff(&diff, file)
 }
 
-pub fn working_diff(path: &str, file: &str) -> Result<FileDiff, git2::Error> {
+pub fn working_diff(
+    path: &str,
+    file: &str,
+    ignore_whitespace: bool,
+) -> Result<FileDiff, git2::Error> {
     let repo = Repository::discover(path)?;
     let mut opts = DiffOptions::new();
     opts.pathspec(file);
+    if ignore_whitespace {
+        opts.ignore_whitespace(true);
+    }
     let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
     collect_file_diff(&diff, file)
 }

@@ -67,10 +67,13 @@ export function SideBySide() {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-2 overflow-auto bg-background text-[12px]">
+    <div
+      data-diff-scroll
+      className="grid h-full min-h-0 grid-cols-2 overflow-auto bg-background text-[12px]"
+    >
       <div className="min-w-0 border-r border-border">
         {hunks.map((h, hi) => (
-          <div key={hi}>
+          <div key={hi} data-hunk-index={hi}>
             <HunkHeader text={h.header} />
             {h.pairs.map((p, i) => {
               const tokRow = leftTokens?.[hunkOffsets[hi] + i];
@@ -130,9 +133,9 @@ export function Unified() {
 
   let cursor = 0;
   return (
-    <div className="h-full min-h-0 overflow-auto bg-background text-[12px]">
+    <div data-diff-scroll className="h-full min-h-0 overflow-auto bg-background text-[12px]">
       {hunks.map((h, hi) => (
-        <div key={hi}>
+        <div key={hi} data-hunk-index={hi}>
           <HunkHeader text={h.header} />
           {h.lines.map((ln, i) => {
             const tokRow = tokens?.[cursor++];

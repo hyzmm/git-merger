@@ -142,9 +142,10 @@ export const git = {
   log: (path: string, limit = 200, skip = 0) =>
     invoke<CommitSummary[]>("git_log", { path, limit, skip }),
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),
-  fileDiff: (path: string, oid: string, file: string) =>
-    invoke<FileDiff>("file_diff", { path, oid, file }),
-  workingDiff: (path: string, file: string) => invoke<FileDiff>("working_diff", { path, file }),
+  fileDiff: (path: string, oid: string, file: string, ignoreWhitespace = false) =>
+    invoke<FileDiff>("file_diff", { path, oid, file, ignoreWhitespace }),
+  workingDiff: (path: string, file: string, ignoreWhitespace = false) =>
+    invoke<FileDiff>("working_diff", { path, file, ignoreWhitespace }),
   conflicts: (path: string) => invoke<ConflictFile[]>("conflicts", { path }),
   mergeState: (path: string) => invoke<MergeState>("merge_state", { path }),
   conflictContent: (path: string, file: string) =>
