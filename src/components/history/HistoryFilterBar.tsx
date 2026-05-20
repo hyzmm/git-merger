@@ -1,0 +1,165 @@
+import { useMemo, useState } from "react";
+import { Filter, X } from "lucide-react";
+import { useApp } from "@/stores/app";
+import { cn } from "@/lib/utils";
+
+/** Filter chip-style row that sits in the CommitList toolbar.
+ *  Hosts: text filter, author dropdown, date range, pathspec. */
+export function HistoryFilterBar() {
+  const filter = useApp((s) => s.history.filter);
+  const author = useApp((s) => s.history.authorFilter);
+  const since = useApp((s) => s.history.sinceFilter);
+  const until = useApp((s) => s.history.untilFilter);
+  const pathspec = useApp((s) => s.history.pathspec);
+  const commits = useApp((s) => s.history.commits);
+
+  const setFilter = useApp((s) => s.setFilter);
+  const setAuthor = useApp((s) => s.setAuthorFilter);
+  const setDateRange = useApp((s) => s.setDateRange);
+  const setPathspec = useApp((s) => s.setPathspec);
+  const resetFilters = useApp((s) => s.resetHistoryFilters);
+
+  // Distinct authors, sorted by frequency desc then name.
+  const authorList = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of commits) {
+      counts.set(c.author_name, (counts.get(c.author_name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  }, [commits]);
+
+  const [advOpen, setAdvOpen] = useState(false);
+  // Local pathspec input – we only push to the store on Enter / blur to avoid
+  // re-running the backend log on every keystroke.
+  const [pathInput, setPathInput] = useState(pathspec);
+  // Date inputs are local strings (yyyy-mm-dd) and pushed on change.
+  const [sinceInput, setSinceInput] = useState<string>(unixToYmd(since));
+  const [untilInput, setUntilInput] = useState<string>(unixToYmd(until));
+
+  const hasAnyFilter =
+    !!filter || !!author || since !== null || until !== null || !!pathspec.trim();
+
+  const commitPath = () => {
+    const next = pathInput.trim();
+    if (next === pathspec) return;
+    setPathspec(next);
+  };
+
+  const onSinceChange = (v: string) => {
+    setSinceInput(v);
+    setDateRange(ymdToUnix(v, false), until);
+  };
+  const onUntilChange = (v: string) => {
+    setUntilInput(v);
+    // Until is exclusive — bump to end-of-day so the user's last day is included.
+    setDateRange(since, ymdToUnix(v, true));
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-border bg-card px-3 py-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter commits (message, author, oid, ref)..."
+          className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring"
+        />
+        <button
+          onClick={() => setAdvOpen((v) => !v)}
+          className={cn(
+            "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px]",
+            advOpen ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent",
+          )}
+          title="Advanced filters: author, date range, path"
+        >
+          <Filter className="h-3 w-3" />
+          More
+        </button>
+        {hasAnyFilter && (
+          <button
+            onClick={resetFilters}
+            className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:bg-accent"
+            title="Clear all filters"
+          >
+            <X className="h-3 w-3" />
+            Reset
+          </button>
+        )}
+      </div>
+
+      {advOpen && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <Label>Author</Label>
+          <select
+            value={author ?? ""}
+            onChange={(e) => setAuthor(e.target.value || null)}
+            className="h-7 min-w-[160px] rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
+          >
+            <option value="">All authors</option>
+            {authorList.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+
+          <Label>From</Label>
+          <input
+            type="date"
+            value={sinceInput}
+            onChange={(e) => onSinceChange(e.target.value)}
+            className="h-7 rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
+          />
+          <Label>To</Label>
+          <input
+            type="date"
+            value={untilInput}
+            onChange={(e) => onUntilChange(e.target.value)}
+            className="h-7 rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
+          />
+
+          <Label>Path</Label>
+          <input
+            value={pathInput}
+            onChange={(e) => setPathInput(e.target.value)}
+            onBlur={commitPath}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitPath();
+              if (e.key === "Escape") {
+                setPathInput(pathspec);
+              }
+            }}
+            placeholder="src/git/  ·  README.md"
+            title="Only show commits that touch this path (file or directory). Press Enter to apply."
+            className="h-7 w-56 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{children}</span>
+  );
+}
+
+function unixToYmd(t: number | null): string {
+  if (t === null) return "";
+  const d = new Date(t * 1000);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function ymdToUnix(s: string, endOfDay: boolean): number | null {
+  if (!s) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const date = new Date(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+  return Math.floor(date.getTime() / 1000);
+}

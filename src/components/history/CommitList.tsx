@@ -5,6 +5,7 @@ import { layoutGraph } from "@/lib/graph";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { GraphRow } from "./GraphRow";
+import { HistoryFilterBar } from "./HistoryFilterBar";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { CommitSummary } from "@/ipc/git";
 
@@ -34,6 +35,10 @@ async function copyText(text: string): Promise<void> {
 export function CommitList() {
   const commits = useApp((s) => s.history.commits);
   const filter = useApp((s) => s.history.filter);
+  const authorFilter = useApp((s) => s.history.authorFilter);
+  const sinceFilter = useApp((s) => s.history.sinceFilter);
+  const untilFilter = useApp((s) => s.history.untilFilter);
+  const pathspec = useApp((s) => s.history.pathspec);
   const selectedOid = useApp((s) => s.history.selectedOid);
   const loading = useApp((s) => s.history.loading);
   const error = useApp((s) => s.history.error);
@@ -49,16 +54,22 @@ export function CommitList() {
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return commits;
-    return commits.filter(
-      (c) =>
-        c.summary.toLowerCase().includes(q) ||
-        c.author_name.toLowerCase().includes(q) ||
-        c.author_email.toLowerCase().includes(q) ||
-        c.oid.startsWith(q) ||
-        c.refs.some((r) => r.toLowerCase().includes(q)),
-    );
-  }, [commits, filter]);
+    return commits.filter((c) => {
+      if (authorFilter && c.author_name !== authorFilter) return false;
+      if (sinceFilter !== null && c.time < sinceFilter) return false;
+      if (untilFilter !== null && c.time > untilFilter) return false;
+      if (q) {
+        const hit =
+          c.summary.toLowerCase().includes(q) ||
+          c.author_name.toLowerCase().includes(q) ||
+          c.author_email.toLowerCase().includes(q) ||
+          c.oid.startsWith(q) ||
+          c.refs.some((r) => r.toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [commits, filter, authorFilter, sinceFilter, untilFilter]);
 
   const layout = useMemo(
     () => layoutGraph(filtered.map((c) => ({ oid: c.oid, parents: c.parents }))),
@@ -141,9 +152,22 @@ export function CommitList() {
 
   return (
     <section className="flex min-w-0 flex-col">
+      <HistoryFilterBar />
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
         <span className="text-muted-foreground">{filtered.length} commits</span>
-        {filter && <span className="text-muted-foreground">· filtered from {commits.length}</span>}
+        {filtered.length !== commits.length && (
+          <span className="text-muted-foreground">· filtered from {commits.length}</span>
+        )}
+        {pathspec && (
+          <span className="rounded bg-secondary px-1.5 font-mono text-[10.5px] text-foreground">
+            path: {pathspec}
+          </span>
+        )}
+        {authorFilter && (
+          <span className="rounded bg-secondary px-1.5 text-[10.5px] text-foreground">
+            author: {authorFilter}
+          </span>
+        )}
         {loading && <span className="text-muted-foreground">· loading...</span>}
         {error && <span className="text-destructive">· {error}</span>}
       </div>

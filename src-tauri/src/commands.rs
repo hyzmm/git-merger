@@ -26,8 +26,13 @@ pub fn open_repo(path: String) -> R<git::RepoInfo> {
 }
 
 #[tauri::command]
-pub fn git_log(path: String, limit: usize, skip: usize) -> R<Vec<git::CommitSummary>> {
-    Ok(git::log::log(&path, limit, skip)?)
+pub fn git_log(
+    path: String,
+    limit: usize,
+    skip: usize,
+    pathspec: Option<String>,
+) -> R<Vec<git::CommitSummary>> {
+    Ok(git::log::log(&path, limit, skip, pathspec.as_deref())?)
 }
 
 #[tauri::command]

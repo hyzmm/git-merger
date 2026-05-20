@@ -33,6 +33,14 @@ interface HistoryState {
   files: FileChange[];
   filesLoading: boolean;
   filter: string;
+  /** Author name filter (exact match against `author_name`). null = all. */
+  authorFilter: string | null;
+  /** Inclusive UNIX-seconds lower bound. null = no bound. */
+  sinceFilter: number | null;
+  /** Exclusive UNIX-seconds upper bound. null = no bound. */
+  untilFilter: number | null;
+  /** Pathspec — when set, the backend filters the walk to commits touching this. */
+  pathspec: string;
   loading: boolean;
   error: string | null;
 }
@@ -113,6 +121,10 @@ interface AppState {
   loadHistory: () => Promise<void>;
   selectCommit: (oid: string) => Promise<void>;
   setFilter: (q: string) => void;
+  setAuthorFilter: (a: string | null) => void;
+  setDateRange: (since: number | null, until: number | null) => void;
+  setPathspec: (p: string) => void;
+  resetHistoryFilters: () => void;
 
   // diff
   openDiff: (oid: string, file: string, files?: FileChange[]) => Promise<void>;
@@ -177,6 +189,10 @@ const emptyHistory: HistoryState = {
   files: [],
   filesLoading: false,
   filter: "",
+  authorFilter: null,
+  sinceFilter: null,
+  untilFilter: null,
+  pathspec: "",
   loading: false,
   error: null,
 };
@@ -305,8 +321,9 @@ export const useApp = create<AppState>((set, get) => ({
     if (!repo) return;
     set((s) => ({ history: { ...s.history, loading: true, error: null } }));
     try {
+      const pathspec = get().history.pathspec.trim();
       const [commits, refs] = await Promise.all([
-        git.log(repo.path, 5000, 0),
+        git.log(repo.path, { limit: 5000, skip: 0, pathspec: pathspec || undefined }),
         git.listRefs(repo.path),
       ]);
       set((s) => ({
@@ -344,6 +361,26 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setFilter: (q) => set((s) => ({ history: { ...s.history, filter: q } })),
+  setAuthorFilter: (a) => set((s) => ({ history: { ...s.history, authorFilter: a } })),
+  setDateRange: (since, until) =>
+    set((s) => ({ history: { ...s.history, sinceFilter: since, untilFilter: until } })),
+  setPathspec: (p) => {
+    set((s) => ({ history: { ...s.history, pathspec: p } }));
+    void get().loadHistory();
+  },
+  resetHistoryFilters: () => {
+    set((s) => ({
+      history: {
+        ...s.history,
+        filter: "",
+        authorFilter: null,
+        sinceFilter: null,
+        untilFilter: null,
+        pathspec: "",
+      },
+    }));
+    void get().loadHistory();
+  },
 
   // ---------- Diff ----------
   openDiff: async (oid, file, files) => {

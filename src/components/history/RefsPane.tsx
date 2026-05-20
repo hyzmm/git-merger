@@ -32,8 +32,6 @@ interface MenuState {
 
 export function RefsPane() {
   const refs = useApp((s) => s.history.refs);
-  const filter = useApp((s) => s.history.filter);
-  const setFilter = useApp((s) => s.setFilter);
   const checkoutBranch = useApp((s) => s.checkoutBranch);
   const deleteBranch = useApp((s) => s.deleteBranch);
   const renameBranch = useApp((s) => s.renameBranch);
@@ -138,22 +136,17 @@ export function RefsPane() {
 
   return (
     <aside className="flex h-full flex-col overflow-hidden bg-card">
-      <div className="border-b border-border p-2">
-        <div className="mb-1.5 flex items-center gap-1">
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter commits..."
-            className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring"
-          />
-          <button
-            onClick={onNewBranch}
-            title="New branch from HEAD"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        </div>
+      <div className="flex items-center justify-between border-b border-border px-2 py-1.5">
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Branches
+        </span>
+        <button
+          onClick={onNewBranch}
+          title="New branch from HEAD"
+          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
       </div>
       <div className="flex-1 overflow-auto">
         {(["local_branch", "remote_branch", "tag"] as const).map((kind) => {

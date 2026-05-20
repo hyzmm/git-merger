@@ -139,8 +139,13 @@ export interface StashEntry {
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
-  log: (path: string, limit = 200, skip = 0) =>
-    invoke<CommitSummary[]>("git_log", { path, limit, skip }),
+  log: (path: string, opts?: { limit?: number; skip?: number; pathspec?: string }) =>
+    invoke<CommitSummary[]>("git_log", {
+      path,
+      limit: opts?.limit ?? 5000,
+      skip: opts?.skip ?? 0,
+      pathspec: opts?.pathspec ?? null,
+    }),
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),
   fileDiff: (path: string, oid: string, file: string, ignoreWhitespace = false) =>
     invoke<FileDiff>("file_diff", { path, oid, file, ignoreWhitespace }),

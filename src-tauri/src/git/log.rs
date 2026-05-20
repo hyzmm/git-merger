@@ -1,8 +1,13 @@
 use super::CommitSummary;
-use git2::{Repository, Sort};
+use git2::{DiffOptions, Repository, Sort};
 use std::collections::HashMap;
 
-pub fn log(path: &str, limit: usize, skip: usize) -> Result<Vec<CommitSummary>, git2::Error> {
+pub fn log(
+    path: &str,
+    limit: usize,
+    skip: usize,
+    pathspec: Option<&str>,
+) -> Result<Vec<CommitSummary>, git2::Error> {
     let repo = Repository::discover(path)?;
 
     // Build map oid -> Vec<refname>
@@ -22,15 +27,29 @@ pub fn log(path: &str, limit: usize, skip: usize) -> Result<Vec<CommitSummary>, 
         return Ok(Vec::new()); // empty repo
     }
 
+    // When a pathspec is provided, only keep commits that touch that path
+    // (mirrors `git log -- <path>`). For the root commit (no parents), we
+    // include it if its tree contains the path.
+    let path_filter = pathspec.filter(|p| !p.is_empty());
+
+    let mut seen: usize = 0;
     let mut out = Vec::with_capacity(limit);
-    for (i, oid) in walk.flatten().enumerate() {
-        if i < skip {
+    for oid in walk.flatten() {
+        let c = repo.find_commit(oid)?;
+        if let Some(spec) = path_filter {
+            let touched = commit_touches_path(&repo, &c, spec).unwrap_or(false);
+            if !touched {
+                continue;
+            }
+        }
+        if seen < skip {
+            seen += 1;
             continue;
         }
         if out.len() >= limit {
             break;
         }
-        let c = repo.find_commit(oid)?;
+
         let parents: Vec<String> = c.parent_ids().map(|p| p.to_string()).collect();
         let author = c.author();
         out.push(CommitSummary {
@@ -46,4 +65,28 @@ pub fn log(path: &str, limit: usize, skip: usize) -> Result<Vec<CommitSummary>, 
     }
 
     Ok(out)
+}
+
+fn commit_touches_path(
+    repo: &Repository,
+    commit: &git2::Commit<'_>,
+    spec: &str,
+) -> Result<bool, git2::Error> {
+    let new_tree = commit.tree()?;
+    if commit.parent_count() == 0 {
+        // Root commit — match if the file/dir exists in this tree.
+        return Ok(new_tree.get_path(std::path::Path::new(spec)).is_ok());
+    }
+    let mut opts = DiffOptions::new();
+    opts.pathspec(spec);
+    for i in 0..commit.parent_count() {
+        let parent = commit.parent(i)?;
+        let parent_tree = parent.tree()?;
+        let diff =
+            repo.diff_tree_to_tree(Some(&parent_tree), Some(&new_tree), Some(&mut opts))?;
+        if diff.deltas().count() > 0 {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
