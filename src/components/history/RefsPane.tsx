@@ -32,6 +32,7 @@ interface MenuState {
 
 export function RefsPane() {
   const refs = useApp((s) => s.history.refs);
+  const selectCommit = useApp((s) => s.selectCommit);
   const checkoutBranch = useApp((s) => s.checkoutBranch);
   const deleteBranch = useApp((s) => s.deleteBranch);
   const renameBranch = useApp((s) => s.renameBranch);
@@ -162,6 +163,9 @@ export function RefsPane() {
                 return (
                   <div
                     key={`${kind}:${r.name}`}
+                    onClick={() => {
+                      if (r.target) void selectCommit(r.target);
+                    }}
                     onContextMenu={(e) => onContextMenu(e, r)}
                     onDoubleClick={() => {
                       if (r.kind === "local_branch" && !r.is_head) void checkoutBranch(r.name);
@@ -174,8 +178,8 @@ export function RefsPane() {
                     style={r.is_head ? { borderLeft: `2px solid hsl(${color})` } : undefined}
                     title={
                       r.kind === "local_branch"
-                        ? "Double-click to checkout · right-click for more"
-                        : "Right-click for actions"
+                        ? "Click: jump · double-click: checkout · right-click: more"
+                        : "Click: jump · right-click: more"
                     }
                   >
                     <span

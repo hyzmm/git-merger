@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { layoutGraph } from "@/lib/graph";
@@ -85,6 +85,15 @@ export function CommitList() {
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
   });
+
+  // When selectedOid changes (e.g. user clicked a ref in RefsPane), scroll
+  // the matching row into view.
+  useEffect(() => {
+    if (!selectedOid) return;
+    const idx = filtered.findIndex((c) => c.oid === selectedOid);
+    if (idx < 0) return;
+    virtualizer.scrollToIndex(idx, { align: "center" });
+  }, [selectedOid, filtered, virtualizer]);
 
   const onContextMenu = (e: React.MouseEvent, c: CommitSummary) => {
     e.preventDefault();
