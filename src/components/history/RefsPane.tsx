@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { GitBranch, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
@@ -32,6 +32,7 @@ interface MenuState {
 
 export function RefsPane() {
   const refs = useApp((s) => s.history.refs);
+  const repo = useApp((s) => s.repo);
   const selectCommit = useApp((s) => s.selectCommit);
   const checkoutBranch = useApp((s) => s.checkoutBranch);
   const deleteBranch = useApp((s) => s.deleteBranch);
@@ -40,6 +41,11 @@ export function RefsPane() {
   const deleteTagAct = useApp((s) => s.deleteTag);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
+
+  const headBranch = useMemo(
+    () => refs.find((r) => r.kind === "local_branch" && r.is_head) ?? null,
+    [refs],
+  );
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof refs> = {
@@ -150,6 +156,44 @@ export function RefsPane() {
         </button>
       </div>
       <div className="flex-1 overflow-auto">
+        {/* HEAD pinned to the top — always visible, unconditional. */}
+        <div className="px-3 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+          HEAD
+        </div>
+        {(() => {
+          const isDetached = headBranch === null;
+          const headLabel = headBranch?.name ?? repo?.head ?? "(unknown)";
+          const headTarget = headBranch?.target ?? null;
+          const color = headBranch ? colorFor(headBranch.name) : "var(--muted-foreground)";
+          return (
+            <div
+              onClick={() => {
+                if (headTarget) void selectCommit(headTarget);
+              }}
+              className={cn(
+                "flex cursor-pointer items-center gap-2 px-3 py-1 text-xs",
+                "hover:bg-accent/50",
+                "bg-accent/30",
+                !headTarget && "cursor-default opacity-80",
+              )}
+              style={{ borderLeft: `2px solid hsl(${color})` }}
+              title={
+                isDetached ? "HEAD is detached" : `HEAD → ${headLabel} (click to jump to its tip)`
+              }
+            >
+              <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate font-mono">
+                {isDetached ? `${headLabel} (detached)` : headLabel}
+              </span>
+              {headTarget && (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {headTarget.slice(0, 7)}
+                </span>
+              )}
+            </div>
+          );
+        })()}
+
         {(["local_branch", "remote_branch", "tag"] as const).map((kind) => {
           const list = grouped[kind] ?? [];
           if (list.length === 0) return null;

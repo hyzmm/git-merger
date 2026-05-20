@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Cloud,
-  FolderOpen,
   GitBranch,
   RefreshCw,
   Search,
@@ -15,6 +13,7 @@ import { useApp } from "@/stores/app";
 import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { AppMenu } from "@/components/AppMenu";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
 
@@ -22,7 +21,6 @@ type RemoteOp = "fetch" | "pull" | "push";
 
 export function Topbar() {
   const repo = useApp((s) => s.repo);
-  const openRepo = useApp((s) => s.openRepo);
   const refresh = useApp((s) => s.refresh);
   const loadHistory = useApp((s) => s.loadHistory);
   const loadChanges = useApp((s) => s.loadChanges);
@@ -83,11 +81,6 @@ export function Topbar() {
     };
   }, [t]);
 
-  async function pickRepo() {
-    const dir = await open({ directory: true, multiple: false });
-    if (typeof dir === "string") await openRepo(dir);
-  }
-
   async function runRemote(op: RemoteOp) {
     if (!repo || running) return;
     setRunning(op);
@@ -119,13 +112,7 @@ export function Topbar() {
   return (
     <>
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
-        <button
-          onClick={pickRepo}
-          className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-secondary px-3 text-sm text-secondary-foreground hover:bg-accent"
-        >
-          <FolderOpen className="h-4 w-4" />
-          {t("topbar.openRepo")}
-        </button>
+        <AppMenu />
 
         {repo && (
           <>

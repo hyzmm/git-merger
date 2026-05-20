@@ -1,0 +1,285 @@
+/**
+ * Topbar app menu — the hamburger ☰ at the very left.
+ *
+ * Houses low-frequency global commands that don't deserve a permanent
+ * Topbar button: Open repository, Recent repositories submenu, Close
+ * repository, About. High-frequency actions (Refresh / Fetch / Pull /
+ * Push / Search / Settings) stay as dedicated buttons.
+ */
+import { useEffect, useRef, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { exit } from "@tauri-apps/plugin-process";
+import { Folder, FolderOpen, Info, LogOut, Menu, Square, X } from "lucide-react";
+import { useApp } from "@/stores/app";
+import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+
+const MAX_RECENT = 8;
+const APP_VERSION = "0.9.0";
+
+export function AppMenu() {
+  const repo = useApp((s) => s.repo);
+  const openRepo = useApp((s) => s.openRepo);
+  const reset = useApp((s) => s.reset);
+  const recentRepos = useApp((s) => s.recentRepos);
+  const removeRecent = useApp((s) => s.removeRecentRepo);
+  const t = useT();
+
+  const [open_, setOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click / Esc.
+  useEffect(() => {
+    if (!open_) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open_]);
+
+  async function pickRepo() {
+    setOpen(false);
+    const dir = await open({ directory: true, multiple: false });
+    if (typeof dir === "string") await openRepo(dir);
+  }
+
+  async function openPath(path: string) {
+    setOpen(false);
+    await openRepo(path);
+  }
+
+  function closeRepo() {
+    setOpen(false);
+    reset();
+  }
+
+  async function quit() {
+    setOpen(false);
+    await exit(0);
+  }
+
+  return (
+    <>
+      <div ref={ref} className="relative">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          title={t("topbar.menu")}
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            open_ && "bg-accent text-accent-foreground",
+          )}
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        {open_ && (
+          <div className="absolute left-0 top-9 z-50 w-72 rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-lg">
+            <Item
+              icon={<FolderOpen className="h-3.5 w-3.5" />}
+              label={t("menu.openRepo")}
+              shortcut="Ctrl+O"
+              onClick={pickRepo}
+            />
+
+            {recentRepos.length > 0 && (
+              <>
+                <Divider />
+                <Heading label={t("menu.recent")} />
+                <div className="max-h-64 overflow-auto">
+                  {recentRepos.slice(0, MAX_RECENT).map((r) => {
+                    const name = pathTail(r.path);
+                    const isCurrent = repo?.path === r.path;
+                    return (
+                      <div
+                        key={r.path}
+                        className={cn(
+                          "group flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-accent",
+                          isCurrent && "bg-accent/40",
+                        )}
+                      >
+                        <button
+                          onClick={() => void openPath(r.path)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          title={r.path}
+                        >
+                          <Folder className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{name}</span>
+                          <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                            {shortPath(r.path)}
+                          </span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRecent(r.path);
+                          }}
+                          title={t("menu.recent.remove")}
+                          className="opacity-0 transition group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {repo && (
+              <>
+                <Divider />
+                <Item
+                  icon={<Square className="h-3.5 w-3.5" />}
+                  label={t("menu.closeRepo")}
+                  onClick={closeRepo}
+                />
+              </>
+            )}
+
+            <Divider />
+            <Item
+              icon={<Info className="h-3.5 w-3.5" />}
+              label={t("menu.about")}
+              onClick={() => {
+                setOpen(false);
+                setAboutOpen(true);
+              }}
+            />
+            <Item
+              icon={<LogOut className="h-3.5 w-3.5" />}
+              label={t("menu.quit")}
+              shortcut="Alt+F4"
+              onClick={quit}
+            />
+          </div>
+        )}
+      </div>
+
+      {aboutOpen && <AboutDialog version={APP_VERSION} onClose={() => setAboutOpen(false)} />}
+    </>
+  );
+}
+
+function Item({
+  icon,
+  label,
+  shortcut,
+  onClick,
+  danger,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  shortcut?: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-accent",
+        danger && "text-destructive",
+      )}
+    >
+      {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
+      <span className="flex-1 truncate">{label}</span>
+      {shortcut && <kbd className="font-mono text-[10px] text-muted-foreground">{shortcut}</kbd>}
+    </button>
+  );
+}
+
+function Heading({ label }: { label: string }) {
+  return (
+    <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {label}
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="my-1 h-px bg-border" />;
+}
+
+/** Last path segment (foldername). */
+function pathTail(p: string): string {
+  const cleaned = p.replace(/[/\\]+$/, "");
+  const m = cleaned.split(/[/\\]/);
+  return m[m.length - 1] || cleaned;
+}
+
+/** Truncate to ~32 chars from the start. */
+function shortPath(p: string): string {
+  if (p.length <= 36) return p;
+  return "…" + p.slice(-34);
+}
+
+function AboutDialog({ version, onClose }: { version: string; onClose: () => void }) {
+  const t = useT();
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md rounded-lg border border-border bg-card text-card-foreground shadow-xl"
+      >
+        <header className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">{t("menu.about")}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="space-y-2 px-4 py-4 text-xs">
+          <div className="flex items-baseline gap-2">
+            <span className="text-base font-semibold text-foreground">Git Tools</span>
+            <span className="font-mono text-muted-foreground">v{version}</span>
+          </div>
+          <p className="text-muted-foreground">{t("welcome.subtitle")}</p>
+          <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <dt>Tauri</dt>
+            <dd className="font-mono">2.x</dd>
+            <dt>React</dt>
+            <dd className="font-mono">19.x</dd>
+            <dt>libgit2</dt>
+            <dd className="font-mono">vendored via git2-rs</dd>
+            <dt>{t("about.repo")}</dt>
+            <dd className="font-mono">
+              <a
+                href="https://github.com/hyzmm/git-merger"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[hsl(var(--branch-1))] hover:underline"
+              >
+                github.com/hyzmm/git-merger
+              </a>
+            </dd>
+          </dl>
+        </div>
+        <div className="flex justify-end border-t border-border px-4 py-2">
+          <button
+            onClick={onClose}
+            className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90"
+          >
+            {t("common.dismiss")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
@@ -24,6 +25,7 @@ export default function App() {
   const applyResolution = useApp((s) => s.applyResolution);
   const chunks = useApp((s) => s.merge.chunks);
   const openPalette = useApp((s) => s.openPalette);
+  const openRepo = useApp((s) => s.openRepo);
 
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
@@ -44,13 +46,17 @@ export default function App() {
       "ctrl+8": () => repo && setView("rebase"),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
+      "ctrl+o": async () => {
+        const dir = await open({ directory: true, multiple: false });
+        if (typeof dir === "string") await openRepo(dir);
+      },
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
       "alt+2": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "right"),
       "alt+3": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "both"),
     }),
-    [repo, setView, refresh, firstPendingIdx, applyResolution, openPalette],
+    [repo, setView, refresh, firstPendingIdx, applyResolution, openPalette, openRepo],
   );
 
   useShortcuts(shortcutMap);

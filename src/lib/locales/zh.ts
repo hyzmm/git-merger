@@ -19,6 +19,7 @@ export const zh: Dict = {
   "topbar.push": "推送当前分支",
   "topbar.search": "搜索",
   "topbar.settings": "设置",
+  "topbar.menu": "菜单",
   "topbar.detached": "游离 HEAD",
   "topbar.loading": "加载中...",
   "topbar.progress.receiving": "接收中",
@@ -120,4 +121,13 @@ export const zh: Dict = {
   "fileHistory.openBlame": "在 Blame 中查看",
   "fileHistory.openInDiff": "打开完整的提交 diff",
   "fileHistory.selectCommit": "请在左侧选择一条提交。",
+
+  // 应用菜单（汉堡）
+  "menu.openRepo": "打开仓库…",
+  "menu.recent": "最近打开",
+  "menu.recent.remove": "从最近列表中移除",
+  "menu.closeRepo": "关闭仓库",
+  "menu.about": "关于 Git Tools",
+  "menu.quit": "退出",
+  "about.repo": "源码",
 };

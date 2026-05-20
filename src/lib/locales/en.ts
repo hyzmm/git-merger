@@ -21,6 +21,7 @@ export const en = {
   "topbar.push": "Push current branch",
   "topbar.search": "Search",
   "topbar.settings": "Settings",
+  "topbar.menu": "Menu",
   "topbar.detached": "detached",
   "topbar.loading": "Loading...",
   "topbar.progress.receiving": "Receiving",
@@ -124,6 +125,15 @@ export const en = {
   "fileHistory.openBlame": "Open this file in Blame",
   "fileHistory.openInDiff": "Open the full commit diff",
   "fileHistory.selectCommit": "Select a commit on the left.",
+
+  // App menu (hamburger)
+  "menu.openRepo": "Open repository…",
+  "menu.recent": "Recent repositories",
+  "menu.recent.remove": "Remove from recent list",
+  "menu.closeRepo": "Close repository",
+  "menu.about": "About Git Tools",
+  "menu.quit": "Quit",
+  "about.repo": "Source",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;
