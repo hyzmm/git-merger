@@ -13,12 +13,15 @@ export const zh: Dict = {
   // Topbar
   "topbar.openRepo": "打开仓库",
   "topbar.refresh": "刷新 (F5)",
-  "topbar.fetch": "git fetch --all --prune",
-  "topbar.pull": "git pull --ff-only",
-  "topbar.push": "git push",
+  "topbar.fetch": "从所有远端拉取（fetch + prune）",
+  "topbar.pull": "拉取（仅快进 fast-forward）",
+  "topbar.push": "推送当前分支",
   "topbar.settings": "设置",
   "topbar.detached": "游离 HEAD",
   "topbar.loading": "加载中...",
+  "topbar.progress.receiving": "接收中",
+  "topbar.progress.indexing": "索引中",
+  "topbar.progress.pushing": "推送中",
 
   // Welcome
   "welcome.title": "Git Tools",
@@ -72,4 +75,14 @@ export const zh: Dict = {
   "updater.later": "稍后",
   "updater.download": "下载并安装",
   "updater.restart": "立即重启",
+
+  // 凭据对话框
+  "creds.title": "登录远端",
+  "creds.subtitle": "访问以下地址需要身份验证：",
+  "creds.username": "用户名",
+  "creds.password": "密码 / Token",
+  "creds.tokenHint":
+    "对于 GitHub / GitLab / Bitbucket，请使用个人访问令牌（PAT），不要使用账号密码。",
+  "creds.signIn": "登录",
+  "creds.signingIn": "登录中...",
 };

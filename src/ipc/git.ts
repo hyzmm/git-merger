@@ -127,12 +127,32 @@ export interface WorkingFile {
   status: WorkingStatus;
 }
 
-export interface GitCmdResult {
+export interface RemoteOpResult {
   success: boolean;
-  stdout: string;
-  stderr: string;
-  code: number;
+  /** Short human-readable summary (e.g. "fast-forwarded 3 commits"). */
+  message: string;
+  /** Optional details per remote/branch (push response, fetch refs). */
+  details: string[];
 }
+
+/** Backwards-compat alias for older call sites. */
+export type GitCmdResult = RemoteOpResult;
+
+/** Frontend payload of `git://credentials-needed`. */
+export interface CredRequest {
+  id: number;
+  url: string;
+  username_hint: string | null;
+}
+
+/** Backend → frontend progress events on `git://progress`. */
+export type ProgressEvent =
+  | { phase: "sideband"; message: string }
+  | { phase: "receiving"; received: number; total: number; bytes: number }
+  | { phase: "indexing"; indexed: number; total: number }
+  | { phase: "pushing"; pushed: number; total: number }
+  | { phase: "push-status"; refname: string; status: string | null }
+  | { phase: "done"; ok: boolean; summary: string };
 
 export interface StashEntry {
   /** Stack index (0 = most recent). */
@@ -206,15 +226,18 @@ export const git = {
   commitChanges: (path: string, message: string) =>
     invoke<string>("commit_changes", { path, message }),
   fetch: (path: string, remote?: string) =>
-    invoke<GitCmdResult>("git_fetch", { path, remote: remote ?? null }),
-  pull: (path: string) => invoke<GitCmdResult>("git_pull", { path }),
+    invoke<RemoteOpResult>("git_fetch", { path, remote: remote ?? null }),
+  pull: (path: string) => invoke<RemoteOpResult>("git_pull", { path }),
   push: (path: string, opts?: { remote?: string; branch?: string; setUpstream?: boolean }) =>
-    invoke<GitCmdResult>("git_push", {
+    invoke<RemoteOpResult>("git_push", {
       path,
       remote: opts?.remote ?? null,
       branch: opts?.branch ?? null,
       setUpstream: opts?.setUpstream ?? false,
     }),
+  submitCredentials: (id: number, username: string, password: string) =>
+    invoke<void>("submit_credentials", { id, reply: { username, password } }),
+  cancelCredentials: (id: number) => invoke<void>("cancel_credentials", { id }),
   stashList: (path: string) => invoke<StashEntry[]>("stash_list", { path }),
   stashSave: (
     path: string,

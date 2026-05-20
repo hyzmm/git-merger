@@ -31,6 +31,8 @@ pub fn run() {
             commands::git_fetch,
             commands::git_pull,
             commands::git_push,
+            commands::submit_credentials,
+            commands::cancel_credentials,
             commands::stash_list,
             commands::stash_save,
             commands::stash_apply,

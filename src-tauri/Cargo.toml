@@ -25,6 +25,7 @@ git2 = { version = "0.20", default-features = false, features = ["vendored-libgi
 thiserror = "1"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
 
 [profile.release]
 opt-level = "s"

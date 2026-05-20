@@ -82,8 +82,7 @@ fn commit_touches_path(
     for i in 0..commit.parent_count() {
         let parent = commit.parent(i)?;
         let parent_tree = parent.tree()?;
-        let diff =
-            repo.diff_tree_to_tree(Some(&parent_tree), Some(&new_tree), Some(&mut opts))?;
+        let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&new_tree), Some(&mut opts))?;
         if diff.deltas().count() > 0 {
             return Ok(true);
         }

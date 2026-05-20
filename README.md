@@ -98,7 +98,7 @@ G:\GitTools
 5. ✅ Merge page — 3-pane conflict editor (LEFT ours / RESULT editable / RIGHT theirs), conflict block parsing (`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`, diff3-aware), Accept Left/Right/Both per block, manual editing, "Mark resolved & stage" (writes file + `git add`), in-app **Abort merge** and **Commit merge** buttons.
 6. ✅ Blame view — line-by-line history, consecutive lines from the same commit are visually grouped (IDEA-style), short-oid clickable to jump to that commit. Virtualized + Shiki-highlighted.
 7. ✅ Changes view (working tree) — Stage / Unstage / Discard with file checkboxes, side-panel commit form (uses git config signature, HEAD as parent). Three sections: Unmerged / Staged / Unstaged.
-8. ✅ Remote ops — Fetch / Pull / Push buttons in the topbar (delegates to system `git` so the user's existing credential helper / SSH key / 2FA setup just works). Result banner shows stdout/stderr.
+8. ✅ Remote ops — Fetch / Pull / Push buttons in the topbar with native libgit2 transport, live progress (receiving / indexing / pushing), an interactive credential prompt for HTTPS, and SSH agent + `~/.ssh/id_*` key fallback. Result banner shows per-remote details. (Originally shelled out to system `git`; replaced in v0.5.0.)
 9. ✅ Global UX — keyboard shortcuts (`Ctrl+1..5` switch view, `F5`/`Ctrl+R` refresh, `Alt+1/2/3` accept in merge), Refresh button, Recent repositories (localStorage), top-level `ErrorBoundary`, IDEA-style dark theme, zero-asset cross-platform font fallback (sans + mono with CJK).
 10. ✅ Open Design driven UI — per-page HTML drafts in `design/` (history.html / diff.html / merge.html / index.html sharing `design.css`); the React implementation is a 1:1 port of those drafts.
 11. ✅ Distribution — `bun run tauri:build` produces signed-ready Windows MSI (~2.7 MB) and NSIS (~2.0 MB) installers; release-profile binary is ~5.4 MB after LTO + strip. macOS `.dmg` / Linux `.deb`/`.rpm`/`.AppImage` build from the same source on those platforms.
@@ -124,14 +124,15 @@ G:\GitTools
 3. ✅ **Auto-update** — `tauri-plugin-updater` configured against `https://github.com/.../releases/latest/download/latest.json`. Topbar shows a clickable badge when an update is available; release notes preview, download progress bar, and one-click "Restart now". CI signs updater bundles with the `TAURI_SIGNING_PRIVATE_KEY` repo secret (a minisign keypair was generated and the public key is committed in `tauri.conf.json`).
 4. ✅ **i18n** — typed lightweight dictionary (no i18next dependency, ~1 kB) in `lib/i18n.ts`, `en` + `zh` locales for the user-facing chrome (Sidebar / Topbar / Welcome / Settings / Updater). Auto-detects from `navigator.language` on first run, switches live via Settings → Language.
 
-### Backlog (post-v0.4.0)
+### v0.5.0 — Shipped
+
+1. ✅ **Native push / pull / fetch via git2-rs** — replaced the shell-out to system `git`. Pull is fast-forward-only (a non-FF prompts the user toward the merge UI); push auto-resolves the upstream remote from the branch config and supports `-u` for first-time pushes; fetch hits all configured remotes by default and prunes stale refs.
+2. ✅ **Live remote progress** — `transfer_progress` / sideband / `push_transfer_progress` / `push_update_reference` callbacks emit `git://progress` events; the Topbar shows "Receiving 1234/5678", "Indexing", "Pushing", and per-ref push status in real time.
+3. ✅ **Credential dialog** — when libgit2 needs `USER_PASS_PLAINTEXT` and no credential helper / SSH key satisfies it, the backend `emit`s a `git://credentials-needed` event; a modal collects the username + token and the libgit2 callback unblocks via a `Condvar`. Resolution order: SSH agent → default `~/.ssh/id_{ed25519,rsa,ecdsa}` keys → `Cred::credential_helper` (HTTPS) → user prompt (≤3 retries, 2-min timeout).
+
+### Backlog (post-v0.5.0)
 
 - ⏳ Interactive Rebase (drag-to-reorder, pick / squash / reword / drop).
-- ⏳ Native libgit2-driven push/pull with progress UI and credential dialogs (current implementation shells out to system `git`).
-- ⏳ Settings panel (theme / font size / tab width / `core.autocrlf`).
-- ⏳ i18n (Chinese / English).
-- ⏳ GitHub Actions CI matrix + auto-release on tag push.
-- ⏳ Auto-update via `tauri-plugin-updater`.
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 - ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
 

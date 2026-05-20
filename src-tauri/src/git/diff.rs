@@ -19,7 +19,9 @@ fn delta_to_status(d: Delta) -> ChangeStatus {
 /// peeled to their target commit automatically).
 pub fn commit_files(path: &str, oid: &str) -> Result<Vec<FileChange>, git2::Error> {
     let repo = Repository::discover(path)?;
-    let commit = repo.find_object(Oid::from_str(oid)?, None)?.peel_to_commit()?;
+    let commit = repo
+        .find_object(Oid::from_str(oid)?, None)?
+        .peel_to_commit()?;
     let new_tree = commit.tree()?;
     let old_tree = if commit.parent_count() > 0 {
         Some(commit.parent(0)?.tree()?)
@@ -161,7 +163,9 @@ pub fn file_diff(
     ignore_whitespace: bool,
 ) -> Result<FileDiff, git2::Error> {
     let repo = Repository::discover(path)?;
-    let commit = repo.find_object(Oid::from_str(oid)?, None)?.peel_to_commit()?;
+    let commit = repo
+        .find_object(Oid::from_str(oid)?, None)?
+        .peel_to_commit()?;
     let new_tree = commit.tree()?;
     let old_tree = if commit.parent_count() > 0 {
         Some(commit.parent(0)?.tree()?)

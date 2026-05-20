@@ -98,11 +98,7 @@ pub fn blame_file(path: String, file: String) -> R<Vec<git::BlameLine>> {
 }
 
 #[tauri::command]
-pub fn blame_at_revision(
-    path: String,
-    file: String,
-    revision: String,
-) -> R<Vec<git::BlameLine>> {
+pub fn blame_at_revision(path: String, file: String, revision: String) -> R<Vec<git::BlameLine>> {
     Ok(git::blame::blame_at_revision(&path, &file, &revision)?)
 }
 
@@ -144,28 +140,46 @@ pub fn commit_changes(path: String, message: String) -> R<String> {
 }
 
 #[tauri::command]
-pub fn git_fetch(path: String, remote: Option<String>) -> R<git::GitCmdResult> {
-    Ok(git::remote::fetch(&path, remote.as_deref())?)
+pub fn git_fetch(
+    app: tauri::AppHandle,
+    path: String,
+    remote: Option<String>,
+) -> R<git::RemoteOpResult> {
+    Ok(git::remote::fetch(app, &path, remote.as_deref())?)
 }
 
 #[tauri::command]
-pub fn git_pull(path: String) -> R<git::GitCmdResult> {
-    Ok(git::remote::pull(&path)?)
+pub fn git_pull(app: tauri::AppHandle, path: String) -> R<git::RemoteOpResult> {
+    Ok(git::remote::pull(app, &path)?)
 }
 
 #[tauri::command]
 pub fn git_push(
+    app: tauri::AppHandle,
     path: String,
     remote: Option<String>,
     branch: Option<String>,
     set_upstream: bool,
-) -> R<git::GitCmdResult> {
+) -> R<git::RemoteOpResult> {
     Ok(git::remote::push(
+        app,
         &path,
         remote.as_deref(),
         branch.as_deref(),
         set_upstream,
     )?)
+}
+
+#[tauri::command]
+pub fn submit_credentials(id: u64, reply: git::CredReply) -> R<()> {
+    git::remote::submit_credentials(id, reply);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_credentials(id: u64) -> R<()> {
+    git::remote::cancel_credentials(id);
+    Ok(())
 }
 
 // ---------- Stash ----------

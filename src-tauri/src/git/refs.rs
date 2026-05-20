@@ -27,10 +27,7 @@ pub fn list_refs(path: &str) -> Result<Vec<RefEntry>, git2::Error> {
     for b in repo.branches(Some(BranchType::Local))?.flatten() {
         let (branch, _) = b;
         if let Ok(Some(name)) = branch.name() {
-            let target = branch
-                .get()
-                .target()
-                .map(|o| o.to_string());
+            let target = branch.get().target().map(|o| o.to_string());
             let is_head = branch.is_head();
             out.push(RefEntry {
                 kind: RefKind::LocalBranch,

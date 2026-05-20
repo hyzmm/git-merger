@@ -15,12 +15,15 @@ export const en = {
   // Topbar
   "topbar.openRepo": "Open Repository",
   "topbar.refresh": "Refresh (F5)",
-  "topbar.fetch": "git fetch --all --prune",
-  "topbar.pull": "git pull --ff-only",
-  "topbar.push": "git push",
+  "topbar.fetch": "Fetch from all remotes (prune)",
+  "topbar.pull": "Pull (fast-forward only)",
+  "topbar.push": "Push current branch",
   "topbar.settings": "Settings",
   "topbar.detached": "detached",
   "topbar.loading": "Loading...",
+  "topbar.progress.receiving": "Receiving",
+  "topbar.progress.indexing": "Indexing",
+  "topbar.progress.pushing": "Pushing",
 
   // Welcome
   "welcome.title": "Git Tools",
@@ -75,6 +78,16 @@ export const en = {
   "updater.later": "Later",
   "updater.download": "Download & install",
   "updater.restart": "Restart now",
+
+  // Credentials dialog
+  "creds.title": "Sign in to remote",
+  "creds.subtitle": "Authentication is required to talk to:",
+  "creds.username": "Username",
+  "creds.password": "Password / token",
+  "creds.tokenHint":
+    "For GitHub / GitLab / Bitbucket, use a personal access token instead of your account password.",
+  "creds.signIn": "Sign in",
+  "creds.signingIn": "Signing in...",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

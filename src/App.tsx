@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { CredentialDialog } from "@/components/CredentialDialog";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
@@ -74,6 +75,7 @@ export default function App() {
           )}
         </main>
       </div>
+      <CredentialDialog />
     </div>
   );
 }

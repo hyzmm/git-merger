@@ -1,70 +1,527 @@
+//! Native fetch / pull / push via git2-rs.
+//!
+//! Credentials are resolved in this order, falling back on each failure:
+//!   1. SSH agent (when the URL is SSH)
+//!   2. `~/.ssh/id_*` keys (when the URL is SSH)
+//!   3. The user's git credential helper (HTTPS)
+//!   4. An interactive prompt forwarded to the frontend via Tauri events
+//!
+//! Progress (objects received / bytes / push status) is forwarded to the
+//! frontend on `git://progress`, so the Topbar can show a live indicator.
+
+use git2::build::CheckoutBuilder;
+use git2::{
+    AnnotatedCommit, AutotagOption, Cred, CredentialType, FetchOptions, MergeAnalysis, PushOptions,
+    RemoteCallbacks, Repository,
+};
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GitCmdResult {
+/// Result of a high-level remote operation surfaced to the UI.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteOpResult {
     pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
-    pub code: i32,
+    /// Short human-readable summary (e.g. "fast-forwarded 3 commits", "everything up-to-date").
+    pub message: String,
+    /// Optional details per remote/branch (push response, fetch refs).
+    pub details: Vec<String>,
 }
 
-/// Run `git <args>` inside the repo's workdir. Inherits the user's git
-/// configuration, credential helpers, and SSH agent.
-pub fn run_git(path: &str, args: &[&str]) -> Result<GitCmdResult, git2::Error> {
-    // Resolve the workdir from the repo so we run in the right place.
-    let repo = git2::Repository::discover(path)?;
-    let workdir = repo
-        .workdir()
-        .ok_or_else(|| git2::Error::from_str("repository has no workdir"))?;
-
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(workdir)
-        .output()
-        .map_err(|e| {
-            git2::Error::from_str(&format!(
-                "failed to spawn `git` (is it installed and on PATH?): {e}"
-            ))
-        })?;
-
-    Ok(GitCmdResult {
-        success: output.status.success(),
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        code: output.status.code().unwrap_or(-1),
-    })
-}
-
-pub fn fetch(path: &str, remote: Option<&str>) -> Result<GitCmdResult, git2::Error> {
-    let r = remote.unwrap_or("--all");
-    if r == "--all" {
-        run_git(path, &["fetch", "--all", "--prune"])
-    } else {
-        run_git(path, &["fetch", "--prune", r])
+impl RemoteOpResult {
+    fn ok(message: impl Into<String>) -> Self {
+        Self {
+            success: true,
+            message: message.into(),
+            details: vec![],
+        }
+    }
+    fn ok_with(message: impl Into<String>, details: Vec<String>) -> Self {
+        Self {
+            success: true,
+            message: message.into(),
+            details,
+        }
     }
 }
 
-pub fn pull(path: &str) -> Result<GitCmdResult, git2::Error> {
-    run_git(path, &["pull", "--ff-only"])
+/// Progress event payload broadcast to the frontend.
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "phase", rename_all = "kebab-case")]
+pub enum ProgressEvent {
+    /// Negotiating with the remote / resolving deltas.
+    Sideband { message: String },
+    /// Receiving objects (fetch).
+    Receiving {
+        received: usize,
+        total: usize,
+        bytes: usize,
+    },
+    /// Indexing local objects (after receive).
+    Indexing { indexed: usize, total: usize },
+    /// Pushing objects.
+    Pushing { pushed: usize, total: usize },
+    /// Per-ref push response. status is None on success, Some(reason) on failure.
+    PushStatus {
+        refname: String,
+        status: Option<String>,
+    },
+    /// Operation finished (success or failure).
+    Done { ok: bool, summary: String },
 }
 
+// ---------------------------------------------------------------------------
+// Credential prompt bridge
+// ---------------------------------------------------------------------------
+//
+// libgit2's credential callback is synchronous. We "block" inside it on a
+// `Condvar` while a Tauri event asks the user, and the frontend later calls
+// `submit_credentials` (or `cancel_credentials`) which signals the condvar.
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CredRequest {
+    pub id: u64,
+    pub url: String,
+    pub username_hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CredReply {
+    pub username: String,
+    pub password: String,
+}
+
+struct PendingCred {
+    reply: Option<CredReply>,
+    cancelled: bool,
+}
+
+type PendingSlot = Arc<(Mutex<PendingCred>, Condvar)>;
+type PendingMap = Mutex<HashMap<u64, PendingSlot>>;
+
+static PENDING: OnceLock<PendingMap> = OnceLock::new();
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+fn pending() -> &'static PendingMap {
+    PENDING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Called from the credentials callback to ask the UI for a username/password.
+/// Blocks the calling thread until the user replies or cancels (or 2 minutes pass).
+fn prompt_user(app: &AppHandle, url: &str, username_hint: Option<&str>) -> Option<CredReply> {
+    let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    let slot: PendingSlot = Arc::new((
+        Mutex::new(PendingCred {
+            reply: None,
+            cancelled: false,
+        }),
+        Condvar::new(),
+    ));
+    pending().lock().unwrap().insert(id, slot.clone());
+
+    let _ = app.emit(
+        "git://credentials-needed",
+        CredRequest {
+            id,
+            url: url.to_string(),
+            username_hint: username_hint.map(|s| s.to_string()),
+        },
+    );
+
+    let (lock, cvar) = &*slot;
+    let mut guard = lock.lock().unwrap();
+    let timeout = Duration::from_secs(120);
+    let (g, _) = cvar
+        .wait_timeout_while(guard, timeout, |s| s.reply.is_none() && !s.cancelled)
+        .unwrap();
+    guard = g;
+
+    pending().lock().unwrap().remove(&id);
+
+    if guard.cancelled {
+        None
+    } else {
+        guard.reply.take()
+    }
+}
+
+/// Frontend → backend: deliver the user's reply.
+pub fn submit_credentials(id: u64, reply: CredReply) {
+    if let Some(slot) = pending().lock().unwrap().get(&id).cloned() {
+        let (lock, cvar) = &*slot;
+        let mut s = lock.lock().unwrap();
+        s.reply = Some(reply);
+        cvar.notify_all();
+    }
+}
+
+/// Frontend → backend: user cancelled the prompt.
+pub fn cancel_credentials(id: u64) {
+    if let Some(slot) = pending().lock().unwrap().get(&id).cloned() {
+        let (lock, cvar) = &*slot;
+        let mut s = lock.lock().unwrap();
+        s.cancelled = true;
+        cvar.notify_all();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Callback construction
+// ---------------------------------------------------------------------------
+
+fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks<'a> {
+    let mut cb = RemoteCallbacks::new();
+
+    // -------- credentials --------
+    // Track what we've already tried so we don't loop forever inside libgit2.
+    let mut tried_agent = false;
+    let mut tried_default = false;
+    let mut tried_helper = false;
+    let mut prompted_count = 0usize;
+    let app_for_creds = app.clone();
+    cb.credentials(move |url, username_from_url, allowed| {
+        // SSH agent first.
+        if allowed.contains(CredentialType::SSH_KEY) && !tried_agent {
+            tried_agent = true;
+            if let Some(user) = username_from_url {
+                if let Ok(c) = Cred::ssh_key_from_agent(user) {
+                    return Ok(c);
+                }
+            }
+        }
+        // Default ~/.ssh keys.
+        if allowed.contains(CredentialType::SSH_KEY) && !tried_default {
+            tried_default = true;
+            if let Some(user) = username_from_url {
+                if let Some(home) = dirs::home_dir() {
+                    for key in ["id_ed25519", "id_rsa", "id_ecdsa"] {
+                        let priv_key = home.join(".ssh").join(key);
+                        if priv_key.exists() {
+                            if let Ok(c) = Cred::ssh_key(user, None, &priv_key, None) {
+                                return Ok(c);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // git credential helper (https).
+        if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) && !tried_helper {
+            tried_helper = true;
+            if let Ok(cfg) = git2::Config::open_default() {
+                if let Ok(c) = Cred::credential_helper(&cfg, url, username_from_url) {
+                    return Ok(c);
+                }
+            }
+        }
+        // SSH wants only a username (not actually credentials).
+        if allowed.contains(CredentialType::USERNAME) {
+            if let Some(user) = username_from_url {
+                return Cred::username(user);
+            }
+        }
+        // Fallback: ask the user.
+        if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) && prompted_count < 3 {
+            prompted_count += 1;
+            if let Some(reply) = prompt_user(&app_for_creds, url, username_from_url) {
+                return Cred::userpass_plaintext(&reply.username, &reply.password);
+            }
+        }
+        Err(git2::Error::from_str(
+            "authentication required (no usable credentials)",
+        ))
+    });
+
+    // -------- progress: receive (fetch) --------
+    let app_progress = app.clone();
+    cb.transfer_progress(move |stats| {
+        let received = stats.received_objects();
+        let total = stats.total_objects();
+        let bytes = stats.received_bytes();
+        let _ = app_progress.emit(
+            "git://progress",
+            ProgressEvent::Receiving {
+                received,
+                total,
+                bytes,
+            },
+        );
+        if stats.indexed_objects() > 0 && total > 0 {
+            let _ = app_progress.emit(
+                "git://progress",
+                ProgressEvent::Indexing {
+                    indexed: stats.indexed_objects(),
+                    total,
+                },
+            );
+        }
+        true
+    });
+
+    // -------- sideband (server messages) --------
+    let app_sb = app.clone();
+    cb.sideband_progress(move |data| {
+        if let Ok(s) = std::str::from_utf8(data) {
+            let _ = app_sb.emit(
+                "git://progress",
+                ProgressEvent::Sideband {
+                    message: s.trim().to_string(),
+                },
+            );
+        }
+        true
+    });
+
+    // -------- progress: push --------
+    let app_push = app.clone();
+    cb.push_transfer_progress(move |current, total, _bytes| {
+        let _ = app_push.emit(
+            "git://progress",
+            ProgressEvent::Pushing {
+                pushed: current,
+                total,
+            },
+        );
+    });
+
+    // -------- per-ref push response --------
+    let app_ref = app.clone();
+    cb.push_update_reference(move |refname, status| {
+        let _ = app_ref.emit(
+            "git://progress",
+            ProgressEvent::PushStatus {
+                refname: refname.to_string(),
+                status: status.map(|s| s.to_string()),
+            },
+        );
+        Ok(())
+    });
+
+    // (silence unused arg in callback signature)
+    let _ = total_pack_bytes;
+    cb
+}
+
+fn fetch_options<'a>(app: AppHandle) -> FetchOptions<'a> {
+    let mut opts = FetchOptions::new();
+    opts.remote_callbacks(make_callbacks(app, false));
+    opts.download_tags(AutotagOption::Auto);
+    opts.prune(git2::FetchPrune::On);
+    opts
+}
+
+fn push_options<'a>(app: AppHandle) -> PushOptions<'a> {
+    let mut opts = PushOptions::new();
+    opts.remote_callbacks(make_callbacks(app, true));
+    opts
+}
+
+// ---------------------------------------------------------------------------
+// Public ops
+// ---------------------------------------------------------------------------
+
+/// Fetch one remote (or all of them when `remote` is `None`).
+pub fn fetch(
+    app: AppHandle,
+    path: &str,
+    remote: Option<&str>,
+) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let remotes: Vec<String> = match remote {
+        Some(r) => vec![r.to_string()],
+        None => repo
+            .remotes()?
+            .iter()
+            .filter_map(|r| r.map(|s| s.to_string()))
+            .collect(),
+    };
+    if remotes.is_empty() {
+        return Err(git2::Error::from_str("no remote configured"));
+    }
+
+    let mut details = Vec::new();
+    for name in &remotes {
+        let mut r = repo.find_remote(name)?;
+        let mut opts = fetch_options(app.clone());
+        // Use the remote's configured refspecs (None = default).
+        let refspecs: [&str; 0] = [];
+        r.fetch(&refspecs, Some(&mut opts), None)?;
+        let stats = r.stats();
+        details.push(format!(
+            "{}: {} objects ({} bytes)",
+            name,
+            stats.received_objects(),
+            stats.received_bytes()
+        ));
+    }
+
+    let summary = if remotes.len() == 1 {
+        format!("fetched {}", remotes[0])
+    } else {
+        format!("fetched {} remotes", remotes.len())
+    };
+    let _ = app.emit(
+        "git://progress",
+        ProgressEvent::Done {
+            ok: true,
+            summary: summary.clone(),
+        },
+    );
+    Ok(RemoteOpResult::ok_with(summary, details))
+}
+
+/// Pull = fetch + fast-forward (only). Returns an error on a non-FF situation;
+/// the user can resolve via merge UI separately.
+pub fn pull(app: AppHandle, path: &str) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+
+    // Determine the upstream of the current branch.
+    let head = repo.head()?;
+    if !head.is_branch() {
+        return Err(git2::Error::from_str("HEAD is detached; cannot pull"));
+    }
+    let local_branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("invalid HEAD"))?
+        .to_string();
+    let local_branch = repo.find_branch(&local_branch_name, git2::BranchType::Local)?;
+    let upstream = local_branch.upstream().map_err(|_| {
+        git2::Error::from_str(&format!(
+            "branch '{}' has no upstream configured",
+            local_branch_name
+        ))
+    })?;
+    let upstream_ref = upstream.get();
+    let upstream_name = upstream_ref
+        .name()
+        .ok_or_else(|| git2::Error::from_str("invalid upstream ref"))?
+        .to_string();
+
+    // Parse "refs/remotes/<remote>/<branch>".
+    let stripped = upstream_name
+        .strip_prefix("refs/remotes/")
+        .ok_or_else(|| git2::Error::from_str("upstream is not a remote-tracking branch"))?;
+    let (remote_name, _remote_branch) = stripped
+        .split_once('/')
+        .ok_or_else(|| git2::Error::from_str("malformed upstream name"))?;
+
+    // Fetch the upstream's remote.
+    let mut remote = repo.find_remote(remote_name)?;
+    {
+        let mut opts = fetch_options(app.clone());
+        let refspecs: [&str; 0] = [];
+        remote.fetch(&refspecs, Some(&mut opts), None)?;
+    }
+
+    // Fast-forward analysis.
+    let upstream_oid = upstream_ref
+        .target()
+        .ok_or_else(|| git2::Error::from_str("upstream has no target"))?;
+    let fetch_commit: AnnotatedCommit = repo.find_annotated_commit(upstream_oid)?;
+    let (analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
+
+    let result = if analysis.contains(MergeAnalysis::ANALYSIS_UP_TO_DATE) {
+        RemoteOpResult::ok("already up to date")
+    } else if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
+        // Fast-forward the local branch.
+        let refname = format!("refs/heads/{}", local_branch_name);
+        let mut local_ref = repo.find_reference(&refname)?;
+        local_ref.set_target(upstream_oid, "pull: fast-forward")?;
+        repo.set_head(&refname)?;
+        repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
+        RemoteOpResult::ok(format!(
+            "fast-forwarded to {}",
+            &upstream_oid.to_string()[..7]
+        ))
+    } else if analysis.contains(MergeAnalysis::ANALYSIS_NORMAL) {
+        return Err(git2::Error::from_str(
+            "non-fast-forward — use the merge UI to integrate the upstream",
+        ));
+    } else {
+        return Err(git2::Error::from_str("nothing to merge"));
+    };
+
+    let _ = app.emit(
+        "git://progress",
+        ProgressEvent::Done {
+            ok: true,
+            summary: result.message.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// Push the current branch (or `branch` on `remote`) to its upstream.
 pub fn push(
+    app: AppHandle,
     path: &str,
     remote: Option<&str>,
     branch: Option<&str>,
     set_upstream: bool,
-) -> Result<GitCmdResult, git2::Error> {
-    let mut args: Vec<String> = vec!["push".into()];
-    if set_upstream {
-        args.push("-u".into());
-    }
-    if let Some(r) = remote {
-        args.push(r.into());
-        if let Some(b) = branch {
-            args.push(b.into());
+) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+
+    // Resolve the local branch name.
+    let local_branch_name = match branch {
+        Some(b) => b.to_string(),
+        None => {
+            let head = repo.head()?;
+            if !head.is_branch() {
+                return Err(git2::Error::from_str(
+                    "HEAD is detached; specify a branch to push",
+                ));
+            }
+            head.shorthand()
+                .ok_or_else(|| git2::Error::from_str("invalid HEAD"))?
+                .to_string()
         }
+    };
+
+    // Resolve the remote: explicit > upstream remote > "origin".
+    let remote_name = match remote {
+        Some(r) => r.to_string(),
+        None => {
+            let local_branch = repo.find_branch(&local_branch_name, git2::BranchType::Local)?;
+            match local_branch.upstream() {
+                Ok(up) => {
+                    let n = up
+                        .get()
+                        .name()
+                        .and_then(|n| n.strip_prefix("refs/remotes/"))
+                        .and_then(|n| n.split_once('/').map(|(r, _)| r.to_string()));
+                    n.unwrap_or_else(|| "origin".to_string())
+                }
+                Err(_) => "origin".to_string(),
+            }
+        }
+    };
+
+    let mut remote = repo.find_remote(&remote_name)?;
+    let refspec = format!(
+        "refs/heads/{name}:refs/heads/{name}",
+        name = local_branch_name
+    );
+    {
+        let mut opts = push_options(app.clone());
+        remote.push(&[&refspec], Some(&mut opts))?;
     }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_git(path, &arg_refs)
+
+    if set_upstream {
+        let upstream_name = format!("{}/{}", remote_name, local_branch_name);
+        let mut local_branch = repo.find_branch(&local_branch_name, git2::BranchType::Local)?;
+        local_branch.set_upstream(Some(&upstream_name))?;
+    }
+
+    let summary = format!("pushed {} → {}", local_branch_name, remote_name);
+    let _ = app.emit(
+        "git://progress",
+        ProgressEvent::Done {
+            ok: true,
+            summary: summary.clone(),
+        },
+    );
+    Ok(RemoteOpResult::ok(summary))
 }

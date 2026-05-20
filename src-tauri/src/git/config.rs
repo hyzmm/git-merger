@@ -4,6 +4,7 @@
 //! Scope:
 //! - "local"  — repo's `.git/config`
 //! - "global" — user's `~/.gitconfig`
+//!
 //! Reads always fall back to the merged config (local overrides global).
 
 use git2::{Config, Repository};
