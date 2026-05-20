@@ -151,7 +151,7 @@ export function CommitList() {
   };
 
   return (
-    <section className="flex min-w-0 flex-col">
+    <section className="flex h-full min-w-0 min-h-0 flex-col">
       <HistoryFilterBar />
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
         <span className="text-muted-foreground">{filtered.length} commits</span>
