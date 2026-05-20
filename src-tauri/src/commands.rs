@@ -278,3 +278,28 @@ pub fn reset_to(path: String, oid: String, mode: String) -> R<()> {
 pub fn reflog_list(path: String, refname: Option<String>) -> R<Vec<git::ReflogEntry>> {
     Ok(git::reflog::list(&path, refname.as_deref())?)
 }
+
+// ---------- Submodules ----------
+
+#[tauri::command]
+pub fn submodule_list(path: String) -> R<Vec<git::SubmoduleInfo>> {
+    Ok(git::submodule::list(&path)?)
+}
+
+#[tauri::command]
+pub fn submodule_init(path: String, name: String) -> R<()> {
+    git::submodule::init(&path, &name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn submodule_update(path: String, name: String, init_first: bool) -> R<()> {
+    git::submodule::update(&path, &name, init_first)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn submodule_sync(path: String, name: String) -> R<()> {
+    git::submodule::sync(&path, &name)?;
+    Ok(())
+}

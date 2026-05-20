@@ -11,6 +11,7 @@ pub mod reflog;
 pub mod remote;
 pub mod repo;
 pub mod stash;
+pub mod submodule;
 pub mod workspace;
 
 pub use blame::{BlameLine, PrevFile};
@@ -19,6 +20,7 @@ pub use refs::RefEntry;
 pub use reflog::ReflogEntry;
 pub use remote::GitCmdResult;
 pub use stash::StashEntry;
+pub use submodule::SubmoduleInfo;
 pub use workspace::WorkingFile;
 
 use serde::{Deserialize, Serialize};

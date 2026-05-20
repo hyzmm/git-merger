@@ -157,6 +157,18 @@ export interface ReflogEntry {
   time: number;
 }
 
+export interface SubmoduleInfo {
+  name: string;
+  path: string;
+  url: string | null;
+  head_oid: string | null;
+  workdir_oid: string | null;
+  initialized: boolean;
+  workdir_present: boolean;
+  commit_changed: boolean;
+  wd_dirty: boolean;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -233,4 +245,9 @@ export const git = {
     invoke<void>("reset_to", { path, oid, mode }),
   reflogList: (path: string, refname?: string) =>
     invoke<ReflogEntry[]>("reflog_list", { path, refname: refname ?? null }),
+  submoduleList: (path: string) => invoke<SubmoduleInfo[]>("submodule_list", { path }),
+  submoduleInit: (path: string, name: string) => invoke<void>("submodule_init", { path, name }),
+  submoduleUpdate: (path: string, name: string, initFirst = true) =>
+    invoke<void>("submodule_update", { path, name, initFirst }),
+  submoduleSync: (path: string, name: string) => invoke<void>("submodule_sync", { path, name }),
 };

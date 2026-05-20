@@ -9,6 +9,7 @@ import { BlamePage } from "@/pages/BlamePage";
 import { ChangesPage } from "@/pages/ChangesPage";
 import { StashPage } from "@/pages/StashPage";
 import { ReflogPage } from "@/pages/ReflogPage";
+import { SubmodulesPage } from "@/pages/SubmodulesPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -32,8 +33,9 @@ export default function App() {
       "ctrl+2": () => repo && setView("changes"),
       "ctrl+3": () => repo && setView("stash"),
       "ctrl+4": () => repo && setView("reflog"),
-      "ctrl+5": () => repo && setView("diff"),
-      "ctrl+6": () => repo && setView("merge"),
+      "ctrl+5": () => repo && setView("submodules"),
+      "ctrl+6": () => repo && setView("diff"),
+      "ctrl+7": () => repo && setView("merge"),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
@@ -65,6 +67,8 @@ export default function App() {
             <StashPage />
           ) : view === "reflog" ? (
             <ReflogPage />
+          ) : view === "submodules" ? (
+            <SubmodulesPage />
           ) : (
             <BlamePage />
           )}

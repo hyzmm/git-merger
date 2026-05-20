@@ -45,6 +45,10 @@ pub fn run() {
             commands::revert_commit,
             commands::reset_to,
             commands::reflog_list,
+            commands::submodule_list,
+            commands::submodule_init,
+            commands::submodule_update,
+            commands::submodule_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

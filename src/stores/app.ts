@@ -12,6 +12,7 @@ import {
   type ReflogEntry,
   type RepoInfo,
   type StashEntry,
+  type SubmoduleInfo,
   type WorkingFile,
 } from "@/ipc/git";
 import {
@@ -24,7 +25,15 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 
-export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes" | "stash" | "reflog";
+export type ViewKey =
+  | "history"
+  | "diff"
+  | "merge"
+  | "blame"
+  | "changes"
+  | "stash"
+  | "reflog"
+  | "submodules";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -111,6 +120,14 @@ interface ReflogView {
   error: string | null;
 }
 
+interface SubmodulesView {
+  entries: SubmoduleInfo[];
+  loading: boolean;
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -124,6 +141,7 @@ interface AppState {
   changes: ChangesView;
   stash: StashView;
   reflog: ReflogView;
+  submodules: SubmodulesView;
 
   recentRepos: RecentRepo[];
 
@@ -202,6 +220,12 @@ interface AppState {
 
   // reflog
   loadReflog: () => Promise<void>;
+
+  // submodules
+  loadSubmodules: () => Promise<void>;
+  initSubmodule: (name: string) => Promise<void>;
+  updateSubmodule: (name: string) => Promise<void>;
+  syncSubmodule: (name: string) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -275,6 +299,14 @@ const emptyReflog: ReflogView = {
   error: null,
 };
 
+const emptySubmodules: SubmodulesView = {
+  entries: [],
+  loading: false,
+  busy: false,
+  status: null,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -287,6 +319,7 @@ export const useApp = create<AppState>((set, get) => ({
   changes: { ...emptyChanges, selected: new Set() },
   stash: { ...emptyStash },
   reflog: { ...emptyReflog },
+  submodules: { ...emptySubmodules },
 
   recentRepos: loadRecent(),
 
@@ -296,6 +329,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "changes") void get().loadChanges();
     if (v === "stash") void get().loadStash();
     if (v === "reflog") void get().loadReflog();
+    if (v === "submodules") void get().loadSubmodules();
   },
 
   openRepo: async (path) => {
@@ -312,6 +346,7 @@ export const useApp = create<AppState>((set, get) => ({
         merge: { ...emptyMerge, resolvedFiles: new Set() },
         stash: { ...emptyStash },
         reflog: { ...emptyReflog },
+        submodules: { ...emptySubmodules },
       });
       void get().loadHistory();
     } catch (e) {
@@ -328,6 +363,7 @@ export const useApp = create<AppState>((set, get) => ({
       merge: { ...emptyMerge, resolvedFiles: new Set() },
       stash: { ...emptyStash },
       reflog: { ...emptyReflog },
+      submodules: { ...emptySubmodules },
     }),
 
   refresh: async () => {
@@ -347,6 +383,8 @@ export const useApp = create<AppState>((set, get) => ({
       await get().loadStash();
     } else if (view === "reflog") {
       await get().loadReflog();
+    } else if (view === "submodules") {
+      await get().loadSubmodules();
     }
   },
 
@@ -1029,6 +1067,60 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({ reflog: { ...s.reflog, entries, loading: false } }));
     } catch (e) {
       set((s) => ({ reflog: { ...s.reflog, loading: false, error: String(e) } }));
+    }
+  },
+
+  // ---------- Submodules ----------
+  loadSubmodules: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ submodules: { ...s.submodules, loading: true, error: null } }));
+    try {
+      const entries = await git.submoduleList(repo.path);
+      set((s) => ({ submodules: { ...s.submodules, entries, loading: false } }));
+    } catch (e) {
+      set((s) => ({ submodules: { ...s.submodules, loading: false, error: String(e) } }));
+    }
+  },
+
+  initSubmodule: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
+    try {
+      await git.submoduleInit(repo.path, name);
+      set((s) => ({ submodules: { ...s.submodules, busy: false, status: `Initialized ${name}` } }));
+      void get().loadSubmodules();
+    } catch (e) {
+      set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
+    }
+  },
+
+  updateSubmodule: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
+    try {
+      await git.submoduleUpdate(repo.path, name, true);
+      set((s) => ({ submodules: { ...s.submodules, busy: false, status: `Updated ${name}` } }));
+      void get().loadSubmodules();
+    } catch (e) {
+      set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
+    }
+  },
+
+  syncSubmodule: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
+    try {
+      await git.submoduleSync(repo.path, name);
+      set((s) => ({
+        submodules: { ...s.submodules, busy: false, status: `Synced URL for ${name}` },
+      }));
+      void get().loadSubmodules();
+    } catch (e) {
+      set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
     }
   },
 }));
