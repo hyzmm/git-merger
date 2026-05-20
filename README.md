@@ -96,16 +96,31 @@ G:\GitTools
 6. ✅ Blame view — line-by-line history, consecutive lines from the same commit are visually grouped (IDEA-style), short-oid clickable to jump to that commit. Virtualized + Shiki-highlighted.
 7. ✅ Changes view (working tree) — Stage / Unstage / Discard with file checkboxes, side-panel commit form (uses git config signature, HEAD as parent). Three sections: Unmerged / Staged / Unstaged.
 8. ✅ Remote ops — Fetch / Pull / Push buttons in the topbar (delegates to system `git` so the user's existing credential helper / SSH key / 2FA setup just works). Result banner shows stdout/stderr.
-9. ✅ Global UX — keyboard shortcuts (`Ctrl+1/2/3/4` switch view, `F5`/`Ctrl+R` refresh, `Alt+1/2/3` accept in merge), Refresh button, Recent repositories (localStorage), top-level `ErrorBoundary`, IDEA-style dark theme, zero-asset cross-platform font fallback (sans + mono with CJK).
+9. ✅ Global UX — keyboard shortcuts (`Ctrl+1..5` switch view, `F5`/`Ctrl+R` refresh, `Alt+1/2/3` accept in merge), Refresh button, Recent repositories (localStorage), top-level `ErrorBoundary`, IDEA-style dark theme, zero-asset cross-platform font fallback (sans + mono with CJK).
 10. ✅ Open Design driven UI — per-page HTML drafts in `design/` (history.html / diff.html / merge.html / index.html sharing `design.css`); the React implementation is a 1:1 port of those drafts.
 11. ✅ Distribution — `bun run tauri:build` produces signed-ready Windows MSI (~2.7 MB) and NSIS (~2.0 MB) installers; release-profile binary is ~5.4 MB after LTO + strip. macOS `.dmg` / Linux `.deb`/`.rpm`/`.AppImage` build from the same source on those platforms.
 
-### Backlog (post-v0.1.0)
+### v0.2.0 — Shipped
 
-- ⏳ Built-in stash / unstash workflow.
+1. ✅ **Stash workflow** — dedicated Sidebar view with list / Apply / Pop / Drop, plus a "Stash…" button on the Changes page (supports include-untracked).
+2. ✅ **Branch & tag management** — RefsPane right-click menu (Checkout / New branch from / Rename / Delete; Checkout-as-new-local for remote branches; New-branch-from-tag / Delete-tag for tags) and a "+" button to create branches from HEAD. Double-click a local branch to checkout.
+3. ✅ **Commit context menu** — right-click any commit in History for Cherry-pick / Revert / Reset (soft / mixed / hard) / Create branch from here / Create tag here / Checkout (detached) / Copy SHA / Copy message. Auto-jumps to Merge view on cherry-pick / revert conflicts.
+4. ✅ **Diff navigation** — `n` / `p` (and toolbar arrows) jump between hunks within the current file; **Ignore-Whitespace** toggle re-runs `libgit2` with `ignore_whitespace`, complementing the existing whitespace-visualization toggle.
+5. ✅ **Advanced history filters** — author dropdown (auto-collected, sorted by frequency), date range pickers (since / until), and `Path` input that delegates to a backend `git log -- <path>` walk for commits-touching-path semantics.
+
+### Backlog (post-v0.2.0)
+
+- ⏳ Reflog view + one-click "undo" via `git reset` to a reflog entry.
+- ⏳ Blame following file renames (`-C` / `-M`).
+- ⏳ Submodule list / init / update / status.
+- ⏳ Interactive Rebase (drag-to-reorder, pick / squash / reword / drop).
 - ⏳ Native libgit2-driven push/pull with progress UI and credential dialogs (current implementation shells out to system `git`).
-- ⏳ Per-line blame following file renames (`-C` / `-M`).
+- ⏳ Settings panel (theme / font size / tab width / `core.autocrlf`).
+- ⏳ i18n (Chinese / English).
+- ⏳ GitHub Actions CI matrix + auto-release on tag push.
+- ⏳ Auto-update via `tauri-plugin-updater`.
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
+- ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
 
 ## Cross-platform notes
 
