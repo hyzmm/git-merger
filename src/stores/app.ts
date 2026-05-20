@@ -18,6 +18,7 @@ import {
   type StashEntry,
   type SubmoduleInfo,
   type WorkingFile,
+  type WorktreeInfo,
 } from "@/ipc/git";
 import {
   joinChunks,
@@ -39,6 +40,7 @@ export type ViewKey =
   | "reflog"
   | "submodules"
   | "rebase"
+  | "worktrees"
   | "fileHistory";
 export type DiffMode = "sbs" | "unified";
 
@@ -134,6 +136,14 @@ interface SubmodulesView {
   error: string | null;
 }
 
+interface WorktreesView {
+  entries: WorktreeInfo[];
+  loading: boolean;
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+}
+
 interface RebaseView {
   /** Drafted plan before `start` is invoked. Empty when no plan is open. */
   plan: RebaseStep[];
@@ -185,6 +195,7 @@ interface AppState {
   rebase: RebaseView;
   palette: PaletteState;
   fileHistory: FileHistoryView;
+  worktrees: WorktreesView;
 
   recentRepos: RecentRepo[];
 
@@ -269,6 +280,12 @@ interface AppState {
   initSubmodule: (name: string) => Promise<void>;
   updateSubmodule: (name: string) => Promise<void>;
   syncSubmodule: (name: string) => Promise<void>;
+
+  // worktrees
+  loadWorktrees: () => Promise<void>;
+  addWorktree: (name: string, targetPath: string, branch?: string) => Promise<void>;
+  removeWorktree: (name: string, force?: boolean) => Promise<void>;
+  pruneWorktrees: () => Promise<void>;
 
   // interactive rebase
   openRebasePlan: (baseOid: string) => Promise<void>;
@@ -371,6 +388,14 @@ const emptySubmodules: SubmodulesView = {
   error: null,
 };
 
+const emptyWorktrees: WorktreesView = {
+  entries: [],
+  loading: false,
+  busy: false,
+  status: null,
+  error: null,
+};
+
 const emptyRebase: RebaseView = {
   plan: [],
   baseOid: null,
@@ -413,6 +438,7 @@ export const useApp = create<AppState>((set, get) => ({
   rebase: { ...emptyRebase },
   palette: { ...emptyPalette },
   fileHistory: { ...emptyFileHistory },
+  worktrees: { ...emptyWorktrees },
 
   recentRepos: loadRecent(),
 
@@ -424,6 +450,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "reflog") void get().loadReflog();
     if (v === "submodules") void get().loadSubmodules();
     if (v === "rebase") void get().refreshRebaseStatus();
+    if (v === "worktrees") void get().loadWorktrees();
   },
 
   openRepo: async (path) => {
@@ -444,6 +471,7 @@ export const useApp = create<AppState>((set, get) => ({
         rebase: { ...emptyRebase },
         palette: { ...emptyPalette },
         fileHistory: { ...emptyFileHistory },
+        worktrees: { ...emptyWorktrees },
       });
       void get().loadHistory();
       void get().refreshRebaseStatus();
@@ -465,6 +493,7 @@ export const useApp = create<AppState>((set, get) => ({
       rebase: { ...emptyRebase },
       palette: { ...emptyPalette },
       fileHistory: { ...emptyFileHistory },
+      worktrees: { ...emptyWorktrees },
     }),
 
   refresh: async () => {
@@ -486,6 +515,8 @@ export const useApp = create<AppState>((set, get) => ({
       await get().loadReflog();
     } else if (view === "submodules") {
       await get().loadSubmodules();
+    } else if (view === "worktrees") {
+      await get().loadWorktrees();
     }
   },
 
@@ -1222,6 +1253,68 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadSubmodules();
     } catch (e) {
       set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
+    }
+  },
+
+  // ---------- Worktrees ----------
+  loadWorktrees: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ worktrees: { ...s.worktrees, loading: true, error: null } }));
+    try {
+      const entries = await git.worktreeList(repo.path);
+      set((s) => ({ worktrees: { ...s.worktrees, entries, loading: false } }));
+    } catch (e) {
+      set((s) => ({ worktrees: { ...s.worktrees, loading: false, error: String(e) } }));
+    }
+  },
+
+  addWorktree: async (name, targetPath, branch) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ worktrees: { ...s.worktrees, busy: true, status: null, error: null } }));
+    try {
+      const wt = await git.worktreeAdd(repo.path, name, targetPath, branch);
+      set((s) => ({
+        worktrees: { ...s.worktrees, busy: false, status: `Added worktree ${wt.name}` },
+      }));
+      void get().loadWorktrees();
+    } catch (e) {
+      set((s) => ({ worktrees: { ...s.worktrees, busy: false, error: String(e) } }));
+    }
+  },
+
+  removeWorktree: async (name, force = false) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ worktrees: { ...s.worktrees, busy: true, status: null, error: null } }));
+    try {
+      await git.worktreeRemove(repo.path, name, force);
+      set((s) => ({
+        worktrees: { ...s.worktrees, busy: false, status: `Removed worktree ${name}` },
+      }));
+      void get().loadWorktrees();
+    } catch (e) {
+      set((s) => ({ worktrees: { ...s.worktrees, busy: false, error: String(e) } }));
+    }
+  },
+
+  pruneWorktrees: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ worktrees: { ...s.worktrees, busy: true, status: null, error: null } }));
+    try {
+      const pruned = await git.worktreePrune(repo.path);
+      set((s) => ({
+        worktrees: {
+          ...s.worktrees,
+          busy: false,
+          status: pruned.length === 0 ? "Nothing to prune" : `Pruned ${pruned.length} worktree(s)`,
+        },
+      }));
+      void get().loadWorktrees();
+    } catch (e) {
+      set((s) => ({ worktrees: { ...s.worktrees, busy: false, error: String(e) } }));
     }
   },
 

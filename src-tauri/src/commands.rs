@@ -384,3 +384,36 @@ pub fn rebase_abort(path: String) -> R<git::RebaseStatus> {
 pub fn rebase_status(path: String) -> R<git::RebaseStatus> {
     Ok(git::rebase::status(&path)?)
 }
+
+// ---------- Worktrees ----------
+
+#[tauri::command]
+pub fn worktree_list(path: String) -> R<Vec<git::WorktreeInfo>> {
+    Ok(git::worktree::list(&path)?)
+}
+
+#[tauri::command]
+pub fn worktree_add(
+    path: String,
+    name: String,
+    target_path: String,
+    branch: Option<String>,
+) -> R<git::WorktreeInfo> {
+    Ok(git::worktree::add(
+        &path,
+        &name,
+        &target_path,
+        branch.as_deref(),
+    )?)
+}
+
+#[tauri::command]
+pub fn worktree_remove(path: String, name: String, force: bool) -> R<()> {
+    git::worktree::remove(&path, &name, force)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn worktree_prune(path: String) -> R<Vec<String>> {
+    Ok(git::worktree::prune(&path)?)
+}

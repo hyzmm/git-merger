@@ -7,6 +7,7 @@ import {
   Undo2,
   Box,
   ListOrdered,
+  Trees,
 } from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { useT, type TKey } from "@/lib/i18n";
@@ -19,6 +20,7 @@ const items: { key: ViewKey; labelKey: TKey; Icon: typeof History }[] = [
   { key: "reflog", labelKey: "sidebar.reflog", Icon: Undo2 },
   { key: "submodules", labelKey: "sidebar.submodules", Icon: Box },
   { key: "rebase", labelKey: "sidebar.rebase", Icon: ListOrdered },
+  { key: "worktrees", labelKey: "sidebar.worktrees", Icon: Trees },
   { key: "diff", labelKey: "sidebar.diff", Icon: GitCompare },
   { key: "merge", labelKey: "sidebar.merge", Icon: GitMerge },
 ];

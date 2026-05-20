@@ -63,6 +63,10 @@ pub fn run() {
             commands::rebase_continue,
             commands::rebase_abort,
             commands::rebase_status,
+            commands::worktree_list,
+            commands::worktree_add,
+            commands::worktree_remove,
+            commands::worktree_prune,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

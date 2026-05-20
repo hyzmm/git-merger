@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.9.1  
+> 适用版本：v0.10.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -23,6 +23,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.8 Submodules](#38-submodules)
   - [3.9 Interactive Rebase](#39-interactive-rebase)
   - [3.10 File History（单文件时间线 + 跟随重命名）](#310-file-history单文件时间线--跟随重命名)
+  - [3.11 Worktrees（多工作树）](#311-worktrees多工作树)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
@@ -82,7 +83,7 @@ bun run tauri:build
 
 ## 三、视图速览
 
-左侧 Sidebar 共 **8 个视图图标**，对应快捷键 `Ctrl+1..8`：
+左侧 Sidebar 共 **9 个视图图标**，对应快捷键 `Ctrl+1..9`：
 
 | Sidebar 顺序 | 快捷键   | 视图               |
 | ------------ | -------- | ------------------ |
@@ -92,8 +93,9 @@ bun run tauri:build
 | 4            | `Ctrl+4` | Reflog             |
 | 5            | `Ctrl+5` | Submodules         |
 | 6            | `Ctrl+8` | Interactive Rebase |
-| 7            | `Ctrl+6` | Diff               |
-| 8            | `Ctrl+7` | Merge              |
+| 7            | `Ctrl+9` | Worktrees          |
+| 8            | `Ctrl+6` | Diff               |
+| 9            | `Ctrl+7` | Merge              |
 
 > Blame 没有独立 sidebar 入口，从 Diff 工具栏的 **Blame** 按钮进入。
 
@@ -282,6 +284,38 @@ bun run tauri:build
 
 点击右栏标题里的短 oid 也能直接跳到完整 commit diff。
 
+### 3.11 Worktrees（多工作树）
+
+按 `Ctrl+9`。`git worktree` 等价的视图，让你在同一个仓库里同时检出多个分支到不同目录，无需 stash 来回切换。
+
+**布局**：单列列表，**主检出 (main)** 始终置顶并带半透明高亮。每行显示工作目录绝对路径、分支名（或 `(detached)`）、HEAD 短 oid 与注册名。
+
+**徽章**：
+
+- `main`：当前仓库的主检出
+- `locked`：通过 `git worktree lock` 锁定，禁止 prune
+- `prunable`：磁盘上工作目录已不在，元数据残留可清理（橙色提示）
+
+**工具栏按钮**：
+
+| 按钮      | 行为                                                                           |
+| --------- | ------------------------------------------------------------------------------ |
+| **Add**   | 展开内联表单：路径（带 Browse 选目录）/ 名称（默认取末段）/ 分支（留空则新建） |
+| **Prune** | 一键扫描所有可清理工作树并删除元数据                                           |
+
+**每行（非 main）按钮**：
+
+- **Remove**：在工作树干净时安全移除（`git worktree remove`）
+- **Force remove**（红色）：即使工作目录还在也强制删除，弹二次确认；适用于已知不会丢东西的场景
+
+**典型用例**：
+
+1. 想边 review PR 边在主分支继续开发 → Worktrees → Add，路径填 `../gittools-review`，分支选 PR 分支
+2. 跨目录 build / test 同时跑两个 commit
+3. 误删工作目录后留下"幽灵"工作树 → 直接点 **Prune**
+
+后端通过 libgit2 `git_worktree_*` 接口实现，没有 fork system git。所有 4 个操作都覆盖了 `cargo test --test git_layer` 集成测试。
+
 ---
 
 ## 四、Topbar 与远程操作
@@ -409,6 +443,7 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+6`            | Diff                                  | 全局  |
 | `Ctrl+7`            | Merge                                 | 全局  |
 | `Ctrl+8`            | Interactive Rebase                    | 全局  |
+| `Ctrl+9`            | Worktrees                             | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
@@ -714,18 +749,19 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 十四、版本历史一览
 
-| 版本   | 关键改动                                                                                                                         |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0 | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                         |
-| v0.2.0 | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤     |
-| v0.3.0 | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                           |
-| v0.4.0 | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）              |
-| v0.5.0 | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                   |
-| v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                 |
-| v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                       |
-| v0.8.0 | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                             |
-| v0.9.0 | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                             |
-| v0.9.1 | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键 |
+| 版本    | 关键改动                                                                                                                         |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0  | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                         |
+| v0.2.0  | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤     |
+| v0.3.0  | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                           |
+| v0.4.0  | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）              |
+| v0.5.0  | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                   |
+| v0.6.0  | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                 |
+| v0.7.0  | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                       |
+| v0.8.0  | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                             |
+| v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                             |
+| v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键 |
+| v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键             |
 
 ---
 

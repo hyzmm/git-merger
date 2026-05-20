@@ -200,6 +200,23 @@ export interface SubmoduleInfo {
   wd_dirty: boolean;
 }
 
+export interface WorktreeInfo {
+  /** Folder name of the worktree (or registered name under .git/worktrees/<name>). */
+  name: string;
+  /** Absolute path of the working directory. */
+  path: string;
+  /** Short branch name when on a branch; null when detached. */
+  branch: string | null;
+  /** HEAD commit oid (full hash). */
+  head_oid: string | null;
+  /** True for the main checkout. */
+  is_main: boolean;
+  /** True when the worktree has been locked via `git worktree lock`. */
+  is_locked: boolean;
+  /** True when libgit2 considers it pruneable (working dir gone). */
+  is_prunable: boolean;
+}
+
 // ---------- Interactive Rebase ----------
 
 export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
@@ -327,4 +344,15 @@ export const git = {
   rebaseContinue: (path: string) => invoke<RebaseStatus>("rebase_continue", { path }),
   rebaseAbort: (path: string) => invoke<RebaseStatus>("rebase_abort", { path }),
   rebaseStatus: (path: string) => invoke<RebaseStatus>("rebase_status", { path }),
+  worktreeList: (path: string) => invoke<WorktreeInfo[]>("worktree_list", { path }),
+  worktreeAdd: (path: string, name: string, targetPath: string, branch?: string) =>
+    invoke<WorktreeInfo>("worktree_add", {
+      path,
+      name,
+      targetPath,
+      branch: branch ?? null,
+    }),
+  worktreeRemove: (path: string, name: string, force = false) =>
+    invoke<void>("worktree_remove", { path, name, force }),
+  worktreePrune: (path: string) => invoke<string[]>("worktree_prune", { path }),
 };

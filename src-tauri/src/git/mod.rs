@@ -16,6 +16,7 @@ pub mod repo;
 pub mod stash;
 pub mod submodule;
 pub mod workspace;
+pub mod worktree;
 
 pub use blame::{BlameLine, PrevFile};
 pub use file_history::FileHistoryEntry;
@@ -27,6 +28,7 @@ pub use remote::{CredReply, RemoteOpResult};
 pub use stash::StashEntry;
 pub use submodule::SubmoduleInfo;
 pub use workspace::WorkingFile;
+pub use worktree::WorktreeInfo;
 
 use serde::{Deserialize, Serialize};
 

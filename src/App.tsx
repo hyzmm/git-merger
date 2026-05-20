@@ -15,6 +15,7 @@ import { ReflogPage } from "@/pages/ReflogPage";
 import { SubmodulesPage } from "@/pages/SubmodulesPage";
 import { RebasePage } from "@/pages/RebasePage";
 import { FileHistoryPage } from "@/pages/FileHistoryPage";
+import { WorktreesPage } from "@/pages/WorktreesPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -44,6 +45,7 @@ export default function App() {
       "ctrl+6": () => repo && setView("diff"),
       "ctrl+7": () => repo && setView("merge"),
       "ctrl+8": () => repo && setView("rebase"),
+      "ctrl+9": () => repo && setView("worktrees"),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
       "ctrl+o": async () => {
@@ -85,6 +87,8 @@ export default function App() {
             <SubmodulesPage />
           ) : view === "rebase" ? (
             <RebasePage />
+          ) : view === "worktrees" ? (
+            <WorktreesPage />
           ) : view === "fileHistory" ? (
             <FileHistoryPage />
           ) : (

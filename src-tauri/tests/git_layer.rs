@@ -286,3 +286,105 @@ fn rebase_abort_restores_original_head() {
     let head_now = r.repo.head().unwrap().peel_to_commit().unwrap().id();
     assert_eq!(head_now, original_head);
 }
+
+// ---------------------------------------------------------------------------
+// worktree
+// ---------------------------------------------------------------------------
+
+#[test]
+fn worktree_list_returns_main_only_for_fresh_repo() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "1\n", "init");
+
+    let wts = git::worktree::list(&r.path_str()).unwrap();
+    assert_eq!(
+        wts.len(),
+        1,
+        "fresh repo should report only the main checkout"
+    );
+    let main = &wts[0];
+    assert!(main.is_main);
+    assert!(!main.is_locked);
+    assert!(!main.is_prunable);
+    assert!(main.head_oid.is_some());
+    let branch = main.branch.as_deref().unwrap();
+    assert!(
+        branch == "master" || branch == "main",
+        "unexpected default branch name: {branch}"
+    );
+}
+
+#[test]
+fn worktree_add_and_remove_round_trip() {
+    let r = TempRepo::init();
+    let oid = r.commit_file("a.txt", "1\n", "init");
+
+    // Need a branch to attach the worktree to (libgit2 does not auto-create).
+    git::refs_ops::create_branch(&r.path_str(), "feature/wt", &oid.to_string(), false).unwrap();
+
+    // Place the new worktree in a sibling temp dir to avoid nested-repo issues.
+    let target_root = tempfile::tempdir().expect("sibling tempdir");
+    let target_path = target_root
+        .path()
+        .join("wt-feature")
+        .to_string_lossy()
+        .to_string();
+
+    let added = git::worktree::add(
+        &r.path_str(),
+        "wt-feature",
+        &target_path,
+        Some("feature/wt"),
+    )
+    .unwrap();
+
+    assert_eq!(added.name, "wt-feature");
+    assert!(!added.is_main);
+    assert_eq!(added.branch.as_deref(), Some("feature/wt"));
+
+    // List should now report 2 entries (main + wt-feature).
+    let wts = git::worktree::list(&r.path_str()).unwrap();
+    assert_eq!(wts.len(), 2);
+    assert_eq!(wts.iter().filter(|w| w.is_main).count(), 1);
+    assert!(wts.iter().any(|w| w.name == "wt-feature" && !w.is_main));
+
+    // Remove with force=true (working tree still exists).
+    git::worktree::remove(&r.path_str(), "wt-feature", true).unwrap();
+
+    let wts_after = git::worktree::list(&r.path_str()).unwrap();
+    assert_eq!(wts_after.len(), 1);
+    assert!(wts_after[0].is_main);
+}
+
+#[test]
+fn worktree_prune_cleans_dangling_metadata() {
+    let r = TempRepo::init();
+    let oid = r.commit_file("a.txt", "1\n", "init");
+    git::refs_ops::create_branch(&r.path_str(), "feature/zombie", &oid.to_string(), false).unwrap();
+
+    let target_root = tempfile::tempdir().expect("sibling tempdir");
+    let target_path = target_root
+        .path()
+        .join("zombie")
+        .to_string_lossy()
+        .to_string();
+    git::worktree::add(
+        &r.path_str(),
+        "zombie",
+        &target_path,
+        Some("feature/zombie"),
+    )
+    .unwrap();
+
+    // Simulate the user nuking the working directory on disk while metadata
+    // under `.git/worktrees/zombie` survives — that's exactly the case
+    // `prune` is for.
+    std::fs::remove_dir_all(&target_path).unwrap();
+
+    let pruned = git::worktree::prune(&r.path_str()).unwrap();
+    assert_eq!(pruned, vec!["zombie".to_string()]);
+
+    let wts_after = git::worktree::list(&r.path_str()).unwrap();
+    assert_eq!(wts_after.len(), 1);
+    assert!(wts_after[0].is_main);
+}

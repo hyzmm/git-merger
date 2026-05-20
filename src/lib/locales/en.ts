@@ -10,6 +10,7 @@ export const en = {
   "sidebar.reflog": "Reflog (HEAD history)",
   "sidebar.submodules": "Submodules",
   "sidebar.rebase": "Interactive Rebase",
+  "sidebar.worktrees": "Worktrees",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
 
@@ -134,6 +135,40 @@ export const en = {
   "menu.about": "About Git Tools",
   "menu.quit": "Quit",
   "about.repo": "Source",
+
+  // Worktrees
+  "worktrees.count": "worktree(s)",
+  "worktrees.loading": "loading...",
+  "worktrees.working": "working...",
+  "worktrees.empty": "No worktrees in this repository.",
+  "worktrees.add": "Add",
+  "worktrees.addBtn": "Add a new worktree (git worktree add)",
+  "worktrees.prune": "Prune",
+  "worktrees.pruneTitle":
+    "Remove metadata for worktrees whose working directories were deleted on disk",
+  "worktrees.main": "main",
+  "worktrees.locked": "locked",
+  "worktrees.lockedTitle": "This worktree has been locked via `git worktree lock`",
+  "worktrees.prunable": "prunable",
+  "worktrees.prunableTitle": "Working directory missing on disk — safe to prune",
+  "worktrees.remove": "Remove",
+  "worktrees.removeTitle": "Remove the worktree if it is clean",
+  "worktrees.forceRemove": "Force remove",
+  "worktrees.forceRemoveTitle":
+    "Force-remove the worktree even when it still has a working directory (data loss possible)",
+  "worktrees.forceRemoveConfirm":
+    "Force-remove worktree '{name}'?\n\nThis deletes its working directory and metadata. Uncommitted changes will be lost.",
+  "worktrees.nameTitle": "Registered name under .git/worktrees/<name>",
+  "worktrees.formPath": "Path",
+  "worktrees.formPathPh": "Absolute or relative path for the new worktree",
+  "worktrees.formBrowse": "Browse…",
+  "worktrees.formName": "Name",
+  "worktrees.formNamePh": "Optional — defaults to path basename",
+  "worktrees.formBranch": "Branch",
+  "worktrees.formBranchPh":
+    "Existing local branch to check out (leave empty to create a new branch)",
+  "worktrees.cancel": "Cancel",
+  "worktrees.create": "Create worktree",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;
