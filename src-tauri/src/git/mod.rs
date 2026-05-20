@@ -1,6 +1,7 @@
 //! Shared types + module exports for the git layer.
 
 pub mod blame;
+pub mod commit_ops;
 pub mod diff;
 pub mod log;
 pub mod merge;

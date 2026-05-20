@@ -223,3 +223,23 @@ pub fn delete_tag(path: String, name: String) -> R<()> {
     git::refs_ops::delete_tag(&path, &name)?;
     Ok(())
 }
+
+// ---------- Commit operations ----------
+
+#[tauri::command]
+pub fn cherry_pick(path: String, oid: String) -> R<()> {
+    git::commit_ops::cherry_pick(&path, &oid)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn revert_commit(path: String, oid: String) -> R<()> {
+    git::commit_ops::revert(&path, &oid)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reset_to(path: String, oid: String, mode: String) -> R<()> {
+    git::commit_ops::reset(&path, &oid, &mode)?;
+    Ok(())
+}

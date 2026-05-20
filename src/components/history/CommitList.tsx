@@ -1,12 +1,35 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { layoutGraph } from "@/lib/graph";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { GraphRow } from "./GraphRow";
+import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
+import type { CommitSummary } from "@/ipc/git";
 
 const ROW_HEIGHT = 28;
+
+interface MenuState {
+  pos: ContextMenuPos;
+  items: MenuItem[];
+}
+
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback: textarea + execCommand
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+}
 
 export function CommitList() {
   const commits = useApp((s) => s.history.commits);
@@ -15,6 +38,14 @@ export function CommitList() {
   const loading = useApp((s) => s.history.loading);
   const error = useApp((s) => s.history.error);
   const selectCommit = useApp((s) => s.selectCommit);
+  const checkoutCommit = useApp((s) => s.checkoutCommit);
+  const cherryPick = useApp((s) => s.cherryPick);
+  const revertCommit = useApp((s) => s.revertCommit);
+  const resetTo = useApp((s) => s.resetTo);
+  const createBranch = useApp((s) => s.createBranch);
+  const createTag = useApp((s) => s.createTag);
+
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -43,6 +74,70 @@ export function CommitList() {
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
   });
+
+  const onContextMenu = (e: React.MouseEvent, c: CommitSummary) => {
+    e.preventDefault();
+    selectCommit(c.oid);
+    const items: MenuItem[] = [
+      { label: `${c.short_oid} — ${c.summary.slice(0, 60)}`, heading: true },
+      {
+        label: "New branch from here…",
+        onClick: () => {
+          const name = window.prompt(`New branch from ${c.short_oid}:`, "")?.trim();
+          if (!name) return;
+          const ck = window.confirm(`Checkout new branch '${name}' immediately?`);
+          void createBranch(name, c.oid, ck);
+        },
+      },
+      {
+        label: "Create tag here…",
+        onClick: () => {
+          const name = window.prompt(`Tag name at ${c.short_oid}:`, "")?.trim();
+          if (!name) return;
+          const msg = window.prompt(`Tag message (blank = lightweight tag):`, "") ?? "";
+          void createTag(name, c.oid, msg.trim() || undefined);
+        },
+      },
+      {
+        label: "Checkout (detached HEAD)",
+        onClick: () => void checkoutCommit(c.oid),
+      },
+      { separator: true, label: "" },
+      {
+        label: "Cherry-pick onto HEAD",
+        onClick: () => void cherryPick(c.oid),
+      },
+      {
+        label: "Revert this commit",
+        onClick: () => void revertCommit(c.oid),
+      },
+      { separator: true, label: "" },
+      { label: "Reset HEAD to here", heading: true },
+      {
+        label: "Soft (keep index + working tree)",
+        onClick: () => void resetTo(c.oid, "soft"),
+      },
+      {
+        label: "Mixed (keep working tree)",
+        onClick: () => void resetTo(c.oid, "mixed"),
+      },
+      {
+        label: "Hard (discard everything)",
+        danger: true,
+        onClick: () => void resetTo(c.oid, "hard"),
+      },
+      { separator: true, label: "" },
+      {
+        label: `Copy SHA (${c.short_oid})`,
+        onClick: () => void copyText(c.oid),
+      },
+      {
+        label: "Copy commit message",
+        onClick: () => void copyText(c.summary),
+      },
+    ];
+    setMenu({ pos: { x: e.clientX, y: e.clientY }, items });
+  };
 
   return (
     <section className="flex min-w-0 flex-col">
@@ -75,6 +170,7 @@ export function CommitList() {
                 <div
                   key={c.oid}
                   onClick={() => selectCommit(c.oid)}
+                  onContextMenu={(e) => onContextMenu(e, c)}
                   className={cn(
                     "absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-border/40 px-3 text-[12.5px]",
                     "hover:bg-accent/40",
@@ -85,6 +181,7 @@ export function CommitList() {
                     transform: `translateY(${vRow.start}px)`,
                     gridTemplateColumns: `${graphCols * 14}px 1fr 180px 110px 80px`,
                   }}
+                  title="Right-click for actions"
                 >
                   <div className="flex h-7 items-center">
                     {row && <GraphRow row={row} cols={graphCols} />}
@@ -102,6 +199,12 @@ export function CommitList() {
           </div>
         )}
       </div>
+
+      <ContextMenu
+        pos={menu?.pos ?? null}
+        items={menu?.items ?? []}
+        onClose={() => setMenu(null)}
+      />
     </section>
   );
 }

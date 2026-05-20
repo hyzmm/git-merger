@@ -161,6 +161,11 @@ interface AppState {
   renameBranch: (oldName: string, newName: string) => Promise<void>;
   createTag: (name: string, target: string, message?: string) => Promise<void>;
   deleteTag: (name: string) => Promise<void>;
+
+  // commit ops
+  cherryPick: (oid: string) => Promise<void>;
+  revertCommit: (oid: string) => Promise<void>;
+  resetTo: (oid: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -766,6 +771,58 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       await git.deleteTag(repo.path, name);
       void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  // ---------- Commit ops ----------
+  cherryPick: async (oid) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm(`Cherry-pick ${oid.slice(0, 7)} onto current HEAD?`)) return;
+    try {
+      await git.cherryPick(repo.path, oid);
+      void get().loadHistory();
+      // If cherry-pick produced conflicts, switch to merge view to resolve them.
+      const ms = await git.mergeState(repo.path);
+      if (ms !== "clean") set({ view: "merge" });
+      void get().loadMerge();
+      void get().loadChanges();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  revertCommit: async (oid) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm(`Revert ${oid.slice(0, 7)}? An inverse commit will be staged on HEAD.`)) return;
+    try {
+      await git.revertCommit(repo.path, oid);
+      void get().loadHistory();
+      const ms = await git.mergeState(repo.path);
+      if (ms !== "clean") set({ view: "merge" });
+      void get().loadMerge();
+      void get().loadChanges();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  resetTo: async (oid, mode) => {
+    const repo = get().repo;
+    if (!repo) return;
+    const warnings: Record<typeof mode, string> = {
+      soft: "Soft reset: HEAD moves; index and working tree are kept.",
+      mixed: "Mixed reset: HEAD and index move; working tree is kept.",
+      hard: "HARD reset: HEAD, index AND working tree all reset. Uncommitted changes will be LOST.",
+    };
+    if (!confirm(`Reset to ${oid.slice(0, 7)}?\n\n${warnings[mode]}`)) return;
+    try {
+      await git.resetTo(repo.path, oid, mode);
+      void get().loadHistory();
+      void get().loadChanges();
     } catch (e) {
       set({ error: String(e) });
     }

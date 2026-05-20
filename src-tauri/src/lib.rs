@@ -39,6 +39,9 @@ pub fn run() {
             commands::rename_branch,
             commands::create_tag,
             commands::delete_tag,
+            commands::cherry_pick,
+            commands::revert_commit,
+            commands::reset_to,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

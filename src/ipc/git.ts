@@ -196,4 +196,8 @@ export const git = {
   createTag: (path: string, name: string, target: string, message?: string) =>
     invoke<void>("create_tag", { path, name, target, message: message ?? null }),
   deleteTag: (path: string, name: string) => invoke<void>("delete_tag", { path, name }),
+  cherryPick: (path: string, oid: string) => invoke<void>("cherry_pick", { path, oid }),
+  revertCommit: (path: string, oid: string) => invoke<void>("revert_commit", { path, oid }),
+  resetTo: (path: string, oid: string, mode: "soft" | "mixed" | "hard") =>
+    invoke<void>("reset_to", { path, oid, mode }),
 };
