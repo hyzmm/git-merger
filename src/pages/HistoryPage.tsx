@@ -5,13 +5,13 @@ import { CommitDetails } from "@/components/history/CommitDetails";
 export function HistoryPage() {
   return (
     <div className="grid h-full grid-cols-[220px_1fr_380px]">
-      <div className="min-h-0 border-r border-border">
+      <div className="min-h-0 min-w-0 overflow-hidden border-r border-border">
         <RefsPane />
       </div>
-      <div className="min-w-0">
+      <div className="min-h-0 min-w-0 overflow-hidden">
         <CommitList />
       </div>
-      <div className="min-w-0">
+      <div className="min-h-0 min-w-0 overflow-hidden">
         <CommitDetails />
       </div>
     </div>
