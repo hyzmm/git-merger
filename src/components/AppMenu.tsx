@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const MAX_RECENT = 8;
-const APP_VERSION = "0.9.0";
+const APP_VERSION = __APP_VERSION__;
 
 export function AppMenu() {
   const repo = useApp((s) => s.repo);
