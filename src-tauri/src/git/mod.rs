@@ -5,6 +5,7 @@ pub mod diff;
 pub mod log;
 pub mod merge;
 pub mod refs;
+pub mod refs_ops;
 pub mod remote;
 pub mod repo;
 pub mod stash;

@@ -186,4 +186,14 @@ export const git = {
   stashApply: (path: string, index: number) => invoke<void>("stash_apply", { path, index }),
   stashPop: (path: string, index: number) => invoke<void>("stash_pop", { path, index }),
   stashDrop: (path: string, index: number) => invoke<void>("stash_drop", { path, index }),
+  createBranch: (path: string, name: string, startPoint: string, checkout = false) =>
+    invoke<void>("create_branch", { path, name, startPoint, checkout }),
+  checkoutBranch: (path: string, name: string) => invoke<void>("checkout_branch", { path, name }),
+  checkoutCommit: (path: string, oid: string) => invoke<void>("checkout_commit", { path, oid }),
+  deleteBranch: (path: string, name: string) => invoke<void>("delete_branch", { path, name }),
+  renameBranch: (path: string, oldName: string, newName: string) =>
+    invoke<void>("rename_branch", { path, oldName, newName }),
+  createTag: (path: string, name: string, target: string, message?: string) =>
+    invoke<void>("create_tag", { path, name, target, message: message ?? null }),
+  deleteTag: (path: string, name: string) => invoke<void>("delete_tag", { path, name }),
 };

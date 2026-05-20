@@ -152,6 +152,15 @@ interface AppState {
   applyStash: (index: number) => Promise<void>;
   popStash: (index: number) => Promise<void>;
   dropStash: (index: number) => Promise<void>;
+
+  // ref ops (branch / tag)
+  createBranch: (name: string, startPoint: string, checkout?: boolean) => Promise<void>;
+  checkoutBranch: (name: string) => Promise<void>;
+  checkoutCommit: (oid: string) => Promise<void>;
+  deleteBranch: (name: string) => Promise<void>;
+  renameBranch: (oldName: string, newName: string) => Promise<void>;
+  createTag: (name: string, target: string, message?: string) => Promise<void>;
+  deleteTag: (name: string) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -671,6 +680,94 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadStash();
     } catch (e) {
       set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
+    }
+  },
+
+  // ---------- Branch / Tag operations ----------
+  createBranch: async (name, startPoint, checkout = false) => {
+    const repo = get().repo;
+    if (!repo) return;
+    try {
+      await git.createBranch(repo.path, name, startPoint, checkout);
+      void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  checkoutBranch: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    try {
+      await git.checkoutBranch(repo.path, name);
+      void get().loadHistory();
+      void get().loadChanges();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  checkoutCommit: async (oid) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (
+      !confirm(
+        `Checkout ${oid.slice(0, 7)} in detached HEAD state?\n\nYou will not be on any branch after this.`,
+      )
+    )
+      return;
+    try {
+      await git.checkoutCommit(repo.path, oid);
+      void get().loadHistory();
+      void get().loadChanges();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  deleteBranch: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm(`Delete branch '${name}'?`)) return;
+    try {
+      await git.deleteBranch(repo.path, name);
+      void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  renameBranch: async (oldName, newName) => {
+    const repo = get().repo;
+    if (!repo) return;
+    try {
+      await git.renameBranch(repo.path, oldName, newName);
+      void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  createTag: async (name, target, message) => {
+    const repo = get().repo;
+    if (!repo) return;
+    try {
+      await git.createTag(repo.path, name, target, message);
+      void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  deleteTag: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm(`Delete tag '${name}'?`)) return;
+    try {
+      await git.deleteTag(repo.path, name);
+      void get().loadHistory();
+    } catch (e) {
+      set({ error: String(e) });
     }
   },
 }));

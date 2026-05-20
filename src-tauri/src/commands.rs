@@ -179,3 +179,47 @@ pub fn stash_drop(path: String, index: usize) -> R<()> {
     git::stash::drop(&path, index)?;
     Ok(())
 }
+
+// ---------- Branch / Tag operations ----------
+
+#[tauri::command]
+pub fn create_branch(path: String, name: String, start_point: String, checkout: bool) -> R<()> {
+    git::refs_ops::create_branch(&path, &name, &start_point, checkout)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn checkout_branch(path: String, name: String) -> R<()> {
+    git::refs_ops::checkout_branch(&path, &name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn checkout_commit(path: String, oid: String) -> R<()> {
+    git::refs_ops::checkout_commit(&path, &oid)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_branch(path: String, name: String) -> R<()> {
+    git::refs_ops::delete_branch(&path, &name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_branch(path: String, old_name: String, new_name: String) -> R<()> {
+    git::refs_ops::rename_branch(&path, &old_name, &new_name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_tag(path: String, name: String, target: String, message: Option<String>) -> R<()> {
+    git::refs_ops::create_tag(&path, &name, &target, message.as_deref())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_tag(path: String, name: String) -> R<()> {
+    git::refs_ops::delete_tag(&path, &name)?;
+    Ok(())
+}
