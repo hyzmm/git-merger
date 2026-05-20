@@ -1,4 +1,5 @@
 import { useMemo, useRef } from "react";
+import { ArrowLeft, GitBranch } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { useHighlight } from "@/lib/useHighlight";
@@ -10,11 +11,16 @@ const ROW_HEIGHT = 20;
 
 export function BlamePage() {
   const file = useApp((s) => s.blame.file);
+  const revision = useApp((s) => s.blame.revision);
   const lines = useApp((s) => s.blame.lines);
   const loading = useApp((s) => s.blame.loading);
   const error = useApp((s) => s.blame.error);
+  const prev = useApp((s) => s.blame.prev);
+  const stack = useApp((s) => s.blame.history);
   const setView = useApp((s) => s.setView);
   const selectCommit = useApp((s) => s.selectCommit);
+  const followRename = useApp((s) => s.blameFollowRename);
+  const blameBack = useApp((s) => s.blameBack);
 
   // Group consecutive lines from the same commit so we only render blame
   // metadata once per group (IDEA-style).
@@ -43,13 +49,41 @@ export function BlamePage() {
   return (
     <section className="flex h-full min-w-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
+        {stack.length > 0 && (
+          <button
+            onClick={() => void blameBack()}
+            title="Go back to the previous blame view"
+            className="flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 hover:bg-accent"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back
+          </button>
+        )}
         <span className="truncate font-mono">{file}</span>
+        {revision && (
+          <span
+            className="font-mono text-[10.5px] text-[hsl(var(--branch-3))]"
+            title={`Annotating revision ${revision}`}
+          >
+            @ {revision.slice(0, 7)}
+          </span>
+        )}
         <span className="text-[10.5px] text-muted-foreground">
           {lines.length} lines · {groups.length} commits
         </span>
         {loading && <span className="text-[10.5px] text-muted-foreground">loading...</span>}
         {error && <span className="ml-2 text-[10.5px] text-destructive">{error}</span>}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {prev && (
+            <button
+              onClick={() => void followRename()}
+              title={`Annotate previous revision (${prev.revision.slice(0, 7)} — ${prev.file})`}
+              className="flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 hover:bg-accent"
+            >
+              <GitBranch className="h-3 w-3" />
+              Annotate previous {prev.file !== file ? `(${prev.file.split("/").pop()})` : ""}
+            </button>
+          )}
           <button
             onClick={() => setView("diff")}
             className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"

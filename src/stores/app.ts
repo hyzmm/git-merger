@@ -74,8 +74,16 @@ interface MergeView {
 
 interface BlameView {
   file: string | null;
+  /** When set, blame was computed at this revision (a historical commit).
+   *  When null, blame was computed against the working tree at HEAD. */
+  revision: string | null;
+  /** Stack of previous (file, revision) pairs we can pop back to.
+   *  Newest entry is the one openBlame() was called from originally. */
+  history: { file: string; revision: string | null }[];
   lines: BlameLine[];
   loading: boolean;
+  /** Available "previous" entry (path + commit) that user can jump to. */
+  prev: { file: string; revision: string } | null;
   error: string | null;
 }
 
@@ -152,6 +160,9 @@ interface AppState {
 
   // blame
   openBlame: (file: string) => Promise<void>;
+  blameAt: (file: string, revision: string) => Promise<void>;
+  blameFollowRename: () => Promise<void>;
+  blameBack: () => Promise<void>;
 
   // changes (working tree)
   loadChanges: () => Promise<void>;
@@ -233,8 +244,11 @@ const emptyMerge: MergeView = {
 
 const emptyBlame: BlameView = {
   file: null,
+  revision: null,
+  history: [],
   lines: [],
   loading: false,
+  prev: null,
   error: null,
 };
 
@@ -578,13 +592,119 @@ export const useApp = create<AppState>((set, get) => ({
     if (!repo) return;
     set((s) => ({
       view: "blame",
-      blame: { ...s.blame, file, loading: true, error: null, lines: [] },
+      blame: {
+        ...s.blame,
+        file,
+        revision: null,
+        history: [],
+        lines: [],
+        loading: true,
+        prev: null,
+        error: null,
+      },
     }));
     try {
       const lines = await git.blameFile(repo.path, file);
-      set((s) => (s.blame.file === file ? { blame: { ...s.blame, lines, loading: false } } : s));
+      // Try to find the previous (renamed) filename from HEAD.
+      let prev: { file: string; revision: string } | null = null;
+      try {
+        const p = await git.previousFilename(repo.path, file, "HEAD");
+        if (p) prev = { file: p.path, revision: p.oid };
+      } catch {
+        // ignore — repo may have no parents on this commit
+      }
+      set((s) =>
+        s.blame.file === file && s.blame.revision === null
+          ? { blame: { ...s.blame, lines, loading: false, prev } }
+          : s,
+      );
     } catch (e) {
       set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
+    }
+  },
+
+  blameAt: async (file: string, revision: string) => {
+    const repo = get().repo;
+    if (!repo) return;
+    const cur = get().blame;
+    set((s) => ({
+      view: "blame",
+      blame: {
+        ...s.blame,
+        // Push current state onto the history stack so user can go back.
+        history:
+          cur.file !== null
+            ? [...s.blame.history, { file: cur.file, revision: cur.revision }]
+            : s.blame.history,
+        file,
+        revision,
+        lines: [],
+        loading: true,
+        prev: null,
+        error: null,
+      },
+    }));
+    try {
+      const lines = await git.blameAtRevision(repo.path, file, revision);
+      let prev: { file: string; revision: string } | null = null;
+      try {
+        const p = await git.previousFilename(repo.path, file, revision);
+        if (p) prev = { file: p.path, revision: p.oid };
+      } catch {
+        /* ignore */
+      }
+      set((s) =>
+        s.blame.file === file && s.blame.revision === revision
+          ? { blame: { ...s.blame, lines, loading: false, prev } }
+          : s,
+      );
+    } catch (e) {
+      set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
+    }
+  },
+
+  blameFollowRename: async () => {
+    const { blame } = get();
+    if (!blame.prev) return;
+    await get().blameAt(blame.prev.file, blame.prev.revision);
+  },
+
+  blameBack: async () => {
+    const { blame } = get();
+    const top = blame.history[blame.history.length - 1];
+    if (!top) return;
+    const newHistory = blame.history.slice(0, -1);
+    set((s) => ({ blame: { ...s.blame, history: newHistory } }));
+    if (top.revision === null) {
+      await get().openBlame(top.file);
+    } else {
+      // Rebuild from popped entry without pushing onto history again.
+      const repo = get().repo;
+      if (!repo) return;
+      set((s) => ({
+        blame: {
+          ...s.blame,
+          file: top.file,
+          revision: top.revision,
+          lines: [],
+          loading: true,
+          prev: null,
+          error: null,
+        },
+      }));
+      try {
+        const lines = await git.blameAtRevision(repo.path, top.file, top.revision);
+        let prev: { file: string; revision: string } | null = null;
+        try {
+          const p = await git.previousFilename(repo.path, top.file, top.revision);
+          if (p) prev = { file: p.path, revision: p.oid };
+        } catch {
+          /* ignore */
+        }
+        set((s) => ({ blame: { ...s.blame, lines, loading: false, prev } }));
+      } catch (e) {
+        set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
+      }
     }
   },
 

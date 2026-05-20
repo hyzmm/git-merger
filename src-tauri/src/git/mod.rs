@@ -13,7 +13,7 @@ pub mod repo;
 pub mod stash;
 pub mod workspace;
 
-pub use blame::BlameLine;
+pub use blame::{BlameLine, PrevFile};
 pub use merge::{ConflictContent, MergeState};
 pub use refs::RefEntry;
 pub use reflog::ReflogEntry;

@@ -19,6 +19,8 @@ pub fn run() {
             commands::commit_merge,
             commands::list_refs,
             commands::blame_file,
+            commands::blame_at_revision,
+            commands::previous_filename,
             commands::working_changes,
             commands::stage_files,
             commands::unstage_files,

@@ -98,6 +98,24 @@ pub fn blame_file(path: String, file: String) -> R<Vec<git::BlameLine>> {
 }
 
 #[tauri::command]
+pub fn blame_at_revision(
+    path: String,
+    file: String,
+    revision: String,
+) -> R<Vec<git::BlameLine>> {
+    Ok(git::blame::blame_at_revision(&path, &file, &revision)?)
+}
+
+#[tauri::command]
+pub fn previous_filename(
+    path: String,
+    file: String,
+    at_revision: String,
+) -> R<Option<git::PrevFile>> {
+    Ok(git::blame::previous_filename(&path, &file, &at_revision)?)
+}
+
+#[tauri::command]
 pub fn working_changes(path: String) -> R<Vec<git::WorkingFile>> {
     Ok(git::workspace::working_changes(&path)?)
 }
