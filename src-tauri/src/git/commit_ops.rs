@@ -7,11 +7,14 @@ use git2::{
     build::CheckoutBuilder, CherrypickOptions, MergeOptions, Repository, ResetType, RevertOptions,
 };
 
-/// Cherry-pick the given commit onto HEAD. May leave conflicts in the index;
+/// Cherry-pick the given commit onto HEAD. Accepts any committish — annotated
+/// tags are peeled to their target commit. May leave conflicts in the index;
 /// callers should follow up with the merge view if so.
 pub fn cherry_pick(path: &str, oid: &str) -> Result<(), git2::Error> {
     let repo = Repository::discover(path)?;
-    let commit = repo.find_commit(git2::Oid::from_str(oid)?)?;
+    let commit = repo
+        .find_object(git2::Oid::from_str(oid)?, None)?
+        .peel_to_commit()?;
     let mut opts = CherrypickOptions::new();
     opts.merge_opts(MergeOptions::new());
     repo.cherrypick(&commit, Some(&mut opts))?;
@@ -19,10 +22,12 @@ pub fn cherry_pick(path: &str, oid: &str) -> Result<(), git2::Error> {
 }
 
 /// Revert the given commit, creating an inverse change on top of HEAD.
-/// May leave conflicts in the index.
+/// Accepts any committish. May leave conflicts in the index.
 pub fn revert(path: &str, oid: &str) -> Result<(), git2::Error> {
     let repo = Repository::discover(path)?;
-    let commit = repo.find_commit(git2::Oid::from_str(oid)?)?;
+    let commit = repo
+        .find_object(git2::Oid::from_str(oid)?, None)?
+        .peel_to_commit()?;
     let mut opts = RevertOptions::new();
     opts.merge_opts(MergeOptions::new());
     repo.revert(&commit, Some(&mut opts))?;
