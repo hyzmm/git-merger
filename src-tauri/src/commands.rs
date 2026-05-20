@@ -26,6 +26,11 @@ pub fn open_repo(path: String) -> R<git::RepoInfo> {
 }
 
 #[tauri::command]
+pub fn tracked_files(path: String) -> R<Vec<String>> {
+    Ok(git::repo::tracked_files(&path)?)
+}
+
+#[tauri::command]
 pub fn git_log(
     path: String,
     limit: usize,

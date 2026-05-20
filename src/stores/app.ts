@@ -146,6 +146,13 @@ interface RebaseView {
   error: string | null;
 }
 
+interface PaletteState {
+  open: boolean;
+  /** Cached HEAD-tree file list, lazily loaded the first time the palette opens. */
+  files: string[];
+  filesLoadedFor: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -161,6 +168,7 @@ interface AppState {
   reflog: ReflogView;
   submodules: SubmodulesView;
   rebase: RebaseView;
+  palette: PaletteState;
 
   recentRepos: RecentRepo[];
 
@@ -257,6 +265,11 @@ interface AppState {
   rebaseAbort: () => Promise<void>;
   refreshRebaseStatus: () => Promise<void>;
   closeRebasePlan: () => void;
+
+  // command palette
+  openPalette: () => void;
+  closePalette: () => void;
+  ensureTrackedFiles: () => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -348,6 +361,12 @@ const emptyRebase: RebaseView = {
   error: null,
 };
 
+const emptyPalette: PaletteState = {
+  open: false,
+  files: [],
+  filesLoadedFor: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -362,6 +381,7 @@ export const useApp = create<AppState>((set, get) => ({
   reflog: { ...emptyReflog },
   submodules: { ...emptySubmodules },
   rebase: { ...emptyRebase },
+  palette: { ...emptyPalette },
 
   recentRepos: loadRecent(),
 
@@ -391,6 +411,7 @@ export const useApp = create<AppState>((set, get) => ({
         reflog: { ...emptyReflog },
         submodules: { ...emptySubmodules },
         rebase: { ...emptyRebase },
+        palette: { ...emptyPalette },
       });
       void get().loadHistory();
       void get().refreshRebaseStatus();
@@ -410,6 +431,7 @@ export const useApp = create<AppState>((set, get) => ({
       reflog: { ...emptyReflog },
       submodules: { ...emptySubmodules },
       rebase: { ...emptyRebase },
+      palette: { ...emptyPalette },
     }),
 
   refresh: async () => {
@@ -1295,6 +1317,29 @@ export const useApp = create<AppState>((set, get) => ({
       rebase: { ...emptyRebase },
       view: s.view === "rebase" ? "history" : s.view,
     })),
+
+  // ---------- Command Palette ----------
+  openPalette: () => {
+    set((s) => ({ palette: { ...s.palette, open: true } }));
+    void get().ensureTrackedFiles();
+  },
+
+  closePalette: () => set((s) => ({ palette: { ...s.palette, open: false } })),
+
+  ensureTrackedFiles: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const { palette } = get();
+    if (palette.filesLoadedFor === repo.path) return;
+    try {
+      const files = await git.trackedFiles(repo.path);
+      set((s) => ({
+        palette: { ...s.palette, files, filesLoadedFor: repo.path },
+      }));
+    } catch {
+      // ignore — palette will just show no file results
+    }
+  },
 }));
 
 // Helper used by the rebase actions to fold a backend status into the store.

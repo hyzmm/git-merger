@@ -19,6 +19,7 @@ export const en = {
   "topbar.fetch": "Fetch from all remotes (prune)",
   "topbar.pull": "Pull (fast-forward only)",
   "topbar.push": "Push current branch",
+  "topbar.search": "Search",
   "topbar.settings": "Settings",
   "topbar.detached": "detached",
   "topbar.loading": "Loading...",
@@ -105,6 +106,17 @@ export const en = {
   "rebase.moveDown": "Move down",
   "rebase.reword.placeholder": "New commit message…",
   "rebase.squash.placeholder": "Combined message (leave blank to concatenate)…",
+
+  // Command palette
+  "palette.placeholder": "Search commits, refs, files…",
+  "palette.noResults": "No matches.",
+  "palette.view": "view",
+  "palette.localBranch": "local branch",
+  "palette.remoteBranch": "remote branch",
+  "palette.tag": "tag",
+  "palette.fileBlame": "open in Blame",
+  "palette.hint.navigate": "navigate",
+  "palette.hint.activate": "open",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

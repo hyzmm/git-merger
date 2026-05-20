@@ -134,10 +134,15 @@ G:\GitTools
 
 1. ✅ **Interactive Rebase** — right-click a commit in History → "Rebase interactively from here". The Rebase page lists `base..HEAD` with per-commit action selectors (pick / reword / squash / fixup / drop) and ↑/↓ reorder buttons. Reword / squash steps expose an inline message editor. Once started, the executor cherry-picks each step in order; on conflict it pauses, the Topbar shows the progress bar with conflict tone, and the user resolves via the Merge view and clicks **Continue**. **Abort** restores the original branch tip from the saved state. Plan + state are persisted to `.git/gittools-rebase/state.json` so a closed window doesn't lose progress.
 
-### Backlog (post-v0.6.0)
+### v0.7.0 — Shipped
+
+1. ✅ **Command Palette (`Ctrl+K` / `Ctrl+P`)** — IDEA-style "Search Everywhere" overlay. Aggregates four sources into one fuzzy-ranked list: app views (Sidebar entries), refs (branches + tags), commits (oid + summary + author), and tracked files (HEAD tree walked once and cached per repo). Subsequence matcher with prefix / word-boundary / consecutive-run / case-sensitivity bonuses, plus a small per-kind tie-breaker (refs > files > commits > views). ↑↓ to navigate, Enter to act: refs check out (local) or jump to commit (remote/tag), commits jump-and-select in History, files open in Blame, views switch the page. Matched characters are highlighted inline.
+
+### Backlog (post-v0.7.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
+- ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts`, `lib/fuzzy.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
+- ⏳ File history view (single-file commit timeline with rename-following diff).
 
 ## Cross-platform notes
 

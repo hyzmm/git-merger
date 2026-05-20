@@ -9,6 +9,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             commands::open_repo,
+            commands::tracked_files,
             commands::git_log,
             commands::commit_files,
             commands::file_diff,

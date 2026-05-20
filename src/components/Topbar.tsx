@@ -8,6 +8,7 @@ import {
   FolderOpen,
   GitBranch,
   RefreshCw,
+  Search,
   Settings,
 } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -27,6 +28,7 @@ export function Topbar() {
   const loadChanges = useApp((s) => s.loadChanges);
   const loading = useApp((s) => s.loading);
   const error = useApp((s) => s.error);
+  const openPalette = useApp((s) => s.openPalette);
   const t = useT();
 
   const [running, setRunning] = useState<RemoteOp | null>(null);
@@ -172,6 +174,19 @@ export function Topbar() {
         )}
 
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          {repo && (
+            <button
+              onClick={openPalette}
+              title={t("topbar.search")}
+              className="hidden h-7 items-center gap-2 rounded-md border border-border bg-secondary px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground sm:flex"
+            >
+              <Search className="h-3 w-3" />
+              <span>{t("topbar.search")}</span>
+              <kbd className="ml-2 rounded border border-border bg-background px-1 font-mono text-[10px]">
+                Ctrl+K
+              </kbd>
+            </button>
+          )}
           {progress && (
             <span className="max-w-[260px] truncate font-mono text-[11px] text-foreground/80">
               {progress}

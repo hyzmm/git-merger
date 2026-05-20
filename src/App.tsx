@@ -3,6 +3,7 @@ import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { CredentialDialog } from "@/components/CredentialDialog";
+import { CommandPalette } from "@/components/CommandPalette";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
@@ -21,6 +22,7 @@ export default function App() {
   const refresh = useApp((s) => s.refresh);
   const applyResolution = useApp((s) => s.applyResolution);
   const chunks = useApp((s) => s.merge.chunks);
+  const openPalette = useApp((s) => s.openPalette);
 
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
@@ -39,13 +41,15 @@ export default function App() {
       "ctrl+6": () => repo && setView("diff"),
       "ctrl+7": () => repo && setView("merge"),
       "ctrl+8": () => repo && setView("rebase"),
+      "ctrl+k": () => repo && openPalette(),
+      "ctrl+p": () => repo && openPalette(),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
       "alt+2": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "right"),
       "alt+3": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "both"),
     }),
-    [repo, setView, refresh, firstPendingIdx, applyResolution],
+    [repo, setView, refresh, firstPendingIdx, applyResolution, openPalette],
   );
 
   useShortcuts(shortcutMap);
@@ -80,6 +84,7 @@ export default function App() {
         </main>
       </div>
       <CredentialDialog />
+      <CommandPalette />
     </div>
   );
 }

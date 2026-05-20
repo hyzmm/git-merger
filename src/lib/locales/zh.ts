@@ -17,6 +17,7 @@ export const zh: Dict = {
   "topbar.fetch": "从所有远端拉取（fetch + prune）",
   "topbar.pull": "拉取（仅快进 fast-forward）",
   "topbar.push": "推送当前分支",
+  "topbar.search": "搜索",
   "topbar.settings": "设置",
   "topbar.detached": "游离 HEAD",
   "topbar.loading": "加载中...",
@@ -101,4 +102,15 @@ export const zh: Dict = {
   "rebase.moveDown": "下移",
   "rebase.reword.placeholder": "新的提交信息…",
   "rebase.squash.placeholder": "合并后的提交信息（留空则自动拼接）…",
+
+  // 命令面板
+  "palette.placeholder": "搜索提交 / 分支 / 文件…",
+  "palette.noResults": "没有匹配结果。",
+  "palette.view": "视图",
+  "palette.localBranch": "本地分支",
+  "palette.remoteBranch": "远端分支",
+  "palette.tag": "标签",
+  "palette.fileBlame": "在 Blame 中打开",
+  "palette.hint.navigate": "上下导航",
+  "palette.hint.activate": "打开",
 };

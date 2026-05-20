@@ -221,6 +221,7 @@ export type RebaseStatus =
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
+  trackedFiles: (path: string) => invoke<string[]>("tracked_files", { path }),
   log: (path: string, opts?: { limit?: number; skip?: number; pathspec?: string }) =>
     invoke<CommitSummary[]>("git_log", {
       path,
