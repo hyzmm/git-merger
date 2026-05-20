@@ -108,11 +108,14 @@ G:\GitTools
 4. ✅ **Diff navigation** — `n` / `p` (and toolbar arrows) jump between hunks within the current file; **Ignore-Whitespace** toggle re-runs `libgit2` with `ignore_whitespace`, complementing the existing whitespace-visualization toggle.
 5. ✅ **Advanced history filters** — author dropdown (auto-collected, sorted by frequency), date range pickers (since / until), and `Path` input that delegates to a backend `git log -- <path>` walk for commits-touching-path semantics.
 
-### Backlog (post-v0.2.0)
+### v0.3.0 — Shipped
 
-- ⏳ Reflog view + one-click "undo" via `git reset` to a reflog entry.
-- ⏳ Blame following file renames (`-C` / `-M`).
-- ⏳ Submodule list / init / update / status.
+1. ✅ **Reflog view** — Sidebar entry showing `HEAD@{N}` history with action category color-coded (commit / reset / checkout / merge / rebase / cherry-pick / revert / pull). Per-entry **Restore** (mixed reset to that state) and **Hard** reset buttons turn the reflog into an undo timeline.
+2. ✅ **Annotate previous revision** — when a Blame view is open, the toolbar shows an "Annotate previous" button driven by `Diff::find_similar`-based rename detection. Click to jump to the file's previous identity (path + commit), with a back stack to retrace the chain. Solves the IDE-hostile case where a file has been renamed.
+3. ✅ **Submodules view** — list of submodules with derived status badges (`not cloned` / `not initialized` / `needs update` / `dirty` / `clean`), plus per-row **Init** / **Update** / **Sync** buttons. Status is computed via `submodule_status` (`WD_*` flags); update uses `Submodule::update`.
+
+### Backlog (post-v0.3.0)
+
 - ⏳ Interactive Rebase (drag-to-reorder, pick / squash / reword / drop).
 - ⏳ Native libgit2-driven push/pull with progress UI and credential dialogs (current implementation shells out to system `git`).
 - ⏳ Settings panel (theme / font size / tab width / `core.autocrlf`).
