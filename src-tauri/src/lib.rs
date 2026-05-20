@@ -42,6 +42,7 @@ pub fn run() {
             commands::cherry_pick,
             commands::revert_commit,
             commands::reset_to,
+            commands::reflog_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

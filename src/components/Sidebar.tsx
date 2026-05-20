@@ -1,4 +1,4 @@
-import { History, GitCompare, GitMerge, FilePlus2, Archive } from "lucide-react";
+import { History, GitCompare, GitMerge, FilePlus2, Archive, Undo2 } from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,7 @@ const items: { key: ViewKey; label: string; Icon: typeof History }[] = [
   { key: "history", label: "History", Icon: History },
   { key: "changes", label: "Changes (working tree)", Icon: FilePlus2 },
   { key: "stash", label: "Stash", Icon: Archive },
+  { key: "reflog", label: "Reflog (HEAD history)", Icon: Undo2 },
   { key: "diff", label: "Diff", Icon: GitCompare },
   { key: "merge", label: "Merge", Icon: GitMerge },
 ];

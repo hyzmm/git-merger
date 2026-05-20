@@ -253,3 +253,10 @@ pub fn reset_to(path: String, oid: String, mode: String) -> R<()> {
     git::commit_ops::reset(&path, &oid, &mode)?;
     Ok(())
 }
+
+// ---------- Reflog ----------
+
+#[tauri::command]
+pub fn reflog_list(path: String, refname: Option<String>) -> R<Vec<git::ReflogEntry>> {
+    Ok(git::reflog::list(&path, refname.as_deref())?)
+}

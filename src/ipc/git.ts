@@ -136,6 +136,19 @@ export interface StashEntry {
   time: number;
 }
 
+export interface ReflogEntry {
+  index: number;
+  new_oid: string;
+  short_new_oid: string;
+  old_oid: string;
+  short_old_oid: string;
+  message: string;
+  committer_name: string;
+  committer_email: string;
+  /** Unix seconds. */
+  time: number;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -206,4 +219,6 @@ export const git = {
   revertCommit: (path: string, oid: string) => invoke<void>("revert_commit", { path, oid }),
   resetTo: (path: string, oid: string, mode: "soft" | "mixed" | "hard") =>
     invoke<void>("reset_to", { path, oid, mode }),
+  reflogList: (path: string, refname?: string) =>
+    invoke<ReflogEntry[]>("reflog_list", { path, refname: refname ?? null }),
 };

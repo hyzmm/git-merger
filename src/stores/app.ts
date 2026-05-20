@@ -9,6 +9,7 @@ import {
   type FileDiff,
   type MergeState,
   type RefEntry,
+  type ReflogEntry,
   type RepoInfo,
   type StashEntry,
   type WorkingFile,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 
-export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes" | "stash";
+export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes" | "stash" | "reflog";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -96,6 +97,12 @@ interface StashView {
   status: string | null;
 }
 
+interface ReflogView {
+  entries: ReflogEntry[];
+  loading: boolean;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -108,6 +115,7 @@ interface AppState {
   blame: BlameView;
   changes: ChangesView;
   stash: StashView;
+  reflog: ReflogView;
 
   recentRepos: RecentRepo[];
 
@@ -180,6 +188,9 @@ interface AppState {
   cherryPick: (oid: string) => Promise<void>;
   revertCommit: (oid: string) => Promise<void>;
   resetTo: (oid: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
+
+  // reflog
+  loadReflog: () => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -244,6 +255,12 @@ const emptyStash: StashView = {
   status: null,
 };
 
+const emptyReflog: ReflogView = {
+  entries: [],
+  loading: false,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -255,6 +272,7 @@ export const useApp = create<AppState>((set, get) => ({
   blame: { ...emptyBlame },
   changes: { ...emptyChanges, selected: new Set() },
   stash: { ...emptyStash },
+  reflog: { ...emptyReflog },
 
   recentRepos: loadRecent(),
 
@@ -263,6 +281,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "merge") void get().loadMerge();
     if (v === "changes") void get().loadChanges();
     if (v === "stash") void get().loadStash();
+    if (v === "reflog") void get().loadReflog();
   },
 
   openRepo: async (path) => {
@@ -278,6 +297,7 @@ export const useApp = create<AppState>((set, get) => ({
         diff: { ...emptyDiff },
         merge: { ...emptyMerge, resolvedFiles: new Set() },
         stash: { ...emptyStash },
+        reflog: { ...emptyReflog },
       });
       void get().loadHistory();
     } catch (e) {
@@ -293,6 +313,7 @@ export const useApp = create<AppState>((set, get) => ({
       diff: { ...emptyDiff },
       merge: { ...emptyMerge, resolvedFiles: new Set() },
       stash: { ...emptyStash },
+      reflog: { ...emptyReflog },
     }),
 
   refresh: async () => {
@@ -310,6 +331,8 @@ export const useApp = create<AppState>((set, get) => ({
       await get().loadChanges();
     } else if (view === "stash") {
       await get().loadStash();
+    } else if (view === "reflog") {
+      await get().loadReflog();
     }
   },
 
@@ -870,8 +893,22 @@ export const useApp = create<AppState>((set, get) => ({
       await git.resetTo(repo.path, oid, mode);
       void get().loadHistory();
       void get().loadChanges();
+      void get().loadReflog();
     } catch (e) {
       set({ error: String(e) });
+    }
+  },
+
+  // ---------- Reflog ----------
+  loadReflog: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ reflog: { ...s.reflog, loading: true, error: null } }));
+    try {
+      const entries = await git.reflogList(repo.path);
+      set((s) => ({ reflog: { ...s.reflog, entries, loading: false } }));
+    } catch (e) {
+      set((s) => ({ reflog: { ...s.reflog, loading: false, error: String(e) } }));
     }
   },
 }));
