@@ -29,6 +29,7 @@ export function ChangesPage() {
   const loading = useApp((s) => s.changes.loading);
   const committing = useApp((s) => s.changes.committing);
   const error = useApp((s) => s.changes.error);
+  const stashBusy = useApp((s) => s.stash.busy);
 
   const toggle = useApp((s) => s.toggleChange);
   const selectAll = useApp((s) => s.selectAllChanges);
@@ -38,6 +39,8 @@ export function ChangesPage() {
   const discardSel = useApp((s) => s.discardSelected);
   const setMessage = useApp((s) => s.setCommitMessage);
   const commit = useApp((s) => s.commitWorking);
+  const setView = useApp((s) => s.setView);
+  const saveStash = useApp((s) => s.saveStash);
 
   const staged = files.filter((f) => f.flag === "staged" || f.flag === "both");
   const unstaged = files.filter(
@@ -46,6 +49,24 @@ export function ChangesPage() {
   const conflicts = files.filter((f) => f.flag === "conflict");
   const stagedCount = staged.length;
   const hasSelection = selected.size > 0;
+  const hasAnyChange = files.length > 0 && conflicts.length === 0;
+
+  const onStashAll = async () => {
+    const m = window.prompt(
+      "Stash message (optional):\n\nLeave blank to use 'WIP on <branch>'.",
+      "",
+    );
+    if (m === null) return;
+    const includeUntracked = window.confirm(
+      "Include untracked files? (OK = include, Cancel = skip)",
+    );
+    await saveStash({
+      message: m.trim() || undefined,
+      includeUntracked,
+      keepIndex: false,
+    });
+    setView("stash");
+  };
 
   return (
     <div className="grid h-full grid-cols-[1fr_360px]">
@@ -105,6 +126,17 @@ export function ChangesPage() {
               )}
             >
               Discard
+            </button>
+            <button
+              onClick={onStashAll}
+              disabled={!hasAnyChange || stashBusy}
+              title="git stash — save all working changes for later"
+              className={cn(
+                "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
+                (!hasAnyChange || stashBusy) && "cursor-not-allowed opacity-60",
+              )}
+            >
+              Stash…
             </button>
           </div>
         </div>

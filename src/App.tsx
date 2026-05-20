@@ -7,6 +7,7 @@ import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
 import { BlamePage } from "@/pages/BlamePage";
 import { ChangesPage } from "@/pages/ChangesPage";
+import { StashPage } from "@/pages/StashPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -27,9 +28,10 @@ export default function App() {
   const shortcutMap = useMemo(
     () => ({
       "ctrl+1": () => repo && setView("history"),
-      "ctrl+2": () => repo && setView("diff"),
-      "ctrl+3": () => repo && setView("merge"),
-      "ctrl+4": () => repo && setView("changes"),
+      "ctrl+2": () => repo && setView("changes"),
+      "ctrl+3": () => repo && setView("stash"),
+      "ctrl+4": () => repo && setView("diff"),
+      "ctrl+5": () => repo && setView("merge"),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
@@ -57,6 +59,8 @@ export default function App() {
             <MergePage />
           ) : view === "changes" ? (
             <ChangesPage />
+          ) : view === "stash" ? (
+            <StashPage />
           ) : (
             <BlamePage />
           )}

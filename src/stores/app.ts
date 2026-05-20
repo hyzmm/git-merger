@@ -10,6 +10,7 @@ import {
   type MergeState,
   type RefEntry,
   type RepoInfo,
+  type StashEntry,
   type WorkingFile,
 } from "@/ipc/git";
 import {
@@ -22,7 +23,7 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 
-export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes";
+export type ViewKey = "history" | "diff" | "merge" | "blame" | "changes" | "stash";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -77,6 +78,15 @@ interface ChangesView {
   error: string | null;
 }
 
+interface StashView {
+  entries: StashEntry[];
+  loading: boolean;
+  busy: boolean;
+  error: string | null;
+  /** Last successful action message, shown briefly. */
+  status: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -88,6 +98,7 @@ interface AppState {
   merge: MergeView;
   blame: BlameView;
   changes: ChangesView;
+  stash: StashView;
 
   recentRepos: RecentRepo[];
 
@@ -130,6 +141,17 @@ interface AppState {
   discardSelected: () => Promise<void>;
   setCommitMessage: (m: string) => void;
   commitWorking: () => Promise<void>;
+
+  // stash
+  loadStash: () => Promise<void>;
+  saveStash: (opts?: {
+    message?: string;
+    includeUntracked?: boolean;
+    keepIndex?: boolean;
+  }) => Promise<void>;
+  applyStash: (index: number) => Promise<void>;
+  popStash: (index: number) => Promise<void>;
+  dropStash: (index: number) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -181,6 +203,14 @@ const emptyChanges: ChangesView = {
   error: null,
 };
 
+const emptyStash: StashView = {
+  entries: [],
+  loading: false,
+  busy: false,
+  error: null,
+  status: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -191,6 +221,7 @@ export const useApp = create<AppState>((set, get) => ({
   merge: { ...emptyMerge, resolvedFiles: new Set() },
   blame: { ...emptyBlame },
   changes: { ...emptyChanges, selected: new Set() },
+  stash: { ...emptyStash },
 
   recentRepos: loadRecent(),
 
@@ -198,6 +229,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ view: v });
     if (v === "merge") void get().loadMerge();
     if (v === "changes") void get().loadChanges();
+    if (v === "stash") void get().loadStash();
   },
 
   openRepo: async (path) => {
@@ -212,6 +244,7 @@ export const useApp = create<AppState>((set, get) => ({
         history: { ...emptyHistory },
         diff: { ...emptyDiff },
         merge: { ...emptyMerge, resolvedFiles: new Set() },
+        stash: { ...emptyStash },
       });
       void get().loadHistory();
     } catch (e) {
@@ -226,6 +259,7 @@ export const useApp = create<AppState>((set, get) => ({
       history: { ...emptyHistory },
       diff: { ...emptyDiff },
       merge: { ...emptyMerge, resolvedFiles: new Set() },
+      stash: { ...emptyStash },
     }),
 
   refresh: async () => {
@@ -239,6 +273,10 @@ export const useApp = create<AppState>((set, get) => ({
       }
     } else if (view === "merge") {
       await get().loadMerge();
+    } else if (view === "changes") {
+      await get().loadChanges();
+    } else if (view === "stash") {
+      await get().loadStash();
     }
   },
 
@@ -565,6 +603,74 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({
         changes: { ...s.changes, committing: false, error: String(e) },
       }));
+    }
+  },
+
+  // ---------- Stash ----------
+  loadStash: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ stash: { ...s.stash, loading: true, error: null } }));
+    try {
+      const entries = await git.stashList(repo.path);
+      set((s) => ({ stash: { ...s.stash, entries, loading: false } }));
+    } catch (e) {
+      set((s) => ({ stash: { ...s.stash, loading: false, error: String(e) } }));
+    }
+  },
+
+  saveStash: async (opts) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
+    try {
+      await git.stashSave(repo.path, opts);
+      set((s) => ({ stash: { ...s.stash, busy: false, status: "Stashed working changes." } }));
+      void get().loadStash();
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
+    }
+  },
+
+  applyStash: async (index) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
+    try {
+      await git.stashApply(repo.path, index);
+      set((s) => ({ stash: { ...s.stash, busy: false, status: `Applied stash@{${index}}.` } }));
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
+    }
+  },
+
+  popStash: async (index) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
+    try {
+      await git.stashPop(repo.path, index);
+      set((s) => ({ stash: { ...s.stash, busy: false, status: `Popped stash@{${index}}.` } }));
+      void get().loadStash();
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
+    }
+  },
+
+  dropStash: async (index) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (!confirm(`Drop stash@{${index}}? This cannot be undone.`)) return;
+    set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
+    try {
+      await git.stashDrop(repo.path, index);
+      set((s) => ({ stash: { ...s.stash, busy: false, status: `Dropped stash@{${index}}.` } }));
+      void get().loadStash();
+    } catch (e) {
+      set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
     }
   },
 }));

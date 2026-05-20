@@ -7,13 +7,15 @@ pub mod merge;
 pub mod refs;
 pub mod remote;
 pub mod repo;
+pub mod stash;
 pub mod workspace;
 
 pub use blame::BlameLine;
 pub use merge::{ConflictContent, MergeState};
-pub use refs::{RefEntry, RefKind};
+pub use refs::RefEntry;
 pub use remote::GitCmdResult;
-pub use workspace::{WorkingFile, WorkingFlag, WorkingStatus};
+pub use stash::StashEntry;
+pub use workspace::WorkingFile;
 
 use serde::{Deserialize, Serialize};
 

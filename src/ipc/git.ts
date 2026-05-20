@@ -126,6 +126,16 @@ export interface GitCmdResult {
   code: number;
 }
 
+export interface StashEntry {
+  /** Stack index (0 = most recent). */
+  index: number;
+  oid: string;
+  short_oid: string;
+  message: string;
+  /** Unix seconds. */
+  time: number;
+}
+
 // ---------- Commands ----------
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
@@ -162,4 +172,18 @@ export const git = {
       branch: opts?.branch ?? null,
       setUpstream: opts?.setUpstream ?? false,
     }),
+  stashList: (path: string) => invoke<StashEntry[]>("stash_list", { path }),
+  stashSave: (
+    path: string,
+    opts?: { message?: string; includeUntracked?: boolean; keepIndex?: boolean },
+  ) =>
+    invoke<string>("stash_save", {
+      path,
+      message: opts?.message ?? null,
+      includeUntracked: opts?.includeUntracked ?? false,
+      keepIndex: opts?.keepIndex ?? false,
+    }),
+  stashApply: (path: string, index: number) => invoke<void>("stash_apply", { path, index }),
+  stashPop: (path: string, index: number) => invoke<void>("stash_pop", { path, index }),
+  stashDrop: (path: string, index: number) => invoke<void>("stash_drop", { path, index }),
 };

@@ -8,6 +8,7 @@ pub enum CmdError {
     #[error("{0}")]
     Git(#[from] git2::Error),
     #[error("{0}")]
+    #[allow(dead_code)]
     Other(String),
 }
 
@@ -137,4 +138,44 @@ pub fn git_push(
         branch.as_deref(),
         set_upstream,
     )?)
+}
+
+// ---------- Stash ----------
+
+#[tauri::command]
+pub fn stash_list(path: String) -> R<Vec<git::StashEntry>> {
+    Ok(git::stash::list(&path)?)
+}
+
+#[tauri::command]
+pub fn stash_save(
+    path: String,
+    message: Option<String>,
+    include_untracked: bool,
+    keep_index: bool,
+) -> R<String> {
+    Ok(git::stash::save(
+        &path,
+        message.as_deref(),
+        include_untracked,
+        keep_index,
+    )?)
+}
+
+#[tauri::command]
+pub fn stash_apply(path: String, index: usize) -> R<()> {
+    git::stash::apply(&path, index)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stash_pop(path: String, index: usize) -> R<()> {
+    git::stash::pop(&path, index)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stash_drop(path: String, index: usize) -> R<()> {
+    git::stash::drop(&path, index)?;
+    Ok(())
 }

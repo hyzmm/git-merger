@@ -87,7 +87,7 @@ pub fn conflict_content(path: &str, file: &str) -> Result<ConflictContent, git2:
         theirs: None,
         working: None,
     };
-    let mut index = repo.index()?;
+    let index = repo.index()?;
     if index.has_conflicts() {
         for c in index.conflicts()?.flatten() {
             let p = c
