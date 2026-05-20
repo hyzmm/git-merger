@@ -2,6 +2,7 @@
 
 pub mod blame;
 pub mod commit_ops;
+pub mod config;
 pub mod diff;
 pub mod log;
 pub mod merge;

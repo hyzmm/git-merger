@@ -49,6 +49,8 @@ pub fn run() {
             commands::submodule_init,
             commands::submodule_update,
             commands::submodule_sync,
+            commands::config_get,
+            commands::config_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

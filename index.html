@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Git Tools</title>
+    <script>
+      // Pre-paint theme to avoid a flash of the wrong scheme. Mirrors what
+      // the SettingsProvider applies on mount.
+      (function () {
+        try {
+          const raw = localStorage.getItem("gittools.settings.v1");
+          const s = raw ? JSON.parse(raw) : null;
+          const t = s && s.theme;
+          const dark =
+            t === "dark" ||
+            (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          const html = document.documentElement;
+          html.classList.toggle("dark", dark);
+          if (s && typeof s.fontSize === "number") {
+            html.style.fontSize = s.fontSize + "px";
+          }
+          if (s && typeof s.tabSize === "number") {
+            html.style.setProperty("--tab-size", String(s.tabSize));
+          }
+        } catch (_) {
+          /* ignore — fall back to default dark */
+        }
+      })();
+    </script>
   </head>
   <body class="bg-background text-foreground antialiased">
     <div id="root"></div>

@@ -250,4 +250,7 @@ export const git = {
   submoduleUpdate: (path: string, name: string, initFirst = true) =>
     invoke<void>("submodule_update", { path, name, initFirst }),
   submoduleSync: (path: string, name: string) => invoke<void>("submodule_sync", { path, name }),
+  configGet: (path: string, key: string) => invoke<string | null>("config_get", { path, key }),
+  configSet: (path: string, key: string, value: string, scope: "local" | "global" = "local") =>
+    invoke<void>("config_set", { path, key, value, scope }),
 };

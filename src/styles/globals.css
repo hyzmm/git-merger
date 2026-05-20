@@ -114,6 +114,10 @@ body,
   height: 100%;
 }
 
+:root {
+  --tab-size: 4;
+}
+
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -139,6 +143,8 @@ samp,
     "liga" 1,
     "tnum" 1,
     "zero" 1; /* slashed zero for clearer 0/O distinction */
+  tab-size: var(--tab-size);
+  -moz-tab-size: var(--tab-size);
 }
 
 /* Native-feeling scrollbars */

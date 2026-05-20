@@ -303,3 +303,16 @@ pub fn submodule_sync(path: String, name: String) -> R<()> {
     git::submodule::sync(&path, &name)?;
     Ok(())
 }
+
+// ---------- Config ----------
+
+#[tauri::command]
+pub fn config_get(path: String, key: String) -> R<Option<String>> {
+    Ok(git::config::get(&path, &key)?)
+}
+
+#[tauri::command]
+pub fn config_set(path: String, key: String, value: String, scope: String) -> R<()> {
+    git::config::set(&path, &key, &value, &scope)?;
+    Ok(())
+}

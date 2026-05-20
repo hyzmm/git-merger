@@ -7,10 +7,12 @@ import {
   FolderOpen,
   GitBranch,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { git, type GitCmdResult } from "@/ipc/git";
 import { cn } from "@/lib/utils";
+import { SettingsDialog } from "@/components/SettingsDialog";
 
 type RemoteOp = "fetch" | "pull" | "push";
 
@@ -25,6 +27,7 @@ export function Topbar() {
 
   const [running, setRunning] = useState<RemoteOp | null>(null);
   const [opResult, setOpResult] = useState<{ op: RemoteOp; result: GitCmdResult } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   async function pickRepo() {
     const dir = await open({ directory: true, multiple: false });
@@ -113,9 +116,16 @@ export function Topbar() {
           </>
         )}
 
-        <div className="ml-auto text-xs text-muted-foreground">
-          {loading && "Loading..."}
+        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          {loading && <span>Loading...</span>}
           {error && <span className="text-destructive">{error}</span>}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
@@ -126,6 +136,8 @@ export function Topbar() {
           onDismiss={() => setOpResult(null)}
         />
       )}
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }
