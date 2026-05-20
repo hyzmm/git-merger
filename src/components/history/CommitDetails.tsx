@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "@/stores/app";
 import { fullDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { FileChange } from "@/ipc/git";
 
 const STATUS_LABEL: Record<FileChange["status"], string> = {
@@ -30,6 +31,10 @@ export function CommitDetails() {
   const files = useApp((s) => s.history.files);
   const filesLoading = useApp((s) => s.history.filesLoading);
   const openDiff = useApp((s) => s.openDiff);
+  const openBlame = useApp((s) => s.openBlame);
+  const openFileHistory = useApp((s) => s.openFileHistory);
+
+  const [menu, setMenu] = useState<{ pos: ContextMenuPos; items: MenuItem[] } | null>(null);
 
   const fullMessage = useMemo(() => commit?.summary ?? "", [commit]);
 
@@ -93,6 +98,30 @@ export function CommitDetails() {
             <div
               key={`${f.old_path ?? ""}->${f.path}`}
               onClick={() => commit && openDiff(commit.oid, f.path, files)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (!commit) return;
+                const items: MenuItem[] = [
+                  {
+                    label: "Open diff at this commit",
+                    onClick: () => openDiff(commit.oid, f.path, files),
+                  },
+                  {
+                    label: "Show file history (follows renames)",
+                    onClick: () => void openFileHistory(f.path),
+                  },
+                  {
+                    label: "Blame current version",
+                    onClick: () => void openBlame(f.path),
+                  },
+                  { separator: true, label: "" },
+                  {
+                    label: `Copy path (${f.path.split("/").pop()})`,
+                    onClick: () => void navigator.clipboard.writeText(f.path).catch(() => {}),
+                  },
+                ];
+                setMenu({ pos: { x: e.clientX, y: e.clientY }, items });
+              }}
               className="flex cursor-pointer items-center gap-2 px-3.5 py-1 hover:bg-accent/50"
             >
               <span
@@ -128,6 +157,11 @@ export function CommitDetails() {
           {fullMessage}
         </pre>
       </div>
+      <ContextMenu
+        pos={menu?.pos ?? null}
+        items={menu?.items ?? []}
+        onClose={() => setMenu(null)}
+      />
     </aside>
   );
 }

@@ -113,4 +113,11 @@ export const zh: Dict = {
   "palette.fileBlame": "在 Blame 中打开",
   "palette.hint.navigate": "上下导航",
   "palette.hint.activate": "打开",
+
+  // 文件历史
+  "fileHistory.commits": "次提交",
+  "fileHistory.empty": "未找到该文件的历史（或提交链未触及该路径）。",
+  "fileHistory.openBlame": "在 Blame 中查看",
+  "fileHistory.openInDiff": "打开完整的提交 diff",
+  "fileHistory.selectCommit": "请在左侧选择一条提交。",
 };

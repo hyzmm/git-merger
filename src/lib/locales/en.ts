@@ -117,6 +117,13 @@ export const en = {
   "palette.fileBlame": "open in Blame",
   "palette.hint.navigate": "navigate",
   "palette.hint.activate": "open",
+
+  // File History
+  "fileHistory.commits": "commits",
+  "fileHistory.empty": "No history found for this file (or commit walk didn't reach it).",
+  "fileHistory.openBlame": "Open this file in Blame",
+  "fileHistory.openInDiff": "Open the full commit diff",
+  "fileHistory.selectCommit": "Select a commit on the left.",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

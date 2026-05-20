@@ -4,6 +4,7 @@ pub mod blame;
 pub mod commit_ops;
 pub mod config;
 pub mod diff;
+pub mod file_history;
 pub mod log;
 pub mod merge;
 pub mod rebase;
@@ -17,6 +18,7 @@ pub mod submodule;
 pub mod workspace;
 
 pub use blame::{BlameLine, PrevFile};
+pub use file_history::FileHistoryEntry;
 pub use merge::{ConflictContent, MergeState};
 pub use rebase::{RebaseStatus, RebaseStep};
 pub use reflog::ReflogEntry;

@@ -18,6 +18,7 @@ export function DiffViewer() {
   const ignoreWhitespace = useApp((s) => s.diff.ignoreWhitespace);
   const toggleIgnoreWhitespace = useApp((s) => s.toggleIgnoreWhitespace);
   const openBlame = useApp((s) => s.openBlame);
+  const openFileHistory = useApp((s) => s.openFileHistory);
   const view = useApp((s) => s.view);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,6 +112,17 @@ export function DiffViewer() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => file && void openFileHistory(file)}
+            disabled={!file}
+            className={cn(
+              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+              !file && "cursor-not-allowed opacity-50",
+            )}
+            title="Show this file's history (follows renames)"
+          >
+            History
+          </button>
           <button
             onClick={() => file && openBlame(file)}
             disabled={!file}

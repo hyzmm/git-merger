@@ -31,6 +31,17 @@ export interface FileChange {
   deletions: number;
 }
 
+export interface FileHistoryEntry {
+  commit: CommitSummary;
+  /** Path of the tracked file at this commit (may differ on renames). */
+  path_at_commit: string;
+  status: "added" | "deleted" | "modified" | "renamed" | "copied" | "typechange";
+  /** Previous path when this commit is a rename / copy. */
+  old_path: string | null;
+  insertions: number;
+  deletions: number;
+}
+
 export interface DiffHunk {
   old_start: number;
   old_lines: number;
@@ -222,6 +233,8 @@ export type RebaseStatus =
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
   trackedFiles: (path: string) => invoke<string[]>("tracked_files", { path }),
+  fileHistory: (path: string, file: string, limit?: number) =>
+    invoke<FileHistoryEntry[]>("file_history", { path, file, limit: limit ?? null }),
   log: (path: string, opts?: { limit?: number; skip?: number; pathspec?: string }) =>
     invoke<CommitSummary[]>("git_log", {
       path,

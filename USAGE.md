@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.7.0  
+> 适用版本：v0.8.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -22,6 +22,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.7 Reflog（HEAD 时光机）](#37-refloghead-时光机)
   - [3.8 Submodules](#38-submodules)
   - [3.9 Interactive Rebase](#39-interactive-rebase)
+  - [3.10 File History（单文件时间线 + 跟随重命名）](#310-file-history单文件时间线--跟随重命名)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
@@ -261,6 +262,23 @@ bun run tauri:build
 3. 把 `debug log` 设为 **drop**
 4. 第二条设为 **reword**，改 message
 5. 点 Start，自动跑完即可（无冲突时秒回）
+
+### 3.10 File History（单文件时间线 + 跟随重命名）
+
+`git log --follow -- <path>` 等价的视图。两栏：
+
+- **左**：该文件的提交时间线（旧→新逆序）。每行：状态徽章（A/M/D/R/C/T）+ 短 oid + 摘要 + 作者 + +N -N 行数。**重命名 / 拷贝** 在行尾显示 `oldpath → newpath` 的细字
+- **右**：选中提交时该文件的 diff（Side-by-side / Unified 自由切换，复用主 Diff 视图的渲染管线）
+
+后端按需 `Diff::find_similar` 检测重命名，每次循环后切换跟踪的路径，所以 `lib/graph.ts` → `src/lib/graph.ts` → `src/components/Graph.tsx` 这样的迁移链能完整呈现。
+
+**入口（v0.8.0）**：
+
+- **Diff 工具栏 → History**：当前打开的文件的历史
+- **Blame 工具栏 → File history**：blame 文件的历史
+- **History → Commit Details 右键文件**：弹出菜单，含 "Show file history (follows renames)" / "Open diff at this commit" / "Blame current version" / "Copy path"
+
+点击右栏标题里的短 oid 也能直接跳到完整 commit diff。
 
 ---
 
@@ -512,6 +530,7 @@ G:\GitTools\
 │       ├── commands.rs       # 50+ 个 #[tauri::command]
 │       └── git/
 │           ├── repo.rs       # open_repo / tracked_files
+│           ├── file_history.rs # 单文件提交历史 + 跟随重命名 (v0.8.0)
 │           ├── log.rs        # 含 author/date/pathspec 过滤
 │           ├── diff.rs       # 含 ignore_whitespace
 │           ├── merge.rs      # 三路 + abort + commit
@@ -542,6 +561,7 @@ G:\GitTools\
 | 类别          | 命令                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Repo          | `open_repo`, `tracked_files`                                                                                        |
+| File History  | `file_history`                                                                                                      |
 | History       | `git_log`, `commit_files`, `file_diff`, `working_diff`, `list_refs`                                                 |
 | Working tree  | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`                                |
 | Merge         | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                   |
@@ -680,6 +700,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.5.0 | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件               |
 | v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                             |
 | v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                   |
+| v0.8.0 | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                         |
 
 ---
 

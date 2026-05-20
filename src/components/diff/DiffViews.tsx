@@ -4,7 +4,7 @@ import { DiffLineCell } from "./DiffPrimitives";
 import { pairLines, type PairedLine } from "@/lib/pairLines";
 import { useHighlight } from "@/lib/useHighlight";
 import { cn } from "@/lib/utils";
-import type { DiffHunk } from "@/ipc/git";
+import type { DiffHunk, FileDiff } from "@/ipc/git";
 
 function stripNL(s: string): string {
   return s.replace(/\r?\n$/, "");
@@ -30,10 +30,19 @@ function extractUnifiedSource(hunks: DiffHunk[]) {
   return hunks.flatMap((h) => h.lines.map((ln) => stripNL(ln.content)));
 }
 
-export function SideBySide() {
-  const fileDiff = useApp((s) => s.diff.fileDiff);
+interface DiffViewProps {
+  /** Optional override; falls back to s.diff.fileDiff. */
+  fileDiff?: FileDiff | null;
+  /** Filename for syntax-highlighting language detection. */
+  filename?: string;
+}
+
+export function SideBySide({ fileDiff: fdProp, filename: nameProp }: DiffViewProps = {}) {
+  const fdStore = useApp((s) => s.diff.fileDiff);
   const showWhitespace = useApp((s) => s.diff.showWhitespace);
-  const filename = useApp((s) => s.diff.selectedFile ?? "");
+  const fnStore = useApp((s) => s.diff.selectedFile ?? "");
+  const fileDiff = fdProp !== undefined ? fdProp : fdStore;
+  const filename = nameProp ?? fnStore;
 
   const hunks = useMemo(() => {
     if (!fileDiff) return [];
@@ -117,10 +126,12 @@ export function SideBySide() {
   );
 }
 
-export function Unified() {
-  const fileDiff = useApp((s) => s.diff.fileDiff);
+export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps = {}) {
+  const fdStore = useApp((s) => s.diff.fileDiff);
   const showWhitespace = useApp((s) => s.diff.showWhitespace);
-  const filename = useApp((s) => s.diff.selectedFile ?? "");
+  const fnStore = useApp((s) => s.diff.selectedFile ?? "");
+  const fileDiff = fdProp !== undefined ? fdProp : fdStore;
+  const filename = nameProp ?? fnStore;
 
   const hunks = useMemo(() => fileDiff?.hunks ?? [], [fileDiff]);
   const flatLines = useMemo(() => extractUnifiedSource(hunks), [hunks]);

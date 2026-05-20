@@ -138,11 +138,14 @@ G:\GitTools
 
 1. ✅ **Command Palette (`Ctrl+K` / `Ctrl+P`)** — IDEA-style "Search Everywhere" overlay. Aggregates four sources into one fuzzy-ranked list: app views (Sidebar entries), refs (branches + tags), commits (oid + summary + author), and tracked files (HEAD tree walked once and cached per repo). Subsequence matcher with prefix / word-boundary / consecutive-run / case-sensitivity bonuses, plus a small per-kind tie-breaker (refs > files > commits > views). ↑↓ to navigate, Enter to act: refs check out (local) or jump to commit (remote/tag), commits jump-and-select in History, files open in Blame, views switch the page. Matched characters are highlighted inline.
 
-### Backlog (post-v0.7.0)
+### v0.8.0 — Shipped
+
+1. ✅ **File History view** — `git log --follow -- <path>` equivalent. Walks HEAD backwards collecting commits that touch a tracked path; on each step uses libgit2's `Diff::find_similar` (renames + copies) to detect when a commit is a rename and switches the tracked path to the old name to keep following the chain. Each entry carries the path-at-that-commit, the change status (added / modified / deleted / renamed / copied / typechange), and per-file +/- line stats. Two-pane page: left commit list with rename arrows, right diff of the file's version at the selected commit (Side-by-side / Unified mode toggle, reuses the existing diff renderer). Entry points: Diff toolbar **History** button, Blame toolbar **File history** button, and a right-click on any file in Commit Details (also offers "Open diff at this commit" / "Blame current version" / "Copy path").
+
+### Backlog (post-v0.8.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 - ⏳ Unit tests for `lib/graph.ts`, `lib/wordDiff.ts`, `lib/conflictParser.ts`, `lib/fuzzy.ts` (vitest) and Rust integration tests with `tempfile`-built repos.
-- ⏳ File history view (single-file commit timeline with rename-following diff).
 
 ## Cross-platform notes
 

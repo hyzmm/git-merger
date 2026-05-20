@@ -31,6 +31,19 @@ pub fn tracked_files(path: String) -> R<Vec<String>> {
 }
 
 #[tauri::command]
+pub fn file_history(
+    path: String,
+    file: String,
+    limit: Option<usize>,
+) -> R<Vec<git::FileHistoryEntry>> {
+    Ok(git::file_history::file_history(
+        &path,
+        &file,
+        limit.unwrap_or(2000),
+    )?)
+}
+
+#[tauri::command]
 pub fn git_log(
     path: String,
     limit: usize,

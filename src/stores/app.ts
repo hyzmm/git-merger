@@ -7,6 +7,7 @@ import {
   type ConflictFile,
   type FileChange,
   type FileDiff,
+  type FileHistoryEntry,
   type MergeState,
   type RebaseStateInfo,
   type RebaseStatus,
@@ -37,7 +38,8 @@ export type ViewKey =
   | "stash"
   | "reflog"
   | "submodules"
-  | "rebase";
+  | "rebase"
+  | "fileHistory";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {
@@ -153,6 +155,19 @@ interface PaletteState {
   filesLoadedFor: string | null;
 }
 
+interface FileHistoryView {
+  /** Path the user originally asked for; UI shows this in the toolbar. */
+  startPath: string | null;
+  entries: FileHistoryEntry[];
+  /** Index of currently-selected entry (drives the right-side diff). */
+  selectedIdx: number;
+  /** Diff of the selected entry. */
+  fileDiff: FileDiff | null;
+  diffLoading: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
 interface AppState {
   repo: RepoInfo | null;
   view: ViewKey;
@@ -169,6 +184,7 @@ interface AppState {
   submodules: SubmodulesView;
   rebase: RebaseView;
   palette: PaletteState;
+  fileHistory: FileHistoryView;
 
   recentRepos: RecentRepo[];
 
@@ -270,6 +286,10 @@ interface AppState {
   openPalette: () => void;
   closePalette: () => void;
   ensureTrackedFiles: () => Promise<void>;
+
+  // file history
+  openFileHistory: (file: string) => Promise<void>;
+  selectFileHistoryEntry: (idx: number) => Promise<void>;
 }
 
 const emptyHistory: HistoryState = {
@@ -367,6 +387,16 @@ const emptyPalette: PaletteState = {
   filesLoadedFor: null,
 };
 
+const emptyFileHistory: FileHistoryView = {
+  startPath: null,
+  entries: [],
+  selectedIdx: 0,
+  fileDiff: null,
+  diffLoading: false,
+  loading: false,
+  error: null,
+};
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -382,6 +412,7 @@ export const useApp = create<AppState>((set, get) => ({
   submodules: { ...emptySubmodules },
   rebase: { ...emptyRebase },
   palette: { ...emptyPalette },
+  fileHistory: { ...emptyFileHistory },
 
   recentRepos: loadRecent(),
 
@@ -412,6 +443,7 @@ export const useApp = create<AppState>((set, get) => ({
         submodules: { ...emptySubmodules },
         rebase: { ...emptyRebase },
         palette: { ...emptyPalette },
+        fileHistory: { ...emptyFileHistory },
       });
       void get().loadHistory();
       void get().refreshRebaseStatus();
@@ -432,6 +464,7 @@ export const useApp = create<AppState>((set, get) => ({
       submodules: { ...emptySubmodules },
       rebase: { ...emptyRebase },
       palette: { ...emptyPalette },
+      fileHistory: { ...emptyFileHistory },
     }),
 
   refresh: async () => {
@@ -1338,6 +1371,69 @@ export const useApp = create<AppState>((set, get) => ({
       }));
     } catch {
       // ignore — palette will just show no file results
+    }
+  },
+
+  // ---------- File History ----------
+  openFileHistory: async (file: string) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set({
+      view: "fileHistory",
+      fileHistory: {
+        ...emptyFileHistory,
+        startPath: file,
+        loading: true,
+      },
+    });
+    try {
+      const entries = await git.fileHistory(repo.path, file);
+      set((s) => ({
+        fileHistory: {
+          ...s.fileHistory,
+          entries,
+          loading: false,
+          selectedIdx: 0,
+        },
+      }));
+      if (entries.length > 0) await get().selectFileHistoryEntry(0);
+    } catch (e) {
+      set((s) => ({
+        fileHistory: { ...s.fileHistory, loading: false, error: String(e) },
+      }));
+    }
+  },
+
+  selectFileHistoryEntry: async (idx: number) => {
+    const repo = get().repo;
+    const fh = get().fileHistory;
+    const entry = fh.entries[idx];
+    if (!repo || !entry) return;
+    set((s) => ({
+      fileHistory: {
+        ...s.fileHistory,
+        selectedIdx: idx,
+        fileDiff: null,
+        diffLoading: true,
+        error: null,
+      },
+    }));
+    try {
+      const fd = await git.fileDiff(
+        repo.path,
+        entry.commit.oid,
+        entry.path_at_commit,
+        get().diff.ignoreWhitespace,
+      );
+      set((s) =>
+        s.fileHistory.selectedIdx === idx
+          ? { fileHistory: { ...s.fileHistory, fileDiff: fd, diffLoading: false } }
+          : s,
+      );
+    } catch (e) {
+      set((s) => ({
+        fileHistory: { ...s.fileHistory, diffLoading: false, error: String(e) },
+      }));
     }
   },
 }));

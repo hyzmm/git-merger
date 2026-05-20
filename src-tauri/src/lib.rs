@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::open_repo,
             commands::tracked_files,
+            commands::file_history,
             commands::git_log,
             commands::commit_files,
             commands::file_diff,

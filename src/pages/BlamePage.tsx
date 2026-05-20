@@ -21,6 +21,7 @@ export function BlamePage() {
   const selectCommit = useApp((s) => s.selectCommit);
   const followRename = useApp((s) => s.blameFollowRename);
   const blameBack = useApp((s) => s.blameBack);
+  const openFileHistory = useApp((s) => s.openFileHistory);
 
   // Group consecutive lines from the same commit so we only render blame
   // metadata once per group (IDEA-style).
@@ -84,6 +85,14 @@ export function BlamePage() {
               Annotate previous {prev.file !== file ? `(${prev.file.split("/").pop()})` : ""}
             </button>
           )}
+          <button
+            onClick={() => file && void openFileHistory(file)}
+            disabled={!file}
+            title="Show this file's history (follows renames)"
+            className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent disabled:opacity-50"
+          >
+            File history
+          </button>
           <button
             onClick={() => setView("diff")}
             className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
