@@ -1,10 +1,10 @@
 # Git Tools — 使用说明
 
-IDEA 风格的 **History / Diff / Merge** 桌面应用，基于 Tauri 2 + React 19，可在 Windows / macOS / Linux 运行。
+IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.1.0  
+> 适用版本：v0.7.0  
 > 仓库位置：`G:\GitTools\`  
-> 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`
+> 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
 ---
 
@@ -12,16 +12,26 @@ IDEA 风格的 **History / Diff / Merge** 桌面应用，基于 Tauri 2 + React 
 
 - [一、安装](#一安装)
 - [二、首次启动](#二首次启动)
-- [三、三个核心视图](#三三个核心视图)
-  - [3.1 History（提交历史）](#31-history提交历史)
+- [三、视图速览](#三视图速览)
+  - [3.1 History（提交历史 + Graph）](#31-history提交历史--graph)
   - [3.2 Diff（差异查看）](#32-diff差异查看)
   - [3.3 Merge（冲突解决）](#33-merge冲突解决)
-- [四、键盘快捷键](#四键盘快捷键)
-- [五、典型工作流](#五典型工作流)
-- [六、从源码运行 / 二次开发](#六从源码运行--二次开发)
-- [七、构建可分发安装包](#七构建可分发安装包)
-- [八、常见问题排查（FAQ）](#八常见问题排查faq)
-- [九、卸载与清理](#九卸载与清理)
+  - [3.4 Changes（工作树）](#34-changes工作树)
+  - [3.5 Blame（行级历史 + 跨重命名追溯）](#35-blame行级历史--跨重命名追溯)
+  - [3.6 Stash](#36-stash)
+  - [3.7 Reflog（HEAD 时光机）](#37-refloghead-时光机)
+  - [3.8 Submodules](#38-submodules)
+  - [3.9 Interactive Rebase](#39-interactive-rebase)
+- [四、Topbar 与远程操作](#四topbar-与远程操作)
+- [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
+- [六、设置面板](#六设置面板)
+- [七、自动更新](#七自动更新)
+- [八、键盘快捷键](#八键盘快捷键)
+- [九、典型工作流](#九典型工作流)
+- [十、从源码运行 / 二次开发](#十从源码运行--二次开发)
+- [十一、构建可分发安装包](#十一构建可分发安装包)
+- [十二、常见问题排查（FAQ）](#十二常见问题排查faq)
+- [十三、卸载与清理](#十三卸载与清理)
 
 ---
 
@@ -29,34 +39,29 @@ IDEA 风格的 **History / Diff / Merge** 桌面应用，基于 Tauri 2 + React 
 
 ### Windows（推荐）
 
-任选一种安装包（都在 `src-tauri/target/release/bundle/`）：
+任选一种安装包（在 `src-tauri/target/release/bundle/` 或 GitHub Releases）：
 
-| 安装包                 | 文件                                 | 大小    | 适合                |
-| ---------------------- | ------------------------------------ | ------- | ------------------- |
-| **NSIS**（推荐，更轻） | `nsis/Git Tools_0.1.0_x64-setup.exe` | 1.96 MB | 个人使用            |
-| **MSI**                | `msi/Git Tools_0.1.0_x64_en-US.msi`  | 2.68 MB | 企业部署 / 静默安装 |
+| 安装包                 | 文件                            | 适合                |
+| ---------------------- | ------------------------------- | ------------------- |
+| **NSIS**（推荐，更轻） | `Git Tools_x.y.z_x64-setup.exe` | 个人使用            |
+| **MSI**                | `Git Tools_x.y.z_x64_en-US.msi` | 企业部署 / 静默安装 |
 
-**安装步骤**：
-
-1. 双击 `Git Tools_0.1.0_x64-setup.exe`
-2. 一路 Next 完成
-3. 在开始菜单 → 找到 **Git Tools** → 启动
-
-> 第一次启动可能会弹 Windows SmartScreen 提示（因为安装包未数字签名），点 "更多信息 → 仍要运行" 即可。
+> 第一次启动可能会弹 Windows SmartScreen 提示（因为安装包未数字签名），点 "更多信息 → 仍要运行" 即可。从 v0.4.0 起应用支持自动更新（详见第七章）。
 
 ### macOS / Linux
 
-当前 `G:\` 上只构建了 Windows 包；macOS/Linux 安装包要在对应系统上从源码 build：
+GitHub Actions release 流水线会在 tag push 时为 4 个平台同时构建（windows / macos-arm64 / macos-intel / linux），并把所有产物附在 GitHub Release Draft 上。
+
+如果要本地构建：
 
 ```bash
-# 在 macOS 或 Linux 上
-git clone <你的仓库地址>
+git clone https://github.com/hyzmm/git-merger.git GitTools
 cd GitTools
 bun install
 bun run tauri:build
 ```
 
-产物会出现在：
+产物：
 
 - macOS：`src-tauri/target/release/bundle/{dmg,macos}/`
 - Linux：`src-tauri/target/release/bundle/{appimage,deb,rpm}/`
@@ -65,407 +70,400 @@ bun run tauri:build
 
 ## 二、首次启动
 
-启动后会看到 **Welcome 页**：
+启动后看到 **Welcome 页**：左侧 Logo + 介绍，右侧 Recent 仓库列表（hover 出 `×` 可移除）。点 **Open Repository** 按钮选择仓库根目录（包含 `.git/` 那一层）。
 
-```
-┌───────────────────────────────────────────────────────────┐
-│  Git Tools                          Recent                │
-│  IDEA-style History/Diff/Merge      ┌────────────────┐    │
-│  for any local Git repository.      │ (无最近仓库)   │    │
-│                                     └────────────────┘    │
-│  [Open Repository]                                        │
-│                                                           │
-│  Ctrl+1/2/3   Switch History/Diff/Merge                   │
-│  F5 / Ctrl+R  Refresh current view                        │
-│  F7/Shift+F7  Next/previous conflict (Merge)              │
-│  Alt+1/2/3    Accept Left/Right/Both                      │
-└───────────────────────────────────────────────────────────┘
-```
+> Windows 文件对话框里 **地址栏当前所在的目录** 才是被选中目录——不要进入它内部再点确认。
 
-### 打开仓库
-
-**方式 A：点 "Open Repository" 按钮**
-
-1. 在弹出的文件夹选择对话框里，**导航到目标 git 仓库的根目录**（包含 `.git/` 那一层）
-2. 注意：在 Windows 文件对话框里，**地址栏当前所在的目录才是被选中的目录**——不要进入它内部再点确认
-3. 点 "选择文件夹"
-
-**方式 B：从 Recent 列表点击**
-
-- 之前打开过的仓库会自动出现在右侧 Recent 列表
-- 点目录条目直接打开
-- hover 上去会显示 `×` 图标，点击可从列表移除
-
-打开成功后会自动跳到 **History 视图**。
+打开成功后自动跳到 History 视图。从 v0.4.0 起应用会记住你上次选的语言（en/zh）和主题（auto/light/dark），并在启动前同步主题，避免亮屏闪烁（FOUC-free）。
 
 ---
 
-## 三、三个核心视图
+## 三、视图速览
 
-应用左侧的 sidebar 有 3 个图标，对应 3 个视图。也可以用 `Ctrl+1/2/3` 快速切换。
+左侧 Sidebar 共 **8 个视图图标**，对应快捷键 `Ctrl+1..8`：
 
-### 3.1 History（提交历史）
+| Sidebar 顺序 | 快捷键   | 视图               |
+| ------------ | -------- | ------------------ |
+| 1            | `Ctrl+1` | History            |
+| 2            | `Ctrl+2` | Changes            |
+| 3            | `Ctrl+3` | Stash              |
+| 4            | `Ctrl+4` | Reflog             |
+| 5            | `Ctrl+5` | Submodules         |
+| 6            | `Ctrl+8` | Interactive Rebase |
+| 7            | `Ctrl+6` | Diff               |
+| 8            | `Ctrl+7` | Merge              |
 
-```
-┌──────────┬────────────────────────────────┬──────────────────────────┐
-│ Refs     │ Commits                        │ Commit Details           │
-├──────────┼────────────────────────────────┼──────────────────────────┤
-│ Filter…  │  ●  master, v0.1.0  Merge ...  │ Merge pull request #482  │
-│          │  |\                            │                          │
-│ LOCAL    │  | ●  refactor(diff)           │ Commit: a3f9c1e8d2b4...  │
-│  master  │  | ●  feat(diff): word-level   │ Parents: e1c0ba2 7f2bd84 │
-│  feat/*  │  ●  chore: initial scaffold    │ Author: Alice <a@x.io>   │
-│          │                                │ Date: 2026-05-19 ...     │
-│ TAGS     │                                │ Refs: master v0.1.0      │
-│  v0.1.0  │                                │                          │
-│          │                                │ CHANGED FILES (7)        │
-│          │                                │  M src/components/Diff.. │
-│          │                                │  A src/lib/word-diff.ts  │
-│          │                                │  D src/old/DiffOld.tsx   │
-│          │                                │                          │
-│          │                                │ MESSAGE                  │
-│          │                                │ Merge pull request #482  │
-└──────────┴────────────────────────────────┴──────────────────────────┘
-```
+> Blame 没有独立 sidebar 入口，从 Diff 工具栏的 **Blame** 按钮进入。
 
-#### 三栏功能
+### 3.1 History（提交历史 + Graph）
+
+三栏布局：左 **Refs 面板**、中 **Commit List + DAG**、右 **Commit Details**。
 
 **左 — Refs 面板**
 
-- **Filter commits...** 输入框：按 message、author、email、oid 前缀、ref 名 实时过滤中间栏
-- **LOCAL** 段：本地分支，HEAD 分支会高亮 + 标 `HEAD`
-- **REMOTE** 段：远程分支（如 `origin/main`）
-- **TAGS** 段：标签
-- 每个 ref 前面的圆点颜色和它在 DAG 中的 lane 颜色一致
+- **过滤栏（Filter Bar，v0.2.0 起）**：
+  - 关键字框：按 message / author / email / oid 前缀 / ref 名 实时过滤
+  - **作者下拉**（v0.2.0）：自动汇总所有 commit 的 author，按出现频率排序
+  - **日期范围（since / until）**（v0.2.0）：UNIX 秒级精确过滤
+  - **路径（pathspec）**（v0.2.0）：输入路径让后端走 `git log -- <path>`，只显示触及该路径的 commit
+  - **Reset filters** 按钮一键清空所有过滤条件
+- **LOCAL / REMOTE / TAGS 三段**：HEAD 分支高亮 `HEAD` 标识；颜色与 DAG lane 一致
+- **单击任一 ref → 跳转并选中该 commit**（v0.2.0 修复，commit 列表会自动滚到目标行）
+- **右键 ref（v0.2.0 起）**：
+  - 本地分支：Checkout / Rename / Delete / Create branch from / Copy name
+  - 远端分支：Checkout as new local / Copy name
+  - 标签：New branch from tag / Delete / Copy name
+- **"+" 按钮**：从 HEAD 创建新分支（可选立即 checkout）
+- **双击本地分支**：直接 checkout
 
 **中 — Commit List + DAG**
 
-- 每行：DAG 图 / 引用 chips + commit message / 作者 / 相对时间 / 短 oid
-- **DAG 渲染规则**：
-  - 5 色循环（蓝/紫/金/绿/红）按 ref 名稳定分配
-  - 直线 = 同 lane 持续；曲线 = 分支或合并
-  - 多 parent 的 merge commit 会同时连接所有父 lane
-- 点击任一行会在右侧详情面板加载该 commit 的详情
+- 5 色循环（蓝/紫/金/绿/红）按 ref 名稳定分配 lane
+- 直线 = 同 lane 持续；曲线 = 分支或合并；多 parent merge 同时连接所有父 lane
+- 虚拟滚动（@tanstack/react-virtual），10 万 commit 流畅
+- **右键任一 commit（v0.2.0 起）**：
+  - **Cherry-pick onto HEAD**（冲突自动跳到 Merge 视图）
+  - **Revert this commit**
+  - **Reset HEAD to here**（soft / mixed / hard，每种带不同警告文案）
+  - **Rebase interactively from here**（v0.6.0，详见 3.9）
+  - **Create branch from here** / **Create tag here**
+  - **Checkout (detached HEAD)**（带二次确认）
+  - **Copy SHA** / **Copy commit message**
 
 **右 — Commit Details**
 
-- 完整 oid（40 位）、parents 短哈希、author + email、本地化日期、所有 ref chips
-- **Changed files** 列表：A / M / D / R / C / T 状态 + 行级 +N -N 统计
-- **点击任一文件 → 自动跳到 Diff 视图查看具体差异**
-- 完整 commit message（multi-line preserve）
-
-#### History 视图常见操作
-
-| 想做什么                     | 怎么做                                                   |
-| ---------------------------- | -------------------------------------------------------- |
-| 看某分支的提交               | 点左侧分支 ref（目前选中后会显示在 chip 上，未来会过滤） |
-| 找包含 "fix login" 的 commit | 在 Filter 框输入 `fix login`                             |
-| 看某 commit 修改了哪些文件   | 点击该 commit，看右侧详情                                |
-| 看某文件具体改了什么         | 在右侧详情里点击文件名，跳到 Diff                        |
-
----
+- 完整 oid / parents 短哈希 / author + email / 本地化时间 / 所有 ref chips
+- **Changed files** 列表（A / M / D / R / C / T 状态 + 行级 +N -N）
+- 点击文件名 → 跳到 Diff 视图
 
 ### 3.2 Diff（差异查看）
 
-```
-┌──────────────────────┬──────────────────────────────────────────────────┐
-│ Changed files (7)    │ src/components/DiffViewer.tsx  a3f9c1e           │
-├──────────────────────┤ [Side-by-side] [Unified]    ⌫ Whitespace  3 hunks│
-│ ▾ src/components     │                                                  │
-│  M  DiffViewer.tsx ◀ │  42 │ export function DiffViewer({ │ 42 │ export function ...
-│  D  old/DiffOld.tsx  │  43-│   const rows = flatten(...   │ 43+│   const hunks = group ...
-│ ▾ src/lib            │  44-│   return rows.map(render);   │ 44+│   if (mode === "sbs")  ...
-│  A  word-diff.ts     │  45 │                              │ 45+│   return <Unified ...   ...
-│  M  diff/tokenizer   │  46 │   // guard against empty     │ 46 │   // guard against     ...
-│ ▾ src/pages          │ ────────────────────────────────────────────────────────────────
-│  M  DiffPage.tsx     │ @@ -120,8 +123,16 @@ function renderRow(row) {
-│ ▾ /                  │  120 │ function renderRow(row) {  │ 123 │ function renderRow(...
-│  M  README.md        │  121-│   const cls = row.origin   │ 124+│   const cls = classify(  ...
-│                      │      │     === "+" ? "add"...     │     │   const tokens = wordDiff
-└──────────────────────┴──────────────────────────────────────────────────┘
-```
+**左：文件树**（按目录分组，状态字母 + 文件名 + 行数）；**右：Diff 主体**
 
-#### 三个核心能力
-
-**1. 文件树（左栏）**
-
-- 按目录分组的变更文件清单
-- 每行：A/M/D/R/C/T 状态字母 + 文件名 + +N -N 行数
-- 点击切换到该文件的 diff
-
-**2. Diff 视图模式（顶栏 segmented 控件）**
-
-- **Side-by-side**：左旧右新，行级对齐，方便对比改写位置
-- **Unified**：传统 `git diff` 风格，一栏显示，连续阅读流畅
-
-**3. 行级 + 词级高亮**
-
-- 行级：删除行红色背景 + `-` marker；新增行绿色背景 + `+` marker
-- 词级（仅 Side-by-side 模式）：在配对的"替换行"内，**只有真正变动的 token** 会被高亮（绿色加 / 红色删），让一眼能看出"改了哪个变量名 / 哪个参数"
-- 算法：基于 LCS 的 token diff（无第三方依赖）
-
-**4. Whitespace 可视化**
-
-- 点 toolbar 上的 **⌫ Whitespace** 按钮启用
-- 空格显示为 `·`，tab 显示为 `→`
-- 排查"看不见的空白差异"必备
-
-#### Diff 视图常见操作
-
-| 想做什么                           | 怎么做                             |
-| ---------------------------------- | ---------------------------------- |
-| 看下一个文件的 diff                | 点左侧文件树另一项                 |
-| 切换到 Unified 模式                | 顶栏点 Unified                     |
-| 检查行尾有没有 trailing whitespace | 点 ⌫ Whitespace                    |
-| 看本次 diff 一共改了几块           | 顶栏右侧 "X hunks"                 |
-| 回到 commit 列表                   | `Ctrl+1` 或左侧 sidebar 第一个图标 |
-
----
+- **模式切换**：Side-by-side（左旧右新）/ Unified
+- **行级 + 词级高亮**：替换行内只对真正变动的 token 加 `+`/`-` 颜色（基于 LCS）
+- **Shiki 语法高亮**：~35 种语言（TS / Rust / Python / Go / C++ / …）
+- **Whitespace 可视化**：⌫ 按钮启用，空格→`·`，tab→`→`
+- **Ignore Whitespace**（v0.2.0）：另一个按钮，让后端用 libgit2 的 `ignore_whitespace` 重算 diff（与可视化是互补的）
+- **跳转到 hunk**（v0.2.0）：工具栏 ↑/↓ 按钮，或快捷键 `n` / `p`
+- **Blame 按钮**：跳到 Blame 视图查看该文件
 
 ### 3.3 Merge（冲突解决）
 
-只有在仓库**当前正在进行 merge / rebase / cherry-pick** 时这个视图才有内容。否则显示 "Repository is clean"。
+> 仓库正在 merge / rebase / cherry-pick / revert 时此视图才有内容。
 
-```
-┌─[Merge in progress]  3 conflict files─────────────────────────────────────────┐
-├──────────────────┬───────────────────────────────────────────────────────────┤
-│ Conflicts (1/3)  │ src/components/DiffViewer.tsx  1/3 resolved  [Mark resolved & stage]│
-├──────────────────┼───────────────────────────────────────────────────────────┤
-│ Resolved         │  LEFT — ours       │  RESULT      │  RIGHT — theirs       │
-│ ✓ word-diff.ts   │  (master)          │  working     │  (feat/diff-viewer)   │
-│                  │                    │              │                       │
-│ Pending          │  function render(  │ ◀ Conflict#1 │  function render(     │
-│ ▶ DiffViewer.tsx │    row             │  ─ pending   │    row                │
-│   diff.rs        │  ) {               │  [L][R][Both]│  ) {                  │
-│                  │    const cls =     │              │    const cls = classify
-│                  │      row.origin    │   ┌──────┐   │      (row.origin);    │
-│                  │      === "+"       │   │master│   │    const tokens = ... │
-│                  │      ? "add" ...   │   │side  │   │  return <div>...      │
-│                  │  }                 │   │change│   │  }                    │
-│                  │                    │   └──────┘   │                       │
-└──────────────────┴───────────────────────────────────────────────────────────┘
-```
+三栏：LEFT (ours) / RESULT (working, 可编辑) / RIGHT (theirs)。每个 conflict block 顶部有：
 
-#### 操作步骤
+| 按钮         | 状态色 | 作用               |
+| ------------ | ------ | ------------------ |
+| Accept Left  | 蓝     | 用 ours 内容       |
+| Accept Right | 紫     | 用 theirs 内容     |
+| Accept Both  | 绿     | ours + theirs 拼接 |
+| 直接编辑     | 橙     | manual             |
 
-**Step 1：从外部触发一次 merge**
+**所有 block 都不再 pending → "Mark resolved & stage" 可点击** → 写文件 + `git add`。
 
-由于这个 v0.1.0 还没集成 merge 启动按钮，请在终端里手动触发，例如：
+**v0.1.0 起内置的两个按钮**：
 
-```bash
-git merge feature-branch
-# 或
-git rebase main
-# 或
-git cherry-pick abc1234
-```
+- **Abort merge**：调用 libgit2 取消当前 merge / cherry-pick / revert（rebase 用第 3.9 节的 Abort）
+- **Commit merge**：直接在 UI 内提交合并 commit，无需切换终端
 
-如果出现冲突，git 会自动暂停在 merge 中间状态，工作目录里会有 `<<<<<<< / ======= / >>>>>>>` 标记的文件。
+### 3.4 Changes（工作树）
 
-**Step 2：在 Git Tools 里切到 Merge 视图（Ctrl+3）**
+按 `Ctrl+2`。三段：**Unmerged** / **Staged** / **Unstaged**。
 
-- 顶部红色 chip 显示 "Merge in progress"
-- 左栏列出所有冲突文件，分 Resolved / Pending 两段
+| 想做什么         | 怎么做                                                   |
+| ---------------- | -------------------------------------------------------- |
+| 单文件加暂存     | 勾选 → **Stage**                                         |
+| 全选             | **Select all** → **Stage**                               |
+| 撤回暂存         | 勾选 → **Unstage**                                       |
+| 丢弃工作区改动   | 勾选 → **Discard**（带不可逆确认）                       |
+| 提交             | 输入 commit message → **Commit M files**                 |
+| 暂存当前改动到栈 | 顶部 **Stash…** 按钮（可选 include-untracked）（v0.2.0） |
 
-**Step 3：解决每个冲突文件**
+### 3.5 Blame（行级历史 + 跨重命名追溯）
 
-点击一个 Pending 文件，主区出现三栏：
+入口：Diff 工具栏的 **Blame** 按钮。
 
-| 栏             | 颜色                                 | 内容                         |
-| -------------- | ------------------------------------ | ---------------------------- |
-| LEFT — ours    | 🔵 蓝色                              | 当前分支（HEAD）的版本       |
-| RESULT         | 🟢 绿色（已解决）/ 🔴 红色（待解决） | 工作目录文本，**可手动编辑** |
-| RIGHT — theirs | 🟣 紫色                              | 要合并进来的分支版本         |
-
-每个 conflict block 上方有一行黄色操作栏：
-
-| 按钮                          | 作用                                        |
-| ----------------------------- | ------------------------------------------- |
-| **Accept Left**               | 用 ours 内容；状态变 `left`，背景蓝色       |
-| **Accept Right**              | 用 theirs 内容；状态变 `right`，背景紫色    |
-| **Accept Both**               | 拼接 ours + theirs；状态变 `both`，背景绿色 |
-| 直接在 RESULT textarea 里改字 | 状态变 `manual`，背景橙色                   |
-
-**Step 4：Mark resolved & stage**
-
-当**所有冲突都不再是 pending**（变成 left / right / both / manual 任一种），顶部的 **Mark resolved & stage** 按钮变可点击。
-
-点它会：
-
-1. 把 RESULT 区合成的最终文本写入工作目录文件
-2. `git add <文件>`（清掉 stage 1/2/3 槽位，写入 stage 0）
-3. 该文件从 Pending 移到 Resolved 段，前面打 ✓
-
-**Step 5：完成或放弃合并**
-
-当前版本 v0.1.0 没在 UI 内置 commit/abort 按钮，请回终端：
-
-```bash
-# 所有冲突解决完成后，提交合并
-git commit         # git 会用默认的 merge message
-
-# 或者放弃这次合并
-git merge --abort
-```
-
-之后回 Git Tools 按 F5 / 点 Refresh，Merge 视图会变回 "Repository is clean"。
-
----
-
-### 3.4 Changes（工作树面板）
-
-按 `Ctrl + 4` 或点 sidebar 第二个图标（FilePlus2）进入。
-
-```
-┌─[N changes  · M staged  · K unmerged]──[Select all][Clear][Stage][Unstage][Discard]─┐
-├──────────────────────────────────────────────────────┬──────────────────────────────┤
-│ UNMERGED (K)                                         │ Commit staged changes        │
-│ ☐ ! src/x.ts                       conflict          │                              │
-│                                                      │ ┌────────────────────────┐   │
-│ STAGED CHANGES (M)                                   │ │ Commit message         │   │
-│ ☑ M src/foo.ts                     staged            │ │                        │   │
-│ ☐ A src/lib/new.ts                 staged            │ │ Optional longer body…  │   │
-│                                                      │ └────────────────────────┘   │
-│ UNSTAGED CHANGES (...)                               │                              │
-│ ☐ M README.md                      unstaged          │ [Commit M files]             │
-│ ☐ ? .env.local                     untracked         │                              │
-└──────────────────────────────────────────────────────┴──────────────────────────────┘
-```
-
-操作流程：
-
-| 想做什么                       | 怎么做                                            |
-| ------------------------------ | ------------------------------------------------- |
-| 把单个文件加入暂存             | 勾选它 → 点 **Stage**                             |
-| 一次性暂存所有                 | **Select all** → **Stage**                        |
-| 把暂存的撤回到工作区           | 勾选 → **Unstage**                                |
-| 丢弃工作区改动（注意：不可逆） | 勾选 → **Discard** → 确认对话框                   |
-| 提交已暂存的内容               | 在右栏输入 commit message → 点 **Commit M files** |
-
-**状态字母**（A/M/D/R/T/?/!）跟 git 一致，行尾的 `staged` / `unstaged` / `both` / `untracked` / `conflict` 标签说明该文件在 index 和 working tree 中的位置。
-
----
-
-### 3.5 Blame（行级历史）
-
-入口：在 **Diff 视图** toolbar 上点 **Blame** 按钮。
-
-```
-┌─src/lib/graph.ts  124 lines · 6 commits  [Back to Diff]──────────────────────────┐
-│ Alice    a day ago     6549119  │ 42 │ export function layoutGraph(...)         │
-│                                 │ 43 │   const lanes: Lane[] = [];               │
-│                                 │ 44 │   ...                                     │
-│ Bob      3 days ago    7f2bd84  │ 45 │   for (const c of commits) {              │
-│                                 │ 46 │     ...                                   │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
-
-- 同一 commit 修改的连续行**只在第一行显示作者/时间/oid**（IDEA 风格分组）
-- 短 oid **可点击** → 跳转到 History 视图并选中该 commit
+- 同 commit 修改的连续行只在第一行显示作者/时间/oid（IDEA 风格分组）
+- 短 oid 可点击 → 跳到 History 选中
 - 整列虚拟滚动 + Shiki 语法高亮
+- **Annotate previous（v0.3.0）**：工具栏出现 "Annotate previous: <oldpath>@<oid>" 链接（基于 `Diff::find_similar` 的重命名检测）。点击跳到该文件的上一个身份（可能是不同路径）；自动维护 back stack（**Back** 按钮回退）。这是 IDE 友好的"跨重命名追溯"
+
+### 3.6 Stash
+
+按 `Ctrl+3`。每个 stash entry 一行，按时间倒序：
+
+| 按钮      | 作用                     |
+| --------- | ------------------------ |
+| **Apply** | 应用，保留在栈           |
+| **Pop**   | 应用并从栈移除           |
+| **Drop**  | 不应用直接丢弃（带确认） |
+
+新建 stash：在 **Changes** 视图顶部点 **Stash…** 按钮（可输入消息、勾选 include-untracked）。
+
+### 3.7 Reflog（HEAD 时光机）
+
+按 `Ctrl+4`。展示 `HEAD@{N}` 的所有变更，并按动作类别上色：
+
+- commit / reset / checkout / merge / rebase / cherry-pick / revert / pull 不同色 chip
+- 每行后面：
+  - **Restore** = mixed reset 到该状态（保留工作区）
+  - **Hard** = hard reset 到该状态（带警告，**会丢失未提交改动**）
+
+这是"撤销刚才那个错误操作"的最后一道保险。
+
+### 3.8 Submodules
+
+按 `Ctrl+5`。每个 submodule 一行，自动计算的状态徽章：
+
+- `not cloned` / `not initialized` / `needs update` / `dirty` / `clean`
+
+操作按钮：**Init** / **Update**（含 init-first）/ **Sync**（同步 URL）。
+
+### 3.9 Interactive Rebase
+
+按 `Ctrl+8`，或在 History 中右键任一 commit → **Rebase interactively from here (`<oid>^`)**。
+
+```
+┌─Draft plan ──────────── [Cancel] [Start rebase]──┐
+│ ↑↓ [PICK ▾]   a3f9c1e   feat: word-level diff    │
+│ ↑↓ [REWORD ▾] 5e2bd84   chore: rename Diff prop  │
+│      └─[ Updated message…                     ]──│
+│ ↑↓ [SQUASH ▾] 1c4a8e1   wip                      │
+│      └─[ Optional combined message…           ]──│
+│ ↑↓ [DROP ▾]   9b0e612   debug log                │
+│ ↑↓ [PICK ▾]   eee2a1d   docs: README             │
+└──────────────────────────────────────────────────┘
+```
+
+**草稿模式**：
+
+- 顶部 **PICK / REWORD / SQUASH / FIXUP / DROP** 选择器，颜色不同
+- ↑↓ 重排顺序
+- REWORD / SQUASH 展开内嵌消息编辑框
+- 点 **Start rebase** 开始
+
+**执行模式**：
+
+- 顶部进度条 `done/total (pct%)`
+- 后端按 plan 顺序 cherry-pick → commit / amend
+- **遇到冲突**：进度条变红，UI 自动跳到 Merge 视图。在 Merge 视图解决并 stage（**Mark resolved & stage**），然后回到 Rebase 视图点 **Continue**
+- **Abort**：随时点击红色 Abort 按钮（带确认），恢复到原 branch tip
+- 状态持久化到 `.git/gittools-rebase/state.json`，**关闭应用再打开 plan 仍在**
+
+### 整理顺序示例
+
+把"wip"和"debug log"压扁到上一个 commit，并整理 message：
+
+1. History 右键 `eee2a1d` → Rebase interactively from here
+2. 把 `wip` 设为 **squash**，写新合并消息
+3. 把 `debug log` 设为 **drop**
+4. 第二条设为 **reword**，改 message
+5. 点 Start，自动跑完即可（无冲突时秒回）
 
 ---
 
-### 3.6 远程操作（Topbar 上的 Cloud / ↓ / ↑ 按钮）
+## 四、Topbar 与远程操作
 
-打开仓库后，topbar 出现 3 个按钮：
+```
+┌─[Open Repo]──[F5↻]──────────────[ Search Ctrl+K ]──[Cloud][↓Pull][↑Push]──[Updater]──[⚙]─┐
+│                  branch: main  G:\GitTools                                                │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-| 按钮      | 实际命令                  |
-| --------- | ------------------------- |
-| **Fetch** | `git fetch --all --prune` |
-| **Pull**  | `git pull --ff-only`      |
-| **Push**  | `git push`                |
+**Fetch / Pull / Push**（v0.5.0 起原生 libgit2，不再依赖系统 git）：
 
-- **凭据/SSH key 怎么处理**？这一版**直接调用您系统里的 `git`**（通过 `child_process`），所以**用户已配置的 git credential helper、SSH agent、2FA token 全部自然继承**——不需要在应用里再输一次密码
-- 命令完成后**会显示一个 banner**（绿色成功 / 红色失败），含完整 stdout/stderr，方便你看 git 的真实输出
-- 出错或成功时点 banner 右侧 **Dismiss** 关闭
-- **要求**：系统 PATH 里能找到 `git`（在 Windows 装了 git for Windows 即可）
+| 按钮      | 行为                                                              |
+| --------- | ----------------------------------------------------------------- |
+| **Fetch** | 抓取所有 remote + prune 失效远端 ref                              |
+| **Pull**  | **仅 fast-forward**；非 FF 会报错并引导你用 Merge 视图            |
+| **Push**  | 自动从 branch upstream 推断 remote；无 upstream 时回落到 `origin` |
 
----
+**实时进度**（v0.5.0）：右上角显示 "Receiving 1234/5678" / "Indexing" / "Pushing" 等。
 
-## 四、键盘快捷键
+**凭据解析顺序**：
 
-| 快捷键             | 作用                                      | 适用视图 |
-| ------------------ | ----------------------------------------- | -------- |
-| `Ctrl + 1`         | 切到 History                              | 全局     |
-| `Ctrl + 2`         | 切到 Diff                                 | 全局     |
-| `Ctrl + 3`         | 切到 Merge                                | 全局     |
-| `Ctrl + 4`         | 切到 Changes（工作树）                    | 全局     |
-| `F5` 或 `Ctrl + R` | 刷新当前视图（重新拉取数据）              | 全局     |
-| `Alt + 1`          | 对**第一个 pending 冲突**执行 Accept Left | Merge    |
-| `Alt + 2`          | Accept Right（同上）                      | Merge    |
-| `Alt + 3`          | Accept Both（同上）                       | Merge    |
+1. **SSH agent**（URL 是 SSH 时）
+2. **`~/.ssh/id_ed25519` / `id_rsa` / `id_ecdsa`**
+3. **Git credential helper**（HTTPS 用户名/密码，从 `~/.gitconfig` 读）
+4. **应用内弹窗**：弹出"登录远端"对话框，填用户名 + token（GitHub / GitLab / Bitbucket 都已不支持密码，请用 PAT）。最多重试 3 次，2 分钟超时
 
-> 在 input/textarea 里这些快捷键自动失效，不会干扰打字（除非用 Ctrl+ 显式修饰）。
+完成后顶部出现绿色 / 红色 banner，含 message 和 details，点 Dismiss 关闭。
 
 ---
 
-## 五、典型工作流
+## 五、Command Palette（`Ctrl+K`）
 
-### 工作流 1：审查同事的 PR 合并提交
+v0.7.0 新增。按 `Ctrl+K` 或 `Ctrl+P` 弹出，或点 Topbar 的 **Search** 按钮。
 
-1. 打开仓库（Welcome 页 → Open Repository 或 Recent 列表）
-2. **History 视图**自动加载，最上面就是最新合并 commit
-3. 点击它 → 右侧详情列出所有 changed files
-4. **逐个文件点击**：自动跳到 **Diff 视图**
-5. 用 Side-by-side 模式快速看核心改动；切到 Unified 模式做最终阅读
-6. 切换到下一个文件继续
+```
+┌─[🔎 搜索提交 / 分支 / 文件…                   ][esc]─┐
+│ ✦ History                                       视图  │
+│ 🌿 main                                  本地分支  →  │
+│ 🌿 origin/feat/login                     远端分支     │
+│ ● a3f9c1e  feat: word-level diff   3 days ago         │
+│ 📄 src/lib/wordDiff.ts            在 Blame 中打开     │
+│ 📄 src/lib/graph.ts                                   │
+│ ─────────────────────────────────────────────────     │
+│ ↑↓ navigate   ↵ open                  214 results     │
+└───────────────────────────────────────────────────────┘
+```
 
-### 工作流 2：解决一次复杂的 merge 冲突
+**搜索目标**（按命中后的行为）：
 
-1. 终端 `git merge feature-branch` → 出现冲突
-2. 切到 Git Tools → **Ctrl+3 进 Merge 视图**
-3. 左栏会列出 N 个冲突文件
-4. 第一个文件主区显示三栏 + M 个 conflict blocks
-5. 对每个 block：
-   - 简单的 → **Alt+1 / 2 / 3** 一键选择
-   - 复杂的 → 直接在 RESULT 区编辑（可参考左右栏内容）
-6. 所有 block 都不是 pending → 点 **Mark resolved & stage**
-7. 选下一个冲突文件，重复 5-6
-8. 全部解决完 → 终端 `git commit`
+| Kind   | 行为                                  |
+| ------ | ------------------------------------- |
+| 视图   | 切换到该视图                          |
+| 分支   | 本地：`checkout`；远端：跳到该 commit |
+| 标签   | 跳到该 commit                         |
+| Commit | 跳到 History 并选中该 commit          |
+| 文件   | 在 Blame 中打开                       |
 
-### 工作流 3：找出一个 bug 是哪次提交引入的
+**模糊匹配**：子序列（`grph` 能匹配 `lib/graph.ts`），命中字符内联 `<mark>` 高亮，前缀 / 词边界 / 连续命中 / 大小写敏感都有加分。
 
-1. History 视图 + filter 输入框输入关键词（比如 `auth`）
-2. 顺序看可疑的 commit
-3. 点击 → 右栏详情看 changed files → 点击文件 → Diff 视图细看
-4. F5 / Ctrl+R 刷新（如果你在外部又 commit 了新的）
+**键盘**：`↑↓` / `Home` / `End` 导航，`Enter` 打开，`Esc` 关闭。
 
 ---
 
-## 六、从源码运行 / 二次开发
+## 六、设置面板
+
+v0.4.0 起。点 Topbar 右侧 **⚙** 图标打开。
+
+**外观**：
+
+- **主题**：Auto（跟随系统）/ Light / Dark；切换无 FOUC（启动前内联 script 已读 localStorage）
+- **字号**：12 / 13 / 14 / 15 / 16 / 18 px
+- **Tab 宽度**：2 / 4 / 8（影响 Diff / Blame 显示）
+- **语言**：English / 中文（启动时从 `navigator.language` 自动检测，可手动切换）
+
+**Git config**（v0.4.0）：
+
+- 编辑 `core.autocrlf`，作用域可选 **当前仓库** 或 **全局 ~/.gitconfig**
+- 选项：`(unset)` / `false` / `input`（推荐 macOS/Linux）/ `true`（推荐 Windows）
+
+---
+
+## 七、自动更新
+
+v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
+
+- Topbar 出现一个绿色徽章 **Update vX.Y.Z**
+- 点击弹出 release notes 预览
+- 点 **Download & install**：显示进度条
+- 完成后 **Restart now** → 重启即装好新版
+
+服务端：GitHub Releases 的 `latest.json`。CI 在每次 tag push 时用 `TAURI_SIGNING_PRIVATE_KEY` 仓库 secret 签名 updater bundles。
+
+> 自动更新需要正确配置 minisign 公钥。从 v0.4.0 起仓库的 `tauri.conf.json` 已有公钥；CI 需配置对应私钥 secret 才会签出真正可用的更新包。
+
+---
+
+## 八、键盘快捷键
+
+| 快捷键              | 作用                                  | 适用  |
+| ------------------- | ------------------------------------- | ----- |
+| `Ctrl+1`            | History                               | 全局  |
+| `Ctrl+2`            | Changes                               | 全局  |
+| `Ctrl+3`            | Stash                                 | 全局  |
+| `Ctrl+4`            | Reflog                                | 全局  |
+| `Ctrl+5`            | Submodules                            | 全局  |
+| `Ctrl+6`            | Diff                                  | 全局  |
+| `Ctrl+7`            | Merge                                 | 全局  |
+| `Ctrl+8`            | Interactive Rebase                    | 全局  |
+| `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
+| `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
+| `n` / `p`           | 下一个 / 上一个 hunk                  | Diff  |
+| `Alt+1` / `2` / `3` | 第一个 pending 冲突的 Left/Right/Both | Merge |
+
+> 输入框（input/textarea/contenteditable）里这些快捷键自动失效，不会干扰打字（除非用 `Ctrl+` 显式修饰）。
+
+---
+
+## 九、典型工作流
+
+### 1. 审 PR 合并提交
+
+1. 打开仓库 → History
+2. 点最新 merge commit → 右栏 changed files
+3. 逐个文件点击 → Diff 视图
+4. Side-by-side 看核心，Unified 做最终阅读
+5. 词级高亮直接定位"改了哪个变量名"
+
+### 2. 解决 merge 冲突
+
+1. 终端 `git merge feature` → 冲突
+2. `Ctrl+7` → Merge 视图
+3. 每个 block：`Alt+1/2/3` 一键，或手动编辑
+4. **Mark resolved & stage** → 下一个文件
+5. 全部解完 → 点 **Commit merge** 直接出合并提交（无需回终端）
+
+### 3. 整理一组 wip commit（Interactive Rebase）
+
+1. History 右键 base 之后第一个 wip commit → **Rebase interactively from here**
+2. 把不要的 commit 拖排序、设 squash / drop / reword
+3. **Start rebase** → 自动跑
+4. 遇冲突 → Merge 视图解决 → Continue
+5. 完成 → branch ref 自动指向新 tip
+
+### 4. 撤销刚才的错误操作
+
+1. `Ctrl+4` → Reflog
+2. 找到"上一个良好状态"那一行
+3. 点 **Restore**（保工作区）或 **Hard**（彻底回退）
+
+### 5. 找文件去哪了（重命名追溯）
+
+1. Diff 工具栏 → Blame
+2. 工具栏出现 "Annotate previous: <oldpath>"
+3. 点击穿越每一次重命名 / 大改
+4. **Back** 按钮回到上层
+
+### 6. 在 100k commit 仓库找一行代码
+
+1. `Ctrl+K` → 输入 "graph"
+2. 从结果里选 `src/lib/graph.ts` → 在 Blame 中打开
+3. 点任意行的短 oid → History 选中该 commit → Diff
+
+---
+
+## 十、从源码运行 / 二次开发
 
 ### 环境依赖
 
-| 工具    | 最低版本                                                                    | 安装方式                               |
-| ------- | --------------------------------------------------------------------------- | -------------------------------------- |
-| Bun     | 1.3+                                                                        | `irm bun.sh/install.ps1 \| iex`（Win） |
-| Rust    | 1.77+                                                                       | https://rustup.rs                      |
-| Git     | 任意                                                                        | https://git-scm.com                    |
-| Windows | + MSVC C++ Build Tools + WebView2（Win11 自带）                             | VS Installer                           |
-| macOS   | + Xcode CLT                                                                 | `xcode-select --install`               |
-| Linux   | + webkit2gtk-4.1 + libssl-dev + librsvg2-dev + libayatana-appindicator3-dev | apt/dnf                                |
+| 工具    | 最低版本                                                                    | 安装方式                                    |
+| ------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| Bun     | 1.3+                                                                        | `irm bun.sh/install.ps1 \| iex`（Win）      |
+| Rust    | 1.77+                                                                       | https://rustup.rs                           |
+| Git     | 任意                                                                        | https://git-scm.com（仅开发用，应用不依赖） |
+| Windows | + MSVC C++ Build Tools + WebView2（Win11 自带）                             | VS Installer                                |
+| macOS   | + Xcode CLT                                                                 | `xcode-select --install`                    |
+| Linux   | + webkit2gtk-4.1 + libssl-dev + librsvg2-dev + libayatana-appindicator3-dev | apt/dnf                                     |
 
 ### Dev 模式
 
 ```bash
 cd G:\GitTools
-bun install                # 首次执行，装前端依赖
-bun run scripts/gen-icons.ts   # 生成 Tauri 必需的占位图标
+bun install                # 首次执行
+bun run scripts/gen-icons.ts   # 生成 Tauri 图标占位
 bun run tauri:dev          # 启动 dev：Vite + Rust + 自动开窗
 ```
 
-首次启动 Rust 端编译会比较慢（30-90s），之后增量编译几秒。React HMR 改动秒回；Rust 改动会触发 cargo 重编译。
+首次 Rust 编译 30-90s，之后增量秒级。React HMR 改动秒回。
 
 ### 质量门
 
 ```bash
-bun run typecheck          # tsc -b
-bun run lint               # eslint
-bun run format             # prettier --write（自动修正）
-bun run format:check       # prettier --check（CI 用）
-cargo check --manifest-path src-tauri/Cargo.toml --release
+bun run typecheck                # tsc -b
+bun run lint                     # eslint
+bun run format                   # prettier --write
+bun run format:check             # prettier --check（CI 用）
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo check --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --no-deps -- -D warnings
 ```
+
+CI 配置（`.github/workflows/ci.yml`）会在每次 push 跑全部门；`release.yml` 在 tag push 时为 4 个平台并行打包并 draft 一个 GitHub Release。
 
 ### 项目结构速查
 
@@ -475,71 +473,98 @@ G:\GitTools\
 │   ├── App.tsx               # 视图路由 + 全局快捷键
 │   ├── main.tsx              # Root + ErrorBoundary
 │   ├── components/
-│   │   ├── Sidebar.tsx       # 左侧 nav
-│   │   ├── Topbar.tsx        # 顶栏（Open / Refresh / 路径）
+│   │   ├── Sidebar.tsx       # 8 个视图入口
+│   │   ├── Topbar.tsx        # 仓库 / refresh / search / 远程 / updater / settings
+│   │   ├── ContextMenu.tsx   # 右键菜单原语
+│   │   ├── CredentialDialog.tsx       # 远程鉴权弹窗 (v0.5.0)
+│   │   ├── CommandPalette.tsx         # Ctrl+K (v0.7.0)
+│   │   ├── SettingsDialog.tsx         # 设置面板 (v0.4.0)
+│   │   ├── UpdateBadge.tsx            # 自动更新 (v0.4.0)
 │   │   ├── ErrorBoundary.tsx
-│   │   ├── history/          # History 页面组件
-│   │   ├── diff/             # Diff 页面组件
-│   │   └── merge/            # Merge 页面组件
-│   ├── pages/                # WelcomePage / HistoryPage / DiffPage / MergePage
-│   ├── stores/app.ts         # Zustand 全局状态
-│   ├── ipc/git.ts            # 类型化的 invoke 包装
+│   │   ├── history/          # CommitList / CommitDetails / GraphRow / RefsPane / HistoryFilterBar
+│   │   ├── diff/             # DiffViewer / DiffViews / FileTree / DiffPrimitives
+│   │   └── merge/            # ConflictsList / ThreeWayEditor
+│   ├── pages/                # Welcome/History/Diff/Merge/Blame/Changes/Stash/Reflog/Submodules/Rebase
+│   ├── stores/
+│   │   ├── app.ts            # Zustand 全局 store
+│   │   └── settings.ts       # 持久化外观设置 (v0.4.0)
+│   ├── ipc/git.ts            # 类型化 invoke 包装
 │   ├── lib/
-│   │   ├── graph.ts          # DAG lane 分配算法
-│   │   ├── pairLines.ts      # diff 行配对
-│   │   ├── wordDiff.ts       # LCS 词级 diff
-│   │   ├── conflictParser.ts # <<<<<<< 解析
-│   │   ├── recentRepos.ts    # localStorage 最近仓库
-│   │   ├── useShortcuts.ts   # 全局快捷键 hook
-│   │   ├── time.ts           # timeAgo / fullDate
-│   │   └── utils.ts          # cn() helper
-│   ├── styles/globals.css    # Tailwind v4 入口 + 设计 tokens
+│   │   ├── graph.ts                # DAG lane 分配
+│   │   ├── pairLines.ts            # diff 行配对
+│   │   ├── wordDiff.ts             # LCS 词级 diff
+│   │   ├── conflictParser.ts       # <<<<<<< 解析
+│   │   ├── recentRepos.ts          # localStorage
+│   │   ├── useShortcuts.ts         # 全局快捷键 hook
+│   │   ├── useUpdater.ts           # 自动更新 hook (v0.4.0)
+│   │   ├── i18n.ts                 # 自研 typed i18n (v0.4.0)
+│   │   ├── locales/{en,zh}.ts
+│   │   ├── fuzzy.ts                # 子序列匹配 (v0.7.0)
+│   │   ├── time.ts / utils.ts / highlighter.ts
+│   ├── styles/globals.css    # Tailwind v4 + 设计 tokens
 │   └── vite-env.d.ts
 ├── src-tauri/
-│   ├── Cargo.toml            # git2-rs (vendored) + tauri 2 + plugins
+│   ├── Cargo.toml            # git2 (vendored) + tauri 2 + plugins
 │   ├── tauri.conf.json
 │   ├── capabilities/         # Tauri 2 ACL
 │   └── src/
 │       ├── main.rs / lib.rs
-│       ├── commands.rs       # 10 个 #[tauri::command]
-│       └── git/              # repo / log / diff / merge / refs
-├── design/                   # Open Design 风格静态 HTML 设计稿
+│       ├── commands.rs       # 50+ 个 #[tauri::command]
+│       └── git/
+│           ├── repo.rs       # open_repo / tracked_files
+│           ├── log.rs        # 含 author/date/pathspec 过滤
+│           ├── diff.rs       # 含 ignore_whitespace
+│           ├── merge.rs      # 三路 + abort + commit
+│           ├── refs.rs       # 列表
+│           ├── refs_ops.rs   # 分支/标签 CRUD (v0.2.0)
+│           ├── commit_ops.rs # cherry/revert/reset (v0.2.0)
+│           ├── blame.rs      # 含 blame_at_revision + previous_filename (v0.3.0)
+│           ├── stash.rs      # save/apply/pop/drop (v0.2.0)
+│           ├── reflog.rs     # (v0.3.0)
+│           ├── submodule.rs  # init/update/sync (v0.3.0)
+│           ├── workspace.rs  # 工作树 stage/unstage/commit
+│           ├── remote.rs     # 原生 fetch/pull/push + 凭据 + 进度 (v0.5.0)
+│           ├── rebase.rs     # 交互式 rebase 执行器 (v0.6.0)
+│           └── config.rs     # core.autocrlf 等 (v0.4.0)
+├── .github/workflows/{ci,release}.yml   # (v0.4.0)
+├── design/                   # 静态 HTML 设计稿
 ├── scripts/
-│   ├── gen-icons.ts          # 占位图标生成
-│   └── preview-design.ts     # 设计稿本地 HTTP 预览
+│   ├── gen-icons.ts
+│   └── preview-design.ts
 ├── package.json / tsconfig.json / vite.config.ts
-├── eslint.config.js / .prettierrc.json
-├── bunfig.toml               # 腾讯内网 npm 镜像
+├── eslint.config.js / .prettierrc.json / .gitattributes
+├── bunfig.toml               # 国内镜像
 └── README.md / USAGE.md
 ```
 
-### Rust 命令清单（src-tauri/src/commands.rs）
+### 主要 Rust 命令清单
 
-| 命令               | 入参                | 返回              | 说明                           |
-| ------------------ | ------------------- | ----------------- | ------------------------------ |
-| `open_repo`        | path                | `RepoInfo`        | 打开仓库（自动 discover .git） |
-| `git_log`          | path, limit, skip   | `CommitSummary[]` | 提交列表（含 refs 映射）       |
-| `commit_files`     | path, oid           | `FileChange[]`    | 某 commit 的变更文件 + 行数    |
-| `file_diff`        | path, oid, file     | `FileDiff`        | 某 commit 中单文件的 diff      |
-| `working_diff`     | path, file          | `FileDiff`        | 工作目录 vs index              |
-| `conflicts`        | path                | `ConflictFile[]`  | 当前冲突文件列表               |
-| `merge_state`      | path                | `MergeState`      | 仓库当前状态                   |
-| `conflict_content` | path, file          | `ConflictContent` | 冲突文件 3 路 blob 内容        |
-| `resolve_conflict` | path, file, content | `()`              | 写入 + git add                 |
-| `list_refs`        | path                | `RefEntry[]`      | 本地/远程分支 + tag            |
+| 类别          | 命令                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Repo          | `open_repo`, `tracked_files`                                                                                        |
+| History       | `git_log`, `commit_files`, `file_diff`, `working_diff`, `list_refs`                                                 |
+| Working tree  | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`                                |
+| Merge         | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                   |
+| Branches/Tags | `create_branch`, `checkout_branch`, `checkout_commit`, `delete_branch`, `rename_branch`, `create_tag`, `delete_tag` |
+| Commit ops    | `cherry_pick`, `revert_commit`, `reset_to`                                                                          |
+| Stash         | `stash_list`, `stash_save`, `stash_apply`, `stash_pop`, `stash_drop`                                                |
+| Blame         | `blame_file`, `blame_at_revision`, `previous_filename`                                                              |
+| Reflog        | `reflog_list`                                                                                                       |
+| Submodules    | `submodule_list`, `submodule_init`, `submodule_update`, `submodule_sync`                                            |
+| Remote        | `git_fetch`, `git_pull`, `git_push`, `submit_credentials`, `cancel_credentials`                                     |
+| Rebase        | `rebase_plan`, `rebase_start`, `rebase_next`, `rebase_continue`, `rebase_abort`, `rebase_status`                    |
+| Config        | `config_get`, `config_set`                                                                                          |
 
 ---
 
-## 七、构建可分发安装包
+## 十一、构建可分发安装包
 
 ```bash
 cd G:\GitTools
 bun run tauri:build
 ```
 
-首次会跑 Rust release LTO（约 3-6 分钟），之后增量。
-
-产物位置：
+首次 Rust release LTO 约 3-6 分钟，之后增量。产物：
 
 | 平台    | 路径                                                  |
 | ------- | ----------------------------------------------------- |
@@ -547,56 +572,56 @@ bun run tauri:build
 | macOS   | `src-tauri/target/release/bundle/{dmg,macos}/`        |
 | Linux   | `src-tauri/target/release/bundle/{appimage,deb,rpm}/` |
 
+**自动发版**（v0.4.0）：在主仓库打 tag 并 push（如 `git tag v0.7.1 && git push origin v0.7.1`），GitHub Actions `release.yml` 会同时跑 4 个平台 matrix 并 draft 一个 GitHub Release，所有 installers 自动 attach。
+
 ---
 
-## 八、常见问题排查（FAQ）
+## 十二、常见问题排查（FAQ）
 
 ### Q1：双击 Open Repository 后窗口空白？
 
-按 `F12` 打开 DevTools → Console 标签 → 看是否有红色错误。常见原因：
+`F12` 打开 DevTools → Console → 看红色错误。常见原因：选中目录不是 git 仓库 / WebView2 太老。
 
-- 选中的目录不是 git 仓库（没有 `.git/`）
-- WebView2 旧版本（更新一下 Edge）
+### Q2：DAG 提交图错乱？
 
-如果有 ErrorBoundary 红色错误页，请截图反馈。
+按 `F5` / `Ctrl+R` 刷新；如仍异常，DevTools 控制台 `console.table(__layout)` 输出截图反馈。
 
-### Q2：DAG 提交图所有 dot 都在一列？
+### Q3：Diff 没颜色？
 
-理论上不会发生（已修复）。如发生：
+工具栏 "X hunks" 是 0 说明该文件确实没变；binary 文件会显示 "Binary file — no preview."
 
-- 按 F5 或 Ctrl+R 刷新
-- 重启应用
-- 如果仍然有问题，把 DevTools 的 `console.table(__layout)` 输出截图反馈
+### Q4：Push 报 "authentication required (no usable credentials)"？
 
-### Q3：Diff 看不到颜色？
+依次检查：
 
-- 确认 toolbar 显示 "X hunks"，如果是 0 hunks 说明该文件确实没变
-- 如果是 binary 文件，会显示 "Binary file — no preview."
+1. SSH 仓库：`ssh-add ~/.ssh/id_ed25519` 看是否能连通 `ssh -T git@github.com`
+2. HTTPS 仓库：在 SmartCard / Settings 里清掉旧 Windows Credentials；下次 push 应用会弹凭据对话框
+3. GitHub / GitLab / Bitbucket：**密码不行**，必须 PAT（personal access token）
 
-### Q4：Merge 视图说 "Repository is clean" 但终端 git status 显示有冲突？
+### Q5：Pull 报 "non-fast-forward — use the merge UI"？
 
-按 F5 刷新视图。如果仍然不行：
+说明 upstream 有你本地没有的提交，且本地也有 upstream 没有的提交。两个选择：
 
-- 确认你在 Git Tools 里打开的就是终端那个仓库
-- 检查 `.git/MERGE_HEAD` 文件是否存在
+- 终端 `git pull --rebase`（v0.6.0 起也可以本地交互式 rebase 后再 push）
+- 终端 `git merge origin/<branch>` → 在 UI 内的 Merge 视图解决
 
-### Q5：Mark resolved & stage 按钮一直是灰的？
+### Q6：Interactive Rebase 中途想退出？
 
-意味着至少一个 conflict block 还是 `pending` 状态。检查 RESULT 列每个块：
+随时点 Rebase 视图右上角的 **Abort**（红色），会 hard-reset 回原 branch tip 并清状态文件。
 
-- `pending` 红色背景 = 未操作
-- 任意其他状态（`left/right/both/manual`）= 已解决
+### Q7：Rebase 卡在 Conflicted 但 Merge 视图显示 clean？
 
-需要把所有块都从 pending 切走。
+理论上不会发生。若发生：删除 `.git/gittools-rebase/state.json`，重启应用，再 Abort 一次。
 
-### Q6：在 Tauri dev 模式下改 Rust 代码后窗口没刷新？
+### Q8：自动更新 download 进度卡住？
 
-cargo 增量编译完会自动 reload。如果卡住：
+最常见的原因是 `latest.json` 的签名与本地公钥不匹配。临时跳过：在仓库 `tauri.conf.json` 里把 `plugins.updater.endpoints` 注释掉，重新打包。
 
-- 看终端日志（`.tauri-dev.log.err`）
-- 强制重启 dev：`Stop-Process -Name git-tools, bun -Force` 然后 `bun run tauri:dev`
+### Q9：在 Tauri dev 模式下改 Rust 代码后窗口没刷新？
 
-### Q7：bun install 时 `ConnectionRefused`？
+cargo 增量编译完会自动 reload。卡住时：看终端日志（`.tauri-dev.log.err`），或 `Stop-Process -Name git-tools, bun -Force` 后重新 `bun run tauri:dev`。
+
+### Q10：bun install 时 ConnectionRefused？
 
 检查 `bunfig.toml`：
 
@@ -605,52 +630,65 @@ cargo 增量编译完会自动 reload。如果卡住：
 registry = "https://registry.npmmirror.com/"
 ```
 
-或您公司内网镜像。
+或公司内网镜像。
 
-### Q8：Windows SmartScreen 弹"已保护你的电脑"？
+### Q11：Windows SmartScreen 弹"已保护你的电脑"？
 
-因为安装包未做 EV 代码签名。点 "更多信息 → 仍要运行" 即可。如果要消除这个警告，需要购买 EV 代码签名证书并在 build 流程中签名。
+安装包未做 EV 代码签名（v0.7.0 仍在 backlog）。点 "更多信息 → 仍要运行" 即可。
 
-### Q9：高 DPI 屏幕字体太小？
+### Q12：高 DPI 屏字体太小？
 
-按住 Ctrl + 滚轮放大整个 webview（Tauri 默认支持）。或者修改 `tauri.conf.json` 的 `windows.width/height` 默认值。
+`Ctrl + 滚轮` 缩放 webview；或在 Settings → 字号选大档位（v0.4.0）。
 
 ---
 
-## 九、卸载与清理
+## 十三、卸载与清理
 
 ### 卸载应用
 
-- **NSIS 安装的**：开始菜单 → Git Tools → Uninstall；或者控制面板 → 程序和功能
-- **MSI 安装的**：控制面板 → 程序和功能 → Git Tools → 卸载
+- **NSIS**：开始菜单 → Git Tools → Uninstall
+- **MSI**：控制面板 → 程序和功能 → Git Tools → 卸载
 
 ### 清理用户数据
 
-应用本身不在用户目录写额外文件，**仅 localStorage** 存了 Recent 仓库列表。要清掉：
+应用本身**不在用户目录写额外文件**，仅以下位置：
 
-1. 打开应用 → F12 → Application 标签 → Local Storage → 删 `gittools.recent-repos`
-2. 或直接在 Welcome 页对每条 hover 点 `×`
+| 数据            | 位置                                                 | 清理方式                                |
+| --------------- | ---------------------------------------------------- | --------------------------------------- |
+| Recent 仓库列表 | localStorage `gittools.recent-repos`                 | F12 → Application → Local Storage 删    |
+| 外观/语言设置   | localStorage `gittools.settings` / `gittools.locale` | 同上                                    |
+| Rebase 状态     | `<repo>/.git/gittools-rebase/state.json`             | 在 Rebase 视图点 **Abort** 即清；或手删 |
 
-### 清理源码构建产物（如果跑过 dev/build）
+### 清理源码构建产物
 
 ```powershell
 cd G:\GitTools
-Remove-Item -Recurse -Force node_modules
-Remove-Item -Recurse -Force dist
-Remove-Item -Recurse -Force src-tauri\target
-Remove-Item -Recurse -Force .tsbuild
-Remove-Item -Force .tauri-dev.log*, .tauri-build.log*
+Remove-Item -Recurse -Force node_modules, dist, .tsbuild, src-tauri\target -ErrorAction SilentlyContinue
+Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyContinue
 ```
+
+---
+
+## 十四、版本历史一览
+
+| 版本   | 关键改动                                                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0 | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                     |
+| v0.2.0 | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤 |
+| v0.3.0 | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                       |
+| v0.4.0 | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）          |
+| v0.5.0 | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件               |
+| v0.6.0 | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                             |
+| v0.7.0 | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                   |
 
 ---
 
 ## 反馈与扩展
 
-如果想加功能，已具备的扩展点：
-
-- **新增 Rust 命令**：在 `src-tauri/src/commands.rs` 加 `#[tauri::command]`，在 `src-tauri/src/lib.rs` 的 `invoke_handler!` 里注册
-- **新增视图**：在 `ViewKey` 类型里加，`App.tsx` 加路由，`Sidebar.tsx` 加按钮
-- **改主题颜色**：`src/styles/globals.css` 顶部的 `--branch-1..5`、`--diff-*` 变量；以及 `GraphRow.tsx` 里的 `BRANCH_COLORS` 字面量
+- **新 Rust 命令**：`src-tauri/src/commands.rs` 加 `#[tauri::command]`，在 `lib.rs` 的 `invoke_handler!` 注册；前端 `src/ipc/git.ts` 加包装
+- **新视图**：`stores/app.ts` 的 `ViewKey` 加，`App.tsx` 加路由，`Sidebar.tsx` 加 item，`lib/locales/{en,zh}.ts` 加 label
+- **改主题色**：`src/styles/globals.css` 顶部的 `--branch-1..5`、`--diff-*` 变量；以及 `GraphRow.tsx` 里的 `BRANCH_COLORS` 字面量
+- **新 i18n key**：先在 `lib/locales/en.ts` 加，`Dict` 类型会要求 `zh.ts` 同步补齐（编译期保证不漏）
 
 ---
 
