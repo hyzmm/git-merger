@@ -117,7 +117,14 @@ G:\GitTools
 2. ✅ **Annotate previous revision** — when a Blame view is open, the toolbar shows an "Annotate previous" button driven by `Diff::find_similar`-based rename detection. Click to jump to the file's previous identity (path + commit), with a back stack to retrace the chain. Solves the IDE-hostile case where a file has been renamed.
 3. ✅ **Submodules view** — list of submodules with derived status badges (`not cloned` / `not initialized` / `needs update` / `dirty` / `clean`), plus per-row **Init** / **Update** / **Sync** buttons. Status is computed via `submodule_status` (`WD_*` flags); update uses `Submodule::update`.
 
-### Backlog (post-v0.3.0)
+### v0.4.0 — Shipped
+
+1. ✅ **GitHub Actions CI** — `ci.yml` (typecheck + lint + format:check + cargo check + clippy on every push) and `release.yml` (4-platform matrix on tag push: windows / macos-arm64 / macos-intel / linux → drafts a Release with all installers attached). `.gitattributes` enforces LF for cross-platform diffs.
+2. ✅ **Settings panel** — Topbar gear icon opens a dialog with theme (auto / light / dark with FOUC-free pre-paint via inline localStorage script), font size, tab width, language (en / zh) and `core.autocrlf` editor (writes to local repo or global ~/.gitconfig via `git2::Config`).
+3. ✅ **Auto-update** — `tauri-plugin-updater` configured against `https://github.com/.../releases/latest/download/latest.json`. Topbar shows a clickable badge when an update is available; release notes preview, download progress bar, and one-click "Restart now". CI signs updater bundles with the `TAURI_SIGNING_PRIVATE_KEY` repo secret (a minisign keypair was generated and the public key is committed in `tauri.conf.json`).
+4. ✅ **i18n** — typed lightweight dictionary (no i18next dependency, ~1 kB) in `lib/i18n.ts`, `en` + `zh` locales for the user-facing chrome (Sidebar / Topbar / Welcome / Settings / Updater). Auto-detects from `navigator.language` on first run, switches live via Settings → Language.
+
+### Backlog (post-v0.4.0)
 
 - ⏳ Interactive Rebase (drag-to-reorder, pick / squash / reword / drop).
 - ⏳ Native libgit2-driven push/pull with progress UI and credential dialogs (current implementation shells out to system `git`).

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { git, type GitCmdResult } from "@/ipc/git";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
@@ -25,6 +26,7 @@ export function Topbar() {
   const loadChanges = useApp((s) => s.loadChanges);
   const loading = useApp((s) => s.loading);
   const error = useApp((s) => s.error);
+  const t = useT();
 
   const [running, setRunning] = useState<RemoteOp | null>(null);
   const [opResult, setOpResult] = useState<{ op: RemoteOp; result: GitCmdResult } | null>(null);
@@ -68,7 +70,7 @@ export function Topbar() {
           className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-secondary px-3 text-sm text-secondary-foreground hover:bg-accent"
         >
           <FolderOpen className="h-4 w-4" />
-          Open Repository
+          {t("topbar.openRepo")}
         </button>
 
         {repo && (
@@ -76,7 +78,7 @@ export function Topbar() {
             <button
               onClick={() => refresh()}
               disabled={loading}
-              title="Refresh (F5)"
+              title={t("topbar.refresh")}
               className={cn(
                 "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 loading && "animate-spin",
@@ -87,7 +89,7 @@ export function Topbar() {
 
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <GitBranch className="h-4 w-4" />
-              <span className="font-mono">{repo.head ?? "detached"}</span>
+              <span className="font-mono">{repo.head ?? t("topbar.detached")}</span>
               <span className="text-xs opacity-70">{repo.path}</span>
             </div>
 
@@ -97,33 +99,33 @@ export function Topbar() {
                 running={running}
                 Icon={Cloud}
                 onClick={() => runRemote("fetch")}
-                title="git fetch --all --prune"
+                title={t("topbar.fetch")}
               />
               <RemoteBtn
                 op="pull"
                 running={running}
                 Icon={ArrowDownToLine}
                 onClick={() => runRemote("pull")}
-                title="git pull --ff-only"
+                title={t("topbar.pull")}
               />
               <RemoteBtn
                 op="push"
                 running={running}
                 Icon={ArrowUpFromLine}
                 onClick={() => runRemote("push")}
-                title="git push"
+                title={t("topbar.push")}
               />
             </div>
           </>
         )}
 
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          {loading && <span>Loading...</span>}
+          {loading && <span>{t("topbar.loading")}</span>}
           {error && <span className="text-destructive">{error}</span>}
           <UpdateBadge />
           <button
             onClick={() => setSettingsOpen(true)}
-            title="Settings"
+            title={t("topbar.settings")}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Settings className="h-4 w-4" />

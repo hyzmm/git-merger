@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowUpCircle, CheckCircle, Loader2, RefreshCw } from "lucide-react";
 import { useUpdater } from "@/lib/useUpdater";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Tiny badge that appears in the Topbar when an update is available.
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 export function UpdateBadge() {
   const { state, downloadAndInstall, apply } = useUpdater();
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   // Only render once we have something to say.
   if (state.status === "idle" || state.status === "checking" || state.status === "error") {
@@ -28,7 +30,7 @@ export function UpdateBadge() {
         className={cn(
           "flex h-8 items-center gap-1.5 rounded-md border border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.10)] px-2 text-xs text-[hsl(var(--branch-1))] hover:bg-[hsl(var(--branch-1)/.18)]",
         )}
-        title="An update is available"
+        title={t("updater.title")}
       >
         {ready ? (
           <CheckCircle className="h-3.5 w-3.5" />
@@ -39,10 +41,10 @@ export function UpdateBadge() {
         )}
         <span>
           {ready
-            ? "Restart to update"
+            ? t("updater.ready")
             : downloading
-              ? `Downloading${pct !== null ? ` ${pct}%` : "..."}`
-              : `Update v${state.available?.version}`}
+              ? t("updater.downloading", { pct: pct ?? 0 })
+              : t("updater.available", { version: state.available?.version ?? "?" })}
         </span>
       </button>
 
@@ -50,7 +52,7 @@ export function UpdateBadge() {
         <div className="absolute right-0 top-9 z-50 w-80 rounded-md border border-border bg-popover p-3 text-xs shadow-lg">
           <div className="mb-1.5 flex items-center gap-2">
             <ArrowUpCircle className="h-4 w-4 text-[hsl(var(--branch-1))]" />
-            <span className="font-semibold">New version available</span>
+            <span className="font-semibold">{t("updater.title")}</span>
             <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">
               v{state.available.version}
             </span>
@@ -76,7 +78,7 @@ export function UpdateBadge() {
               onClick={() => setOpen(false)}
               className="h-7 rounded-md border border-border bg-secondary px-3 text-[11px] hover:bg-accent"
             >
-              Later
+              {t("updater.later")}
             </button>
             {ready ? (
               <button
@@ -84,7 +86,7 @@ export function UpdateBadge() {
                 className="flex h-7 items-center gap-1 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90"
               >
                 <RefreshCw className="h-3 w-3" />
-                Restart now
+                {t("updater.restart")}
               </button>
             ) : (
               <button
@@ -95,7 +97,7 @@ export function UpdateBadge() {
                   downloading && "cursor-not-allowed opacity-60",
                 )}
               >
-                {downloading ? "Downloading..." : "Download & install"}
+                {downloading ? t("common.loading") : t("updater.download")}
               </button>
             )}
           </div>

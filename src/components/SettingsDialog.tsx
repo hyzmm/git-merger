@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useSettings, type ThemeMode } from "@/stores/settings";
+import { useI18n, useT, type Locale } from "@/lib/i18n";
 import { git } from "@/ipc/git";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,9 @@ export function SettingsDialog({ open, onClose }: Props) {
   const tabSize = useSettings((s) => s.tabSize);
   const setSetting = useSettings((s) => s.set);
   const reset = useSettings((s) => s.reset);
+  const locale = useI18n((s) => s.locale);
+  const setLocale = useI18n((s) => s.setLocale);
+  const t = useT();
 
   const [autocrlf, setAutocrlf] = useState<string>("");
   const [autocrlfScope, setAutocrlfScope] = useState<"local" | "global">("global");
@@ -84,35 +88,35 @@ export function SettingsDialog({ open, onClose }: Props) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Settings"
-        className="w-[560px] max-w-[92vw] max-h-[88vh] overflow-auto rounded-lg border border-border bg-card shadow-2xl"
+        aria-label={t("settings.title")}
+        className="max-h-[88vh] w-[560px] max-w-[92vw] overflow-auto rounded-lg border border-border bg-card shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <h2 className="text-sm font-semibold">Settings</h2>
+          <h2 className="text-sm font-semibold">{t("settings.title")}</h2>
           <button
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Close"
+            aria-label={t("settings.close")}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="space-y-5 p-4">
-          <Section title="Appearance">
-            <Row label="Theme">
+          <Section title={t("settings.appearance")}>
+            <Row label={t("settings.theme")}>
               <SegGroup<ThemeMode>
                 value={theme}
                 options={[
-                  { v: "auto", label: "Auto" },
-                  { v: "light", label: "Light" },
-                  { v: "dark", label: "Dark" },
+                  { v: "auto", label: t("settings.theme.auto") },
+                  { v: "light", label: t("settings.theme.light") },
+                  { v: "dark", label: t("settings.theme.dark") },
                 ]}
                 onChange={(v) => setSetting({ theme: v })}
               />
             </Row>
 
-            <Row label="Font size">
+            <Row label={t("settings.fontSize")}>
               <SegGroup<number>
                 value={fontSize}
                 options={FONT_SIZES.map((n) => ({ v: n, label: `${n}px` }))}
@@ -120,11 +124,22 @@ export function SettingsDialog({ open, onClose }: Props) {
               />
             </Row>
 
-            <Row label="Tab width">
+            <Row label={t("settings.tabWidth")}>
               <SegGroup<number>
                 value={tabSize}
                 options={TAB_SIZES.map((n) => ({ v: n, label: String(n) }))}
                 onChange={(v) => setSetting({ tabSize: v })}
+              />
+            </Row>
+
+            <Row label={t("settings.language")}>
+              <SegGroup<Locale>
+                value={locale}
+                options={[
+                  { v: "en", label: t("settings.language.en") },
+                  { v: "zh", label: t("settings.language.zh") },
+                ]}
+                onChange={setLocale}
               />
             </Row>
 
@@ -133,18 +148,15 @@ export function SettingsDialog({ open, onClose }: Props) {
                 onClick={reset}
                 className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
               >
-                Reset appearance to defaults
+                {t("settings.resetAppearance")}
               </button>
             </div>
           </Section>
 
-          <Section
-            title="Git config"
-            subtitle="Affects how this repo (or your global ~/.gitconfig) handles line endings."
-          >
+          <Section title={t("settings.gitConfig")} subtitle={t("settings.gitConfig.subtitle")}>
             {!repo ? (
               <p className="text-[11px] text-muted-foreground">
-                Open a repository first to inspect or edit git config.
+                {t("settings.gitConfig.openFirst")}
               </p>
             ) : (
               <>
@@ -161,12 +173,12 @@ export function SettingsDialog({ open, onClose }: Props) {
                     ))}
                   </select>
                 </Row>
-                <Row label="Scope">
+                <Row label={t("settings.gitConfig.scope")}>
                   <SegGroup<"local" | "global">
                     value={autocrlfScope}
                     options={[
-                      { v: "local", label: "This repo" },
-                      { v: "global", label: "Global (~/.gitconfig)" },
+                      { v: "local", label: t("settings.gitConfig.scope.local") },
+                      { v: "global", label: t("settings.gitConfig.scope.global") },
                     ]}
                     onChange={setAutocrlfScope}
                   />
@@ -192,7 +204,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                       autocrlfBusy && "cursor-not-allowed opacity-60",
                     )}
                   >
-                    {autocrlfBusy ? "Saving..." : "Save"}
+                    {autocrlfBusy ? t("settings.gitConfig.saving") : t("settings.gitConfig.save")}
                   </button>
                 </div>
               </>

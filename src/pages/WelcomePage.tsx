@@ -1,11 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, X } from "lucide-react";
 import { useApp } from "@/stores/app";
+import { useT } from "@/lib/i18n";
 
 export function WelcomePage() {
   const openRepo = useApp((s) => s.openRepo);
   const recent = useApp((s) => s.recentRepos);
   const removeRecent = useApp((s) => s.removeRecentRepo);
+  const t = useT();
 
   async function pick() {
     const dir = await open({ directory: true, multiple: false });
@@ -17,33 +19,31 @@ export function WelcomePage() {
       <div className="grid w-full max-w-3xl grid-cols-1 gap-8 md:grid-cols-[1fr_1fr]">
         {/* Welcome card */}
         <div className="flex flex-col items-start gap-4">
-          <h1 className="text-2xl font-semibold">Git Tools</h1>
-          <p className="text-sm text-muted-foreground">
-            IDEA-style History, Diff and Merge for any local Git repository.
-          </p>
+          <h1 className="text-2xl font-semibold">{t("welcome.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("welcome.subtitle")}</p>
           <button
             onClick={pick}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <FolderOpen className="h-4 w-4" />
-            Open Repository
+            {t("welcome.openButton")}
           </button>
           <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
-            <ShortcutLine combo="Ctrl+1 / 2 / 3" desc="Switch History / Diff / Merge" />
+            <ShortcutLine combo="Ctrl+1 .. 7" desc="Switch view" />
             <ShortcutLine combo="F5 or Ctrl+R" desc="Refresh current view" />
-            <ShortcutLine combo="F7 / Shift+F7" desc="Next / previous conflict (Merge view)" />
-            <ShortcutLine combo="Alt+1 / 2 / 3" desc="Accept Left / Right / Both" />
+            <ShortcutLine combo="N / P (in Diff)" desc="Next / prev hunk" />
+            <ShortcutLine combo="Alt+1 / 2 / 3 (in Merge)" desc="Accept Left / Right / Both" />
           </div>
         </div>
 
         {/* Recent repos */}
         <div className="min-w-0">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Recent
+            {t("welcome.recent")}
           </h2>
           {recent.length === 0 && (
             <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              No recent repositories yet.
+              {t("welcome.noRecent")}
             </div>
           )}
           <div className="flex flex-col gap-1">
@@ -58,7 +58,7 @@ export function WelcomePage() {
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-mono">{basename(r.path)}</div>
+                    <div className="truncate font-mono text-sm">{basename(r.path)}</div>
                     <div className="truncate text-[11px] text-muted-foreground">{r.path}</div>
                   </div>
                 </button>
