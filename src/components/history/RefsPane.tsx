@@ -53,7 +53,14 @@ export function RefsPane() {
       remote_branch: [],
       tag: [],
     };
-    for (const r of refs) g[r.kind]?.push(r);
+    for (const r of refs) {
+      // The currently checked-out local branch is already rendered in the
+      // HEAD pin at the top of the pane (with its short oid), so skip the
+      // duplicate row in the Local section. In detached state, no local
+      // branch is `is_head`, so this filter has no effect there.
+      if (r.kind === "local_branch" && r.is_head) continue;
+      g[r.kind]?.push(r);
+    }
     return g;
   }, [refs]);
 
@@ -75,8 +82,7 @@ export function RefsPane() {
       items.push(
         { label: ref.name, heading: true },
         {
-          label: ref.is_head ? "Already checked out" : "Checkout",
-          disabled: ref.is_head,
+          label: "Checkout",
           onClick: () => void checkoutBranch(ref.name),
         },
         {
@@ -90,7 +96,6 @@ export function RefsPane() {
         },
         {
           label: "Rename…",
-          disabled: ref.is_head,
           onClick: () => {
             const next = window.prompt(`Rename '${ref.name}' to:`, ref.name)?.trim();
             if (!next || next === ref.name) return;
@@ -101,7 +106,6 @@ export function RefsPane() {
         {
           label: "Delete…",
           danger: true,
-          disabled: ref.is_head,
           onClick: () => void deleteBranch(ref.name),
         },
       );
@@ -212,14 +216,12 @@ export function RefsPane() {
                     }}
                     onContextMenu={(e) => onContextMenu(e, r)}
                     onDoubleClick={() => {
-                      if (r.kind === "local_branch" && !r.is_head) void checkoutBranch(r.name);
+                      if (r.kind === "local_branch") void checkoutBranch(r.name);
                     }}
                     className={cn(
                       "flex cursor-pointer items-center gap-2 px-3 py-1 text-xs",
                       "hover:bg-accent/50",
-                      r.is_head && "bg-accent",
                     )}
-                    style={r.is_head ? { borderLeft: `2px solid hsl(${color})` } : undefined}
                     title={
                       r.kind === "local_branch"
                         ? "Click: jump · double-click: checkout · right-click: more"
@@ -231,9 +233,6 @@ export function RefsPane() {
                       style={{ background: `hsl(${color})` }}
                     />
                     <span className="flex-1 truncate font-mono">{r.name}</span>
-                    {r.is_head && (
-                      <span className="text-[10px] uppercase text-muted-foreground">HEAD</span>
-                    )}
                   </div>
                 );
               })}
