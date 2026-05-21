@@ -32,6 +32,7 @@ IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tau
   - [4.1 App menu (☰)](#41-app-menu-)
   - [4.2 Undo button (reflog quick actions)](#42-undo-button-reflog-quick-actions)
   - [4.3 Multi-repo tabs (v0.12.0 / v0.13.5)](#43-multi-repo-tabs-v0120--v0135)
+  - [4.4 Error feedback & Toasts (v0.13.1)](#44-error-feedback--toasts-v0131)
 - [5. Command Palette (Ctrl+K)](#5-command-palette-ctrlk)
 - [6. Settings panel](#6-settings-panel)
 - [7. Auto-update](#7-auto-update)
@@ -164,6 +165,33 @@ Three panes: left **Refs panel**, center **Commit list + DAG**, right **Commit d
 - **Ignore Whitespace** (v0.2.0): a separate button that re-runs libgit2 with `ignore_whitespace` (complementary to the visualization toggle).
 - **Hunk navigation** (v0.2.0): toolbar ↑/↓ buttons, or `n` / `p` shortcuts.
 - **Blame button**: jump to Blame for the current file.
+
+#### Bidirectional Diff editor (v0.13.3)
+
+When the Diff source is a **working-tree file** (entered via clicking a filename in the Changes view, not via picking a commit in History) and the mode is **Side-by-side**, the toolbar gains an **Edit** toggle.
+
+| Action               | Behavior                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Click **Edit**       | The right pane switches from a static diff to a live textarea bound to the on-disk working-tree text           |
+| Type freely          | Edits the right-side buffer; the left pane stays a read-only HEAD reference; toolbar shows **● dirty**         |
+| Click **Save**       | Atomically writes back (write-to-tmp + rename) and re-runs `working_diff` so the hunk preview refreshes        |
+| Click **Reset**      | Discards buffer edits and re-reads the on-disk text                                                            |
+| Click **Edit** again | Closes edit mode back to read-only diff (the buffer survives in memory; reopening picks up where you left off) |
+
+**Safety guards** (enforced by the backend `read/write_working_file` commands):
+
+- Path-traversal defence: relative paths containing `..` segments are rejected; absolute paths must resolve inside the repo workdir
+- Binary refusal: if the on-disk content contains a NUL byte, the file is treated as binary and editing is blocked (so you can't accidentally clobber a binary asset)
+- 8 MB cap: per-file size limit on read and write — keeps the textarea responsive
+- Atomic writes: write to a temp file then rename, so a process crash never leaves a half-written source
+
+**Typical scenarios**:
+
+1. Tests caught a 1-line typo → fix it directly in Diff view → Save → watch the hunk vanish, no IDE switch
+2. Want to try "what if these 5 lines changed to X" → edit right pane → run tests → didn't work → **Reset** in one click
+3. Fixed a typo and want to commit immediately → Save, switch to Changes — the file is already in the modified list, ready to stage
+
+> The Edit button only appears in Side-by-side mode AND when the diff source is a working-tree file. Diffs between two historical commits (entered from History) stay read-only — there's no "current working text" to write back to.
 
 ### 3.3 Merge (conflict resolution)
 
@@ -523,6 +551,39 @@ A new **RepoTabs** strip above the Topbar lets you keep several repositories ope
 3. Open a third repo briefly to look up a commit hash, `Ctrl+W` to close
 4. Pin your primary monorepo tab so opening/closing N temporary repos can never accidentally close it (v0.13.5)
 5. Quit the app and relaunch the next day — every tab + its pinned state comes back exactly as it was (v0.13.5)
+
+### 4.4 Error feedback & Toasts (v0.13.1)
+
+Starting in v0.13.1, every backend error funnels through a unified **Toast** queue (floating overlay in the bottom-right corner) instead of being silently swallowed or shown via `alert()`.
+
+**Visuals**:
+
+- **Error** (red border): remote rejection, merge conflict, auth failure, file IO failure — default lifetime **8 seconds**
+- **Info** (neutral border): success messages ("Stashed working changes.", "Pruned 2 worktrees") — default lifetime **3 seconds**
+- Hovering a toast **pauses its auto-dismiss timer** so you can copy the error text
+- At most **5** toasts stacked at once; older ones drop off the top
+
+**Error classification** (the backend `AppError` is a 10-kind tagged enum auto-derived from `git2::Error`):
+
+| Kind                                | Triggered by                                       | Toast title prefix          |
+| ----------------------------------- | -------------------------------------------------- | --------------------------- |
+| `NotFound`                          | missing ref / oid / file                           | `NotFound:`                 |
+| `MergeConflict`                     | merge / cherry-pick / revert produced conflicts    | `MergeConflict:`            |
+| `NonFastForward`                    | push rejected (remote has newer commits)           | `NonFastForward:`           |
+| `Auth`                              | wrong SSH key, HTTPS creds, cert validation        | `Auth:`                     |
+| `UserCancelled`                     | credential dialog dismissed, file picker cancelled | `UserCancelled:`            |
+| `InvalidArgument`                   | invalid reset mode, empty commit message           | `InvalidArgument:`          |
+| `Git` / `Io` / `Internal` / `Other` | catch-all categories                               | (corresponding kind prefix) |
+
+**Topbar remote-op banner** (enhanced in v0.13.1):
+
+- Push refused (NonFastForward): banner shows guidance — "Pull/Fetch first, then push"
+- Auth failure: banner shows guidance — "Check credentials / SSH key configuration"
+- Other errors: backend message is shown verbatim
+
+**Global safety net**: any **un-caught** Promise rejection is intercepted by the global `unhandledrejection` listener in `App.tsx` and surfaced as a toast — meaning even if a component forgets to try/catch, the error never disappears silently into `console.error`.
+
+> Pre-v0.13.1 errors were just `String(e)`'d into a component's local error state with no global safety net. If a constructor folded the error into an effect's callback, it could be lost. v0.13.1 closes that gap.
 
 ---
 

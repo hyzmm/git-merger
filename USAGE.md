@@ -32,6 +32,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [4.1 应用菜单（☰）](#41-应用菜单)
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
   - [4.3 多仓库 tabs（v0.12.0 / v0.13.5）](#43-多仓库-tabsv0120--v0135)
+  - [4.4 错误提示与 Toast（v0.13.1）](#44-错误提示与-toastv0131)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
@@ -163,6 +164,33 @@ bun run tauri:build
 - **Ignore Whitespace**（v0.2.0）：另一个按钮，让后端用 libgit2 的 `ignore_whitespace` 重算 diff（与可视化是互补的）
 - **跳转到 hunk**（v0.2.0）：工具栏 ↑/↓ 按钮，或快捷键 `n` / `p`
 - **Blame 按钮**：跳到 Blame 视图查看该文件
+
+#### 双向 Diff 编辑（v0.13.3）
+
+当 Diff 来源是**工作树文件**（从 Changes 视图点文件名进入，而不是从 History 选某个 commit），且模式为 **Side-by-side** 时，工具栏会多出一个 **Edit** 切换。
+
+| 操作               | 行为                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| 点 **Edit**        | 右侧 pane 从静态 diff 切换为可编辑 textarea，绑定到磁盘上的工作树文件文本            |
+| 直接打字           | 编辑右侧 buffer；左侧始终是 HEAD 只读参考；工具栏出现 **● dirty** 徽章               |
+| 点 **Save**        | 原子写回磁盘（先写 tmp 再 rename），随后自动重新 `working_diff` 让左侧 hunk 预览刷新 |
+| 点 **Reset**       | 丢弃 buffer 改动，重新读取磁盘文本                                                   |
+| 再点 **Edit** 取消 | 关闭编辑模式，回到只读 diff（buffer 在内存里保留，下次 Edit 再开就是上次的 buffer）  |
+
+**安全护栏**（后端 `read/write_working_file` 命令实现）：
+
+- 路径 traversal 防御：拒绝任何含 `..` 段的相对路径，绝对路径必须落在仓库 workdir 之内
+- Binary 文件拒写：检测 NUL 字节，binary 文件不允许编辑（避免你不小心改坏二进制资源）
+- 8 MB 上限：单文件超过这个大小就拒绝读写——防止大文件卡死 textarea
+- 原子写：写 tmp 文件后 rename，进程 crash 也不会留下半截写入的源文件
+
+**典型场景**：
+
+1. 跑测试发现 1 行 typo → 不切到 IDE，直接在 Diff 视图改 → Save → 立刻看到 hunk 消失
+2. 想快速试一下"如果这 5 行改成 X 会怎样"→ 编辑右侧 → 跑测试 → 不行 → **Reset** 一键回退
+3. 修完 typo 想立即提交 → Save 后切 Changes 视图，文件已自动出现在改动列表，直接 commit
+
+> 仅 Side-by-side 模式下、且 Diff 来源是工作树文件时显示 Edit 按钮。从 History 进入的"历史 commit 之间的 diff"是只读的，因为没有"现在的工作树文本"可以写回。
 
 ### 3.3 Merge（冲突解决）
 
@@ -522,6 +550,39 @@ Topbar 上方新增一栏 **RepoTabs**，支持同时打开多个仓库并在它
 3. 临时打开第三个仓库查个 commit hash，查完 `Ctrl+W` 关闭即可
 4. 把工作区主仓库 pin 住，再开关 N 个临时仓库都不会误关核心 tab（v0.13.5）
 5. 关掉应用第二天打开，所有 tab 顺序 + pinned 状态原样恢复（v0.13.5）
+
+### 4.4 错误提示与 Toast（v0.13.1）
+
+v0.13.1 起所有后端报错走统一的 **Toast** 队列（屏幕右下角浮层），不再静默吞掉、也不再用 `alert()`。
+
+**视觉**：
+
+- **Error**（红边）：远端拒绝、合并冲突、认证失败、文件读写失败等，默认停留 **8 秒**
+- **Info**（中性边）：成功提示（"Stashed working changes."、"Pruned 2 worktrees"），默认停留 **3 秒**
+- 鼠标悬停在 toast 上时**暂停自动关闭**，方便复制错误文本
+- 同屏最多堆叠 **5 个**，超出后最老的自动出栈
+
+**错误分类**（后端 `AppError` 的 10 种 kind 自动从 `git2::Error` 推断）：
+
+| Kind                                | 触发场景示例                           | Toast 标题前缀     |
+| ----------------------------------- | -------------------------------------- | ------------------ |
+| `NotFound`                          | 引用 / commit oid / 文件不存在         | `NotFound:`        |
+| `MergeConflict`                     | merge / cherry-pick / revert 产生冲突  | `MergeConflict:`   |
+| `NonFastForward`                    | push 被远端拒绝（远端有新 commit）     | `NonFastForward:`  |
+| `Auth`                              | SSH key 不对、HTTPS 凭据失败、证书校验 | `Auth:`            |
+| `UserCancelled`                     | 凭据弹窗被关、文件选择对话框 cancel    | `UserCancelled:`   |
+| `InvalidArgument`                   | 不合法的 reset mode、空 commit message | `InvalidArgument:` |
+| `Git` / `Io` / `Internal` / `Other` | 其他兜底分类                           | （对应 kind 前缀） |
+
+**Topbar 远程操作 banner**（v0.13.1 起增强）：
+
+- Push 被拒（NonFastForward）：banner 显示"Pull/Fetch 后再 push"的引导文案
+- Auth 失败：banner 显示"检查凭据 / SSH key 配置"的引导文案
+- 其他错误：照原样显示后端 message
+
+**全局兜底**：任何**没人 catch** 的 Promise rejection 都会被 `App.tsx` 里的全局 `unhandledrejection` 监听器捕获并弹 toast——也就是说就算某个组件忘了 try/catch，错误也不会消失到 console 里没人看。
+
+> 旧版本（< v0.13.1）的错误处理是把 `git2::Error` 直接 `String(e)` 出来扔到组件 local error 里，没全局兜底。如果某个 ctor 把 error 揉进了 effect 的回调里，可能就丢了。v0.13.1 起这个口子被堵上。
 
 ---
 
