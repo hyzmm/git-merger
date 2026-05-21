@@ -233,6 +233,24 @@ export const en = {
   "search.openInHistory": "Open this commit in History view",
   "search.open": "Open",
 
+  // Search v2 — group-by, recents, saved searches (v0.13.4)
+  "search.groupBy": "Group by",
+  "search.groupBy.commit": "Commit",
+  "search.groupBy.file": "File",
+  "search.foundFiles": "{files} files · {commits} commits",
+  "search.noFileHits": "No diff hits — message-only matches don't appear in the file rollup.",
+  "search.commitOne": "commit",
+  "search.commitMany": "commits",
+  "search.recents": "Recent searches",
+  "search.applyAndRun": "Click to apply and run",
+  "search.clearAll": "Clear all",
+  "search.save": "Save",
+  "search.saveCurrentTitle": "Save the current search axes under a name",
+  "search.savePrompt": "Name for this saved search:",
+  "search.savedTitle": "Saved searches",
+  "search.savedEmpty": "No saved searches yet — run a search and click ★ Save.",
+  "search.delete": "Delete",
+
   // Repo tabs (multi-repo workspace)
   "tabs.add": "New tab (Ctrl+T)",
   "tabs.close": "Close tab (Ctrl+W)",

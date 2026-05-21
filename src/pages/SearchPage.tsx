@@ -1,10 +1,28 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
-import { Search, X, Loader2, Hash, FileText, ArrowRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  ArrowRight,
+  ChevronDown,
+  FileText,
+  Hash,
+  History as HistoryIcon,
+  Loader2,
+  Search,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
-import type { SearchHit, DiffHit } from "@/ipc/git";
+import type { DiffHit, SearchHit } from "@/ipc/git";
+import {
+  aggregateByFile,
+  uniqueCommitCount,
+  type FileGroup,
+  type FileGroupCommit,
+} from "@/lib/searchAggregate";
+import type { SavedSearch, SearchSnapshot } from "@/lib/searchPersist";
 
 export function SearchPage() {
   const t = useT();
@@ -21,6 +39,9 @@ export function SearchPage() {
   const busy = useApp((s) => s.search.busy);
   const appliedQuery = useApp((s) => s.search.appliedQuery);
   const error = useApp((s) => s.search.error);
+  const groupBy = useApp((s) => s.search.groupBy);
+  const recents = useApp((s) => s.search.recents);
+  const saved = useApp((s) => s.search.saved);
 
   const setSearchQuery = useApp((s) => s.setSearchQuery);
   const setSearchMode = useApp((s) => s.setSearchMode);
@@ -30,6 +51,11 @@ export function SearchPage() {
   const selectSearchHit = useApp((s) => s.selectSearchHit);
   const runSearch = useApp((s) => s.runSearch);
   const clearSearch = useApp((s) => s.clearSearch);
+  const setSearchGroupBy = useApp((s) => s.setSearchGroupBy);
+  const applySearchSnapshot = useApp((s) => s.applySearchSnapshot);
+  const saveCurrentSearch = useApp((s) => s.saveCurrentSearch);
+  const deleteSavedSearch = useApp((s) => s.deleteSavedSearch);
+  const clearSearchRecents = useApp((s) => s.clearSearchRecents);
   const selectCommit = useApp((s) => s.selectCommit);
   const setView = useApp((s) => s.setView);
 
@@ -37,6 +63,27 @@ export function SearchPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const [recentsOpen, setRecentsOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
+
+  // Close pop-overs on outside-click. Single shared listener for both.
+  const recentsAnchorRef = useRef<HTMLDivElement>(null);
+  const savedAnchorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!recentsOpen && !savedOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (recentsOpen && recentsAnchorRef.current && !recentsAnchorRef.current.contains(target)) {
+        setRecentsOpen(false);
+      }
+      if (savedOpen && savedAnchorRef.current && !savedAnchorRef.current.contains(target)) {
+        setSavedOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [recentsOpen, savedOpen]);
 
   const submitOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -49,6 +96,23 @@ export function SearchPage() {
   };
 
   const selected = hits.find((h) => h.oid === selectedOid) ?? null;
+  const fileGroups = useMemo(() => aggregateByFile(hits), [hits]);
+  const filesUniqueCommits = useMemo(() => uniqueCommitCount(fileGroups), [fileGroups]);
+
+  const onApplySnapshot = (snap: SearchSnapshot, runImmediately: boolean) => {
+    applySearchSnapshot(snap);
+    setRecentsOpen(false);
+    setSavedOpen(false);
+    if (runImmediately) void runSearch();
+  };
+
+  const onSaveCurrent = () => {
+    const proposed = window.prompt(t("search.savePrompt"), "");
+    if (proposed === null) return;
+    const name = proposed.trim();
+    if (!name) return;
+    saveCurrentSearch(name);
+  };
 
   const jumpToHistory = (oid: string) => {
     setView("history");
@@ -62,15 +126,38 @@ export function SearchPage() {
         <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-card p-3">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={submitOnEnter}
-              placeholder={t("search.placeholder")}
-              className="h-8 flex-1 rounded border border-border bg-background px-2 font-mono text-[12.5px] outline-none focus:border-primary"
-            />
+            <div className="relative flex-1" ref={recentsAnchorRef}>
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={submitOnEnter}
+                placeholder={t("search.placeholder")}
+                className="h-8 w-full rounded border border-border bg-background pl-2 pr-8 font-mono text-[12.5px] outline-none focus:border-primary"
+              />
+              {recents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRecentsOpen((v) => !v)}
+                  title={t("search.recents")}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <HistoryIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {recentsOpen && (
+                <RecentsPanel
+                  recents={recents}
+                  onPick={(snap, run) => onApplySnapshot(snap, run)}
+                  onClear={() => {
+                    clearSearchRecents();
+                    setRecentsOpen(false);
+                  }}
+                  t={t}
+                />
+              )}
+            </div>
             {query && (
               <button
                 type="button"
@@ -165,6 +252,66 @@ export function SearchPage() {
                 className="h-6 w-44 rounded border border-border bg-background px-1.5 font-mono text-[11px] outline-none focus:border-primary"
               />
             </div>
+
+            {/* v0.13.4 — Group-by toggle */}
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">{t("search.groupBy")}:</span>
+              {(["commit", "file"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setSearchGroupBy(g)}
+                  className={cn(
+                    "rounded border px-2 py-0.5",
+                    groupBy === g
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  {t(`search.groupBy.${g}` as never)}
+                </button>
+              ))}
+            </div>
+
+            {/* v0.13.4 — Save / Saved-searches dropdown */}
+            <div className="ml-auto flex items-center gap-1" ref={savedAnchorRef}>
+              <button
+                type="button"
+                onClick={onSaveCurrent}
+                disabled={!query.trim()}
+                title={t("search.saveCurrentTitle")}
+                className={cn(
+                  "rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent",
+                  !query.trim() && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Star className="h-3 w-3" />
+                  {t("search.save")}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSavedOpen((v) => !v)}
+                title={t("search.savedTitle")}
+                className={cn(
+                  "rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-accent",
+                )}
+              >
+                <span className="inline-flex items-center gap-1">
+                  {saved.length > 0 ? saved.length : 0}
+                  <ChevronDown className="h-3 w-3" />
+                </span>
+              </button>
+              {savedOpen && (
+                <SavedPanel
+                  saved={saved}
+                  onApply={(snap) => onApplySnapshot(snap, true)}
+                  onDelete={(name) => deleteSavedSearch(name)}
+                  t={t}
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -174,7 +321,14 @@ export function SearchPage() {
             <span className="text-destructive">⚠ {error}</span>
           ) : appliedQuery ? (
             <>
-              <span className="text-muted-foreground">{t("search.found", { n: hits.length })}</span>
+              <span className="text-muted-foreground">
+                {groupBy === "file"
+                  ? t("search.foundFiles", {
+                      files: fileGroups.length,
+                      commits: filesUniqueCommits,
+                    })
+                  : t("search.found", { n: hits.length })}
+              </span>
               <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground">{t("search.scanned", { n: scanned })}</span>
               {truncated && (
@@ -197,6 +351,13 @@ export function SearchPage() {
             <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
               {appliedQuery && !busy ? t("search.empty") : t("search.hint")}
             </div>
+          ) : groupBy === "file" ? (
+            <FileRollup
+              groups={fileGroups}
+              selectedOid={selectedOid}
+              onPick={selectSearchHit}
+              t={t}
+            />
           ) : (
             <ul className="divide-y divide-border/40">
               {hits.map((h) => (
@@ -274,6 +435,8 @@ export function SearchPage() {
   );
 }
 
+// ---------- Sub-components ----------
+
 function ResultRow({
   hit,
   selected,
@@ -302,6 +465,122 @@ function ResultRow({
         {totalDiffHits > 0 && (
           <span className="rounded bg-secondary px-1.5 text-foreground">+/− {totalDiffHits}</span>
         )}
+      </div>
+    </li>
+  );
+}
+
+function FileRollup({
+  groups,
+  selectedOid,
+  onPick,
+  t,
+}: {
+  groups: FileGroup[];
+  selectedOid: string | null;
+  onPick: (oid: string) => void;
+  t: ReturnType<typeof useT>;
+}) {
+  // Per-file expand state. Default: first 3 files open, rest collapsed —
+  // keeps the list scannable on big result sets.
+  const [openSet, setOpenSet] = useState<Set<string>>(
+    () => new Set(groups.slice(0, 3).map((g) => g.file)),
+  );
+
+  // When the result set changes, reset the default open set to keep the
+  // "first 3 files open" intent fresh. Past selections are intentionally
+  // discarded — the heuristic is more useful than memory here.
+  useEffect(() => {
+    setOpenSet(new Set(groups.slice(0, 3).map((g) => g.file)));
+  }, [groups]);
+
+  if (groups.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
+        {t("search.noFileHits")}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-border/40">
+      {groups.map((g) => {
+        const open = openSet.has(g.file);
+        return (
+          <li key={g.file}>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenSet((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(g.file)) next.delete(g.file);
+                  else next.add(g.file);
+                  return next;
+                });
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-accent/40",
+              )}
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                  !open && "-rotate-90",
+                )}
+              />
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-mono">{g.file}</span>
+              <span className="shrink-0 rounded bg-secondary px-1.5 text-[10.5px] text-foreground">
+                {g.commits.length}{" "}
+                {g.commits.length === 1 ? t("search.commitOne") : t("search.commitMany")}
+              </span>
+              <span className="shrink-0 rounded bg-secondary px-1.5 text-[10.5px] text-muted-foreground">
+                +/− {g.totalLines}
+              </span>
+            </button>
+            {open && (
+              <ul className="border-l-2 border-border/40 bg-background/60">
+                {g.commits.map((c) => (
+                  <FileCommitRow
+                    key={c.oid}
+                    commit={c}
+                    selected={c.oid === selectedOid}
+                    onClick={() => onPick(c.oid)}
+                  />
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function FileCommitRow({
+  commit,
+  selected,
+  onClick,
+}: {
+  commit: FileGroupCommit;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <li
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer px-6 py-1.5 text-[11.5px] hover:bg-accent/40",
+        selected && "bg-accent",
+      )}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[10.5px] text-muted-foreground">{commit.short_oid}</span>
+        <span className="min-w-0 flex-1 truncate text-foreground">{commit.summary}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo(commit.time)}</span>
+      </div>
+      <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+        {commit.author_name} · +/− {commit.lines.length}
       </div>
     </li>
   );
@@ -352,4 +631,108 @@ function DiffHitsList({ hits }: { hits: DiffHit[] }) {
       ))}
     </div>
   );
+}
+
+// ---------- Pop-overs ----------
+
+function RecentsPanel({
+  recents,
+  onPick,
+  onClear,
+  t,
+}: {
+  recents: SearchSnapshot[];
+  onPick: (snap: SearchSnapshot, runImmediately: boolean) => void;
+  onClear: () => void;
+  t: ReturnType<typeof useT>;
+}) {
+  return (
+    <div className="absolute right-0 top-full z-30 mt-1 w-[420px] overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+        <HistoryIcon className="h-3 w-3" />
+        <span>{t("search.recents")}</span>
+        <button
+          type="button"
+          onClick={onClear}
+          className="ml-auto rounded px-1 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {t("search.clearAll")}
+        </button>
+      </div>
+      <ul className="max-h-[280px] overflow-auto py-1">
+        {recents.map((r, i) => (
+          <li key={i}>
+            <button
+              type="button"
+              onClick={() => onPick(r, true)}
+              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-accent/40"
+              title={t("search.applyAndRun")}
+            >
+              <span className="min-w-0 flex-1 truncate font-mono">{r.query}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">
+                {modeBadge(r.mode)} · {r.patternKind === "regex" ? "regex" : "lit"}
+                {r.caseSensitive ? " · Aa" : ""}
+                {r.pathspec ? ` · ${r.pathspec}` : ""}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SavedPanel({
+  saved,
+  onApply,
+  onDelete,
+  t,
+}: {
+  saved: SavedSearch[];
+  onApply: (snap: SearchSnapshot) => void;
+  onDelete: (name: string) => void;
+  t: ReturnType<typeof useT>;
+}) {
+  return (
+    <div className="absolute right-0 top-full z-30 mt-1 w-[420px] overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+        <Star className="h-3 w-3" />
+        <span>{t("search.savedTitle")}</span>
+      </div>
+      {saved.length === 0 ? (
+        <div className="px-3 py-3 text-center text-[11px] text-muted-foreground">
+          {t("search.savedEmpty")}
+        </div>
+      ) : (
+        <ul className="max-h-[280px] overflow-auto py-1">
+          {saved.map((s) => (
+            <li key={s.name} className="group flex items-center gap-2 hover:bg-accent/40">
+              <button
+                type="button"
+                onClick={() => onApply(s)}
+                className="flex min-w-0 flex-1 items-baseline gap-2 px-3 py-1.5 text-left text-[12px]"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                <span className="shrink-0 truncate font-mono text-[10.5px] text-muted-foreground">
+                  "{s.query}"
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(s.name)}
+                title={t("search.delete")}
+                className="mr-2 hidden rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:block"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function modeBadge(m: SearchSnapshot["mode"]): string {
+  return m === "both" ? "msg+diff" : m;
 }

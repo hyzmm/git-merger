@@ -224,6 +224,24 @@ export const zh: Dict = {
   "search.openInHistory": "在 History 视图中打开该 commit",
   "search.open": "打开",
 
+  // Search v2 — 分组 / 最近 / 保存（v0.13.4）
+  "search.groupBy": "分组",
+  "search.groupBy.commit": "按 commit",
+  "search.groupBy.file": "按文件",
+  "search.foundFiles": "{files} 个文件 · {commits} 个 commit",
+  "search.noFileHits": "没有 diff 命中 — 仅 message 匹配的结果不会出现在文件视图。",
+  "search.commitOne": "commit",
+  "search.commitMany": "commit",
+  "search.recents": "最近搜索",
+  "search.applyAndRun": "点击应用并运行",
+  "search.clearAll": "全部清除",
+  "search.save": "保存",
+  "search.saveCurrentTitle": "把当前搜索条件起个名保存下来",
+  "search.savePrompt": "为这个搜索起个名字：",
+  "search.savedTitle": "已保存搜索",
+  "search.savedEmpty": "暂无已保存搜索 — 跑一次搜索后点 ★ 保存。",
+  "search.delete": "删除",
+
   // 仓库 tabs（多仓库工作区）
   "tabs.add": "新建 tab（Ctrl+T）",
   "tabs.close": "关闭 tab（Ctrl+W）",

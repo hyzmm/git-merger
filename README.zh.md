@@ -281,10 +281,21 @@ G:\GitTools
 
 5. ✅ **测试** — `tests/git_layer.rs` 新增 9 个后端集成测试：`working_file_read_returns_disk_contents` / `working_file_read_missing_marks_flag` / `working_file_read_rejects_path_traversal` / `working_file_read_rejects_binary` / `write_working_file_round_trips_through_disk` / `write_working_file_creates_missing_parent_dirs` / `write_working_file_refuses_path_traversal` / `read_head_file_returns_blob_at_head` / `read_head_file_marks_missing_when_file_not_in_head`。总计：后端 **72**（59 集成 + 13 单元，从 61），前端 **91**（不变）。
 
-### Backlog（v0.13.3 之后）
+### v0.13.4 — 已完成
+
+1. ✅ **Search v2 — 文件视图** — 搜索工具栏新增 **Group by** 切换，结果列表在 **Commit**（v0.11 旧布局，一行一个 commit）和 **File**（Find-in-Path 风格：每个文件出现一次，触及它的 commit 嵌套在下面）之间切换。文件视图按总 `+`/`-` 行命中数降序排（同分用文件名 alpha）—— "改得最多"的文件浮到顶部。仅 message 命中（没 diff 命中）的 commit 不会出现在文件视图——这个视图是内容驱动的。前 3 个文件组默认展开，其余折叠保持大结果集可扫。状态栏在此模式下显示 "{N} files · {M} commits" 而不是 "{N} hits"。
+
+2. ✅ **最近搜索 dropdown** — 查询框右侧新增时钟图标，弹出最近 12 条搜索历史，持久化到 localStorage 的 `gittools.search.recents`。最近列表用**结构化键**（mode + kind + case + path + query）去重——再跑同一组合不会产生重复行，只会把已有记录顶到头部。点击任一行 → 应用快照（mode/kind/case/path/query 全套）并立即重跑；**Clear all** 一键清空。
+
+3. ✅ **保存搜索** — 工具栏 **★ Save** 按钮弹窗输名字，把当前条件保存到 `gittools.search.saved`（cap 50 条）。配套 dropdown 列出全部保存项，点击应用并运行，hover 出 🗑️ 删除。同名保存幂等（原地替换 + 顶到头部）。空名字立即报错。
+
+4. ✅ **纯函数抽离 + 测试** — 聚合逻辑（`aggregateByFile` / `uniqueCommitCount`）落在 `src/lib/searchAggregate.ts`（8 个 bun:test：排序、tie、message-only 排除、同 commit 多行、dedup），持久化逻辑（`pushRecent` / `upsertSaved` / `removeSaved` / `snapshotKey` + safe-JSON load/save round-trip）落在 `src/lib/searchPersist.ts`（14 个 bun:test）。两个都是纯函数 —— UI 只做粘合 —— 所以 dedup / cap / sort 行为是孤立测的，不依赖 React 端到端。总计：后端 **72**（不变）；前端 **113**（从 91）。
+
+5. ✅ **Store + i18n** — SearchView slice 新增 `groupBy` / `recents` / `saved` 字段，store 创建时从 localStorage 水合，每次成功 `runSearch` / `saveCurrentSearch` / `deleteSavedSearch` / `clearSearchRecents` 都重新写回。`clearSearch` 现在也保留持久化的副状态（旧版本就保留 mode/kind/case 了）。新增 19 个 `search.*` i18n key，en / zh 双语补齐。
+
+### Backlog（v0.13.4 之后）
 
 - ⏳ 代码签名（Windows EV cert / macOS notarization），让安装包不再触发 SmartScreen / Gatekeeper 警告。
-- ⏳ Search v2：结构化结果（按文件聚合）、保存搜索、最近查询历史。
 - ⏳ Tabs v2：跨进程持久化、tab 拖拽排序、tab 钉选。
 
 ## 跨平台注意

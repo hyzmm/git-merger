@@ -397,6 +397,12 @@ bun run tauri:build
 3. 查所有提到 issue #42 的 commit → mode=Message、pattern=`#42`
 4. 查找硬编码的 IP 地址 → mode=Diff、kind=Regex、pattern=`\b(?:\d{1,3}\.){3}\d{1,3}\b`
 
+**v0.13.4 新增**：
+
+- **Group by**（工具栏切换）：**Commit** = 一行一个命中（旧版本布局）；**File** = Find-in-Path 风格，每个文件一次显示，触及它的 commit 嵌套展开。文件按总命中行数降序，前 3 个默认展开。仅 message 命中（无 diff 命中）的 commit 在文件视图里**不出现**——文件视图是内容驱动的。
+- **最近搜索**（输入框右侧时钟图标）：保留最近 12 条结构化去重的搜索（mode + kind + case + path + query 任一不同就视为新条目）。点击即应用并立即重跑。
+- **★ Save**（保存当前搜索）：起个名字保存当前的全套条件（query/mode/kind/case/path），下次一键复用。同名保存直接替换。所有保存项 + 最近搜索都持久化到 localStorage，跨会话保留。
+
 ---
 
 ## 四、Topbar 与远程操作
@@ -918,6 +924,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.1 | 结构化错误处理：后端 `AppError`（10 种 kind 自动从 `git2::Error` 推断）+ 前端 toast 队列（`useToasts` + `ToastContainer`）+ 全局 `unhandledrejection` 兜底；Topbar 远程操作 banner 区分 NonFastForward / Auth                                      |
 | v0.13.2 | Release 流水线签名密钥治理：新增 `signing-preflight` job（缺 secret 即失败）+ `scripts/check-signing-key.ts`（pubkey ↔ privkey 指纹比对）+ `publish-latest-json` job（聚合 .sig 生成 updater 索引）；README 新增"配置自动更新签名密钥"章节         |
 | v0.13.3 | 双向 Diff 编辑：Side-by-side 模式下查看工作树文件可点击 Edit 切换右侧为可编辑 textarea，HEAD 参考保持只读，Save 原子写回 + 自动重算 diff，dirty 徽章实时提示；后端 `read/write/head_working_file` 三命令带 path-traversal / binary / 8 MB 上限保护 |
+| v0.13.4 | Search v2：Group-by 切换（commit / 文件视图）、最近 12 条查询 dropdown（结构化去重）、★ 保存搜索（命名 + 持久化到 localStorage）；纯函数 `searchAggregate` + `searchPersist` 各带 8 / 14 个 bun:test                                               |
 
 ---
 

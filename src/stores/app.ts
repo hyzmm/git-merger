@@ -34,6 +34,17 @@ import {
   type Resolution,
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
+import {
+  loadRecents as loadSearchRecents,
+  loadSaved as loadSearchSaved,
+  pushRecent as pushSearchRecent,
+  removeSaved as removeSearchSaved,
+  saveRecents as saveSearchRecents,
+  saveSaved as saveSearchSaved,
+  upsertSaved as upsertSearchSaved,
+  type SavedSearch,
+  type SearchSnapshot,
+} from "@/lib/searchPersist";
 
 export type ViewKey =
   | "history"
@@ -218,6 +229,16 @@ interface SearchView {
   /** Echo of the query that produced the current `hits`. */
   appliedQuery: string;
   error: string | null;
+  /**
+   * v0.13.4 — how the result list should be rendered.
+   * - "commit": one row per commit (legacy v0.11 layout).
+   * - "file":   commits rolled up by file path (Find-in-Path style).
+   */
+  groupBy: "commit" | "file";
+  /** Most-recent search snapshots, head = most recent. Persisted to localStorage. */
+  recents: SearchSnapshot[];
+  /** User-named saved searches. Persisted to localStorage. */
+  saved: SavedSearch[];
 }
 
 interface RebaseView {
@@ -408,6 +429,16 @@ interface AppState {
   selectSearchHit: (oid: string | null) => void;
   runSearch: () => Promise<void>;
   clearSearch: () => void;
+  /** v0.13.4: switch the result rendering mode. */
+  setSearchGroupBy: (g: "commit" | "file") => void;
+  /** Apply a stored snapshot (recents row click or saved-search load). */
+  applySearchSnapshot: (s: SearchSnapshot) => void;
+  /** Persist the current search axes under a user-given name. */
+  saveCurrentSearch: (name: string) => void;
+  /** Drop a saved search by name. */
+  deleteSavedSearch: (name: string) => void;
+  /** Wipe the recent-queries list (does NOT touch saved searches). */
+  clearSearchRecents: () => void;
 
   // interactive rebase
   openRebasePlan: (baseOid: string) => Promise<void>;
@@ -569,6 +600,12 @@ const emptySearch: SearchView = {
   busy: false,
   appliedQuery: "",
   error: null,
+  groupBy: "commit",
+  // Recents + saved are seeded from localStorage on store creation; tabs that
+  // copy this template after the fact will pick the latest live values via
+  // `mergeSearchPersisted` below instead of these placeholders.
+  recents: [],
+  saved: [],
 };
 
 const emptyRebase: RebaseView = {
@@ -706,7 +743,16 @@ export const useApp = create<AppState>((set, get) => ({
   fileHistory: { ...emptyFileHistory },
   worktrees: { ...emptyWorktrees },
   gitignore: { ...emptyGitignore },
-  search: { ...emptySearch },
+  search: {
+    ...emptySearch,
+    // v0.13.4: hydrate persisted recent + saved lists once at store
+    // creation. Each tab inherits a snapshot of these on switch via
+    // `snapshotSession` — but the **live** lists are mutated through
+    // `useApp.getState().search.{recents,saved}` so persistence remains
+    // single-sourced no matter which tab is active.
+    recents: loadSearchRecents(),
+    saved: loadSearchSaved(),
+  },
 
   recentRepos: loadRecent(),
 
@@ -2140,6 +2186,11 @@ export const useApp = create<AppState>((set, get) => ({
         patternKind: s.search.patternKind,
         caseSensitive: s.search.caseSensitive,
         pathspec: s.search.pathspec,
+        // v0.13.4: persisted side-state survives a clear too — these are
+        // session-level, not "this query"-level.
+        groupBy: s.search.groupBy,
+        recents: s.search.recents,
+        saved: s.search.saved,
       },
     })),
 
@@ -2170,23 +2221,85 @@ export const useApp = create<AppState>((set, get) => ({
         caseSensitive: sv.caseSensitive,
         pathspec: sv.pathspec.trim() || undefined,
       });
-      set((s) => ({
-        search: {
-          ...s.search,
-          hits: summary.hits,
-          scanned: summary.scanned,
-          truncated: summary.truncated,
-          appliedQuery: query,
-          busy: false,
-          // Auto-select the first hit so the preview pane has something to show.
-          selectedOid: summary.hits[0]?.oid ?? null,
-        },
-      }));
+      set((s) => {
+        const snapshot: SearchSnapshot = {
+          query,
+          mode: sv.mode,
+          patternKind: sv.patternKind,
+          caseSensitive: sv.caseSensitive,
+          pathspec: sv.pathspec,
+        };
+        const recents = pushSearchRecent(s.search.recents, snapshot);
+        saveSearchRecents(recents);
+        return {
+          search: {
+            ...s.search,
+            hits: summary.hits,
+            scanned: summary.scanned,
+            truncated: summary.truncated,
+            appliedQuery: query,
+            busy: false,
+            // Auto-select the first hit so the preview pane has something to show.
+            selectedOid: summary.hits[0]?.oid ?? null,
+            recents,
+          },
+        };
+      });
     } catch (e) {
       set((s) => ({
         search: { ...s.search, busy: false, error: String(e), hits: [] },
       }));
     }
+  },
+
+  setSearchGroupBy: (g) => set((s) => ({ search: { ...s.search, groupBy: g } })),
+
+  applySearchSnapshot: (snap) =>
+    set((s) => ({
+      search: {
+        ...s.search,
+        query: snap.query,
+        mode: snap.mode,
+        patternKind: snap.patternKind,
+        caseSensitive: snap.caseSensitive,
+        pathspec: snap.pathspec,
+        // Don't auto-run — just populate the form. Call sites that want
+        // to immediately fire the search can `void runSearch()` afterwards.
+      },
+    })),
+
+  saveCurrentSearch: (name) => {
+    const sv = get().search;
+    const entry: SavedSearch = {
+      name,
+      query: sv.query,
+      mode: sv.mode,
+      patternKind: sv.patternKind,
+      caseSensitive: sv.caseSensitive,
+      pathspec: sv.pathspec,
+      savedAt: Date.now(),
+    };
+    let nextSaved: SavedSearch[] = [];
+    try {
+      nextSaved = upsertSearchSaved(sv.saved, entry);
+    } catch (err) {
+      // Empty name etc. — surface to the user via the slice's error field.
+      set((s) => ({ search: { ...s.search, error: String(err) } }));
+      return;
+    }
+    saveSearchSaved(nextSaved);
+    set((s) => ({ search: { ...s.search, saved: nextSaved, error: null } }));
+  },
+
+  deleteSavedSearch: (name) => {
+    const next = removeSearchSaved(get().search.saved, name);
+    saveSearchSaved(next);
+    set((s) => ({ search: { ...s.search, saved: next } }));
+  },
+
+  clearSearchRecents: () => {
+    saveSearchRecents([]);
+    set((s) => ({ search: { ...s.search, recents: [] } }));
   },
 
   // ---------- Interactive Rebase ----------

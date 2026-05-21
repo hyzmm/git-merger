@@ -281,10 +281,21 @@ G:\GitTools
 
 5. ✅ **Tests** — 9 new backend integration tests in `tests/git_layer.rs`: `working_file_read_returns_disk_contents` / `working_file_read_missing_marks_flag` / `working_file_read_rejects_path_traversal` / `working_file_read_rejects_binary` / `write_working_file_round_trips_through_disk` / `write_working_file_creates_missing_parent_dirs` / `write_working_file_refuses_path_traversal` / `read_head_file_returns_blob_at_head` / `read_head_file_marks_missing_when_file_not_in_head`. Totals: backend **72** (50 → 59 integration; 11 → 13 unit), frontend **91** (unchanged).
 
-### Backlog (post-v0.13.3)
+### v0.13.4 — Shipped
+
+1. ✅ **Search v2 — file rollup** — A new **Group by** toggle on the Search toolbar swaps the result list between two layouts: **Commit** (legacy v0.11 — one row per matching commit) and **File** (Find-in-Path style: every file appears once with its touching commits nested underneath). The file rollup is sorted by total `+`/`-` line hits (desc, then alphabetical for ties) so the "most-touched" file lands at the top. Files with only message-matches (no diff hits) are intentionally excluded — the file view is content-driven. The first 3 file groups auto-expand by default; everything else is collapsed to keep big result sets scannable. Status bar updates to show "{N} files · {M} commits" in this mode instead of "{N} hits".
+
+2. ✅ **Recent searches dropdown** — The query input gains a clock icon that opens a 12-deep history of past searches, persisted to `localStorage` under `gittools.search.recents`. Recents are deduped on a structural key (mode + kind + case + path + query), so re-running an identical search just bumps the existing entry to the top instead of creating duplicates. Click any row → applies the snapshot's full state (mode/kind/case/path/query) AND immediately re-runs the search; **Clear all** wipes the list.
+
+3. ✅ **Saved searches** — A **★ Save** button on the toolbar prompts for a name and persists the current axes under `gittools.search.saved` (capped at 50). The companion dropdown lists every saved search; clicking a row applies + runs it, hovering reveals a 🗑️ delete affordance. Saving with an existing name is idempotent (replaces in place + bumps to the head of the list). Empty names are rejected with an inline error.
+
+4. ✅ **Pure-helper extraction + tests** — Aggregation logic (`aggregateByFile` / `uniqueCommitCount`) lives in `src/lib/searchAggregate.ts` (8 bun:test cases: ordering, ties, message-only exclusion, single-commit-multiple-lines, dedup), and persistence logic (`pushRecent` / `upsertSaved` / `removeSaved` / `snapshotKey` / load+save round-trips with safe-JSON guards) lives in `src/lib/searchPersist.ts` (14 bun:test cases). Both are pure functions — UI is just glue — so the dedupe / cap / sort behaviour is tested in isolation rather than e2e through React. Totals: backend **72** (unchanged); frontend **113** (up from 91).
+
+5. ✅ **Store + i18n** — New `groupBy` / `recents` / `saved` fields on the SearchView slice, hydrated from localStorage at store creation and re-saved on every successful `runSearch` / `saveCurrentSearch` / `deleteSavedSearch` / `clearSearchRecents`. `clearSearch` now preserves the persisted side-state too (legacy clear was already preserving mode/kind/case). 19 new `search.*` i18n keys mirrored in `en` and `zh`.
+
+### Backlog (post-v0.13.4)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Search v2: structured results (per-file aggregation), saved searches, recent-query history.
 - ⏳ Tabs v2: cross-process persistence, drag-to-reorder, pinned tabs.
 
 ## Cross-platform notes

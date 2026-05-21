@@ -398,6 +398,12 @@ Other toolbar items:
 3. List every commit referencing issue #42 → mode=Message, pattern=`#42`
 4. Hunt hard-coded IPs → mode=Diff, kind=Regex, pattern=`\b(?:\d{1,3}\.){3}\d{1,3}\b`
 
+**New in v0.13.4**:
+
+- **Group by** (toolbar toggle): **Commit** = one row per matching commit (legacy layout); **File** = Find-in-Path style — each file appears once with its touching commits nested underneath. Files are sorted by total `+`/`-` line count (desc), and the first 3 file groups auto-expand. Commits with only message-matches (no diff hits) are intentionally **not** shown in the file rollup — that view is content-driven.
+- **Recent searches** (clock icon on the right of the query input): keeps the 12 most recent searches, deduped on a structural key (mode + kind + case + path + query — any axis change → new entry). Click any row to apply and immediately re-run.
+- **★ Save** (save the current search): name it and the full axes (query / mode / kind / case / path) are persisted under that name. Same name overwrites the existing entry. Both saved searches and recents persist to `localStorage`, so they survive across app sessions.
+
 ---
 
 ## 4. Topbar & remote ops
@@ -927,6 +933,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.1 | Structured error handling: backend `AppError` (10-kind tagged enum auto-derived from `git2::Error`) + frontend toast queue (`useToasts` + `ToastContainer`) + global `unhandledrejection` safety net; Topbar banner now distinguishes NonFastForward / Auth                                                                                                           |
 | v0.13.2 | Release-pipeline signing-key governance: new `signing-preflight` job (fails fast when the secret is missing) + `scripts/check-signing-key.ts` (pubkey ↔ privkey fingerprint check) + `publish-latest-json` job (aggregates `.sig`s into the updater index); README gains a "Configuring updater signing keys" section                                                 |
 | v0.13.3 | Bidirectional Diff editor: Side-by-side mode on a working-tree file gains an Edit toggle that turns the right pane into a live textarea while the left pane stays a read-only HEAD reference; Save atomically writes back and refreshes the underlying diff; backend `read/write_working_file` + `read_head_file` ship with path-traversal / binary / 8 MB safeguards |
+| v0.13.4 | Search v2: Group-by toggle (commit / file rollup), recent-12 queries dropdown (structurally deduped), ★ Save (named, localStorage-backed); pure helpers `searchAggregate` + `searchPersist` shipped with 8 / 14 bun:test cases respectively                                                                                                                           |
 
 ---
 
