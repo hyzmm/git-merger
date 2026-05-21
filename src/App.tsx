@@ -16,6 +16,7 @@ import { SubmodulesPage } from "@/pages/SubmodulesPage";
 import { RebasePage } from "@/pages/RebasePage";
 import { FileHistoryPage } from "@/pages/FileHistoryPage";
 import { WorktreesPage } from "@/pages/WorktreesPage";
+import { GitignorePage } from "@/pages/GitignorePage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -46,6 +47,7 @@ export default function App() {
       "ctrl+7": () => repo && setView("merge"),
       "ctrl+8": () => repo && setView("rebase"),
       "ctrl+9": () => repo && setView("worktrees"),
+      "ctrl+0": () => repo && setView("gitignore"),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
       "ctrl+o": async () => {
@@ -89,6 +91,8 @@ export default function App() {
             <RebasePage />
           ) : view === "worktrees" ? (
             <WorktreesPage />
+          ) : view === "gitignore" ? (
+            <GitignorePage />
           ) : view === "fileHistory" ? (
             <FileHistoryPage />
           ) : (

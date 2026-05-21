@@ -417,3 +417,26 @@ pub fn worktree_remove(path: String, name: String, force: bool) -> R<()> {
 pub fn worktree_prune(path: String) -> R<Vec<String>> {
     Ok(git::worktree::prune(&path)?)
 }
+
+// ---------- .gitignore editor ----------
+
+#[tauri::command]
+pub fn gitignore_read(path: String) -> R<String> {
+    Ok(git::gitignore::read(&path)?)
+}
+
+#[tauri::command]
+pub fn gitignore_write(path: String, contents: String) -> R<()> {
+    git::gitignore::write(&path, &contents)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn gitignore_preview(path: String, candidate: String) -> R<git::IgnorePreview> {
+    Ok(git::gitignore::preview(&path, &candidate)?)
+}
+
+#[tauri::command]
+pub fn gitignore_templates() -> R<Vec<git::GitignoreTemplate>> {
+    Ok(git::gitignore::templates())
+}

@@ -217,6 +217,21 @@ export interface WorktreeInfo {
   is_prunable: boolean;
 }
 
+export interface GitignoreTemplate {
+  id: string;
+  label: string;
+  content: string;
+}
+
+export interface IgnorePreview {
+  /** Total tracked + untracked + ignored paths scanned. */
+  scanned: number;
+  /** Paths that the candidate text starts ignoring (not previously ignored). */
+  newly_ignored: string[];
+  /** Paths that switch from ignored → not ignored under the candidate text. */
+  no_longer_ignored: string[];
+}
+
 // ---------- Interactive Rebase ----------
 
 export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
@@ -355,4 +370,10 @@ export const git = {
   worktreeRemove: (path: string, name: string, force = false) =>
     invoke<void>("worktree_remove", { path, name, force }),
   worktreePrune: (path: string) => invoke<string[]>("worktree_prune", { path }),
+  gitignoreRead: (path: string) => invoke<string>("gitignore_read", { path }),
+  gitignoreWrite: (path: string, contents: string) =>
+    invoke<void>("gitignore_write", { path, contents }),
+  gitignorePreview: (path: string, candidate: string) =>
+    invoke<IgnorePreview>("gitignore_preview", { path, candidate }),
+  gitignoreTemplates: () => invoke<GitignoreTemplate[]>("gitignore_templates"),
 };

@@ -11,6 +11,7 @@ export const en = {
   "sidebar.submodules": "Submodules",
   "sidebar.rebase": "Interactive Rebase",
   "sidebar.worktrees": "Worktrees",
+  "sidebar.gitignore": ".gitignore editor",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
 
@@ -169,6 +170,29 @@ export const en = {
     "Existing local branch to check out (leave empty to create a new branch)",
   "worktrees.cancel": "Cancel",
   "worktrees.create": "Create worktree",
+
+  // .gitignore editor
+  "gitignore.loading": "loading...",
+  "gitignore.working": "working...",
+  "gitignore.unsaved": "unsaved",
+  "gitignore.preview": "Preview",
+  "gitignore.previewTitle": "Compute which working-tree paths the candidate text would (un)ignore",
+  "gitignore.reset": "Reset",
+  "gitignore.resetTitle": "Discard unsaved edits and revert to the on-disk .gitignore",
+  "gitignore.save": "Save",
+  "gitignore.saveTitle": "Write the editor contents to <repo>/.gitignore",
+  "gitignore.templates": "Templates",
+  "gitignore.appendTitle": "Append the {name} template to the editor",
+  "gitignore.placeholder":
+    "# .gitignore — one pattern per line.\n# Pick a template on the left or paste your own rules here.\n",
+  "gitignore.lines": "lines",
+  "gitignore.chars": "chars",
+  "gitignore.previewPanel": "Preview",
+  "gitignore.previewHint": "Click Preview above to see which working-tree paths would change.",
+  "gitignore.scanned": "Scanned",
+  "gitignore.noChange": "No working-tree paths would change.",
+  "gitignore.newlyIgnored": "newly ignored",
+  "gitignore.noLongerIgnored": "no longer ignored",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

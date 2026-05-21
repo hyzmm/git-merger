@@ -9,6 +9,7 @@ export const zh: Dict = {
   "sidebar.submodules": "子模块",
   "sidebar.rebase": "交互式 Rebase",
   "sidebar.worktrees": "工作树",
+  "sidebar.gitignore": ".gitignore 编辑器",
   "sidebar.diff": "Diff",
   "sidebar.merge": "合并",
 
@@ -162,4 +163,27 @@ export const zh: Dict = {
   "worktrees.formBranchPh": "要 checkout 的现有本地分支（留空则新建分支）",
   "worktrees.cancel": "取消",
   "worktrees.create": "创建工作树",
+
+  // .gitignore 编辑器
+  "gitignore.loading": "加载中...",
+  "gitignore.working": "处理中...",
+  "gitignore.unsaved": "未保存",
+  "gitignore.preview": "预览",
+  "gitignore.previewTitle": "计算当前规则会让工作目录里哪些文件被新增/取消忽略",
+  "gitignore.reset": "重置",
+  "gitignore.resetTitle": "丢弃未保存的修改，恢复到磁盘上的 .gitignore",
+  "gitignore.save": "保存",
+  "gitignore.saveTitle": "把编辑器内容写入 <仓库根>/.gitignore",
+  "gitignore.templates": "模板",
+  "gitignore.appendTitle": "把 {name} 模板追加到编辑器",
+  "gitignore.placeholder":
+    "# .gitignore — 每行一条规则。\n# 可从左侧选择模板，或直接粘贴你的规则。\n",
+  "gitignore.lines": "行",
+  "gitignore.chars": "字符",
+  "gitignore.previewPanel": "预览",
+  "gitignore.previewHint": "点击上方「预览」按钮，查看会影响哪些工作目录文件。",
+  "gitignore.scanned": "已扫描",
+  "gitignore.noChange": "没有工作目录文件会受影响。",
+  "gitignore.newlyIgnored": "新增忽略",
+  "gitignore.noLongerIgnored": "不再忽略",
 };

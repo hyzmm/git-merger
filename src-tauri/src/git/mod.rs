@@ -5,6 +5,7 @@ pub mod commit_ops;
 pub mod config;
 pub mod diff;
 pub mod file_history;
+pub mod gitignore;
 pub mod log;
 pub mod merge;
 pub mod rebase;
@@ -20,6 +21,7 @@ pub mod worktree;
 
 pub use blame::{BlameLine, PrevFile};
 pub use file_history::FileHistoryEntry;
+pub use gitignore::{GitignoreTemplate, IgnorePreview};
 pub use merge::{ConflictContent, MergeState};
 pub use rebase::{RebaseStatus, RebaseStep};
 pub use reflog::ReflogEntry;

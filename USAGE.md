@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.10.0  
+> 适用版本：v0.10.1  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -24,6 +24,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.9 Interactive Rebase](#39-interactive-rebase)
   - [3.10 File History（单文件时间线 + 跟随重命名）](#310-file-history单文件时间线--跟随重命名)
   - [3.11 Worktrees（多工作树）](#311-worktrees多工作树)
+  - [3.12 .gitignore 编辑器](#312-gitignore-编辑器)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
@@ -83,7 +84,7 @@ bun run tauri:build
 
 ## 三、视图速览
 
-左侧 Sidebar 共 **9 个视图图标**，对应快捷键 `Ctrl+1..9`：
+左侧 Sidebar 共 **10 个视图图标**，对应快捷键 `Ctrl+1..9` 与 `Ctrl+0`：
 
 | Sidebar 顺序 | 快捷键   | 视图               |
 | ------------ | -------- | ------------------ |
@@ -94,8 +95,9 @@ bun run tauri:build
 | 5            | `Ctrl+5` | Submodules         |
 | 6            | `Ctrl+8` | Interactive Rebase |
 | 7            | `Ctrl+9` | Worktrees          |
-| 8            | `Ctrl+6` | Diff               |
-| 9            | `Ctrl+7` | Merge              |
+| 8            | `Ctrl+0` | .gitignore 编辑器  |
+| 9            | `Ctrl+6` | Diff               |
+| 10           | `Ctrl+7` | Merge              |
 
 > Blame 没有独立 sidebar 入口，从 Diff 工具栏的 **Blame** 按钮进入。
 
@@ -316,6 +318,33 @@ bun run tauri:build
 
 后端通过 libgit2 `git_worktree_*` 接口实现，没有 fork system git。所有 4 个操作都覆盖了 `cargo test --test git_layer` 集成测试。
 
+### 3.12 .gitignore 编辑器
+
+按 `Ctrl+0`。**仓库根 `.gitignore` 的可视化编辑器**，三栏布局：
+
+| 栏位          | 作用                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------- |
+| **左 模板**   | 8 个内置 starter（Node / Rust / Python / Go / macOS / Windows / JetBrains / VS Code），点击即追加到当前内容 |
+| **中 编辑器** | 大 textarea，等宽字体；底部状态栏显示行数 / 字符数；右上 toolbar 含 Preview / Reset / Save                  |
+| **右 预览**   | 点击 Preview 后展示这份候选文本相对磁盘版本的差异                                                           |
+
+**"未保存"提示**：编辑器内容与磁盘不同步时，标题栏出现橙色 `unsaved` 徽章。
+
+**Preview** 是这个编辑器的核心特性 —— 不需要 Save 就能告诉你：
+
+- ⚠️ **Newly ignored**（橙色 ＋）：候选规则会让哪些工作目录文件**新被忽略**。**Tracked 文件不会因为加规则而停止追踪**——若列出来意味着可能需要后续 `git rm --cached`
+- ✅ **No longer ignored**（绿色 −）：候选规则比磁盘版本宽松，哪些之前被忽略的路径会变成不再忽略
+
+实现细节：后端先用 `Repository::statuses(include_ignored=true)` 收集所有 tracked / untracked / ignored 路径，做 baseline 快照；然后**临时把磁盘 `.gitignore` 重命名为 `.gitignore.gittools-preview-bak`**，开新 `Repository` handle、用 `add_ignore_rule(candidate)` 注入候选文本作为唯一规则源，再次调 `is_path_ignored` 算 candidate 状态；用 RAII 守护保证文件总是恢复（即便 panic）。整个窗口几毫秒。
+
+**Save** 写入 `<repo>/.gitignore`（原子 rename），并自动刷新 Changes 视图，避免你看到过时的 untracked 列表。
+
+**典型用例**：
+
+1. 新仓库初始化 → 选 Node + macOS 模板 → Save
+2. 想把 `dist/` 加进忽略 → 输入 `dist/` → Preview 显示哪些文件会被新忽略 → 确认无误后 Save
+3. 临时取消某条规则做实验 → 删除规则行 → Preview 看不再忽略的列表 → 不满意点 Reset 一键还原
+
 ---
 
 ## 四、Topbar 与远程操作
@@ -444,6 +473,7 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+7`            | Merge                                 | 全局  |
 | `Ctrl+8`            | Interactive Rebase                    | 全局  |
 | `Ctrl+9`            | Worktrees                             | 全局  |
+| `Ctrl+0`            | .gitignore 编辑器                     | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
@@ -762,6 +792,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                             |
 | v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键 |
 | v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键             |
+| v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口             |
 
 ---
 

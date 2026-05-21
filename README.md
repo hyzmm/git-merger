@@ -157,7 +157,15 @@ G:\GitTools
 
 1. ✅ **Worktrees view** — Full `git worktree` lifecycle UI implemented natively on top of libgit2's `git_worktree_*` C API (no fork-and-exec to system git). Backend module `git/worktree.rs` exposes 4 functions: `list` (returns the main checkout plus every linked worktree, each with branch / HEAD oid / `is_locked` / `is_prunable`), `add` (with optional existing-branch attachment via `WorktreeAddOptions::reference`), `remove` (configurable force flag toggling `WorktreePruneOptions::valid + working_tree`), and `prune` (sweeps every dangling worktree whose working dir was nuked from disk). Frontend `WorktreesPage.tsx` shows the list with main pinned to the top with an accent background + half-opacity highlight, status badges (`main` / `locked` / `prunable`), an inline Add form with directory picker and optional branch chooser, and per-row Remove (clean) / Force-remove (with confirm) buttons. Sidebar grows to 9 entries with `Ctrl+9` global shortcut. New i18n keys: `sidebar.worktrees` + 19 `worktrees.*` keys mirrored in `en` and `zh`. Test surface: 3 new integration tests in `tests/git_layer.rs` covering `list_returns_main_only_for_fresh_repo`, `add_and_remove_round_trip`, and `prune_cleans_dangling_metadata`. Total backend tests now 17 (up from 14).
 
-### Backlog (post-v0.10.0)
+### v0.10.1 — Shipped
+
+1. ✅ **.gitignore editor view** — A three-column visual editor for the repository-root `.gitignore`. Backend `git/gitignore.rs` exposes `read` (returns empty string when the file is missing), `write` (atomic rename via a sibling `.gitignore.tmp`), `preview` (the centerpiece — see below), and `templates` (8 curated starter packs: Node / Rust / Python / Go / macOS / Windows / JetBrains / VS Code). Frontend `GitignorePage.tsx` lays out templates on the left (click to append), a monospace textarea in the middle with line / char counter and `unsaved` badge when dirty, and a preview panel on the right showing **newly-ignored** (orange `+`) and **no-longer-ignored** (green `−`) working-tree paths relative to disk. Sidebar grows to 10 entries (now wraps to two rows of 5 in the icon column on narrow displays); `Ctrl+0` opens the view.
+
+2. ✅ **Non-destructive ignore preview** — The preview command's interesting trick: to compare candidate text against the on-disk file without permanently modifying anything, we briefly rename `<workdir>/.gitignore` to `<workdir>/.gitignore.gittools-preview-bak`, open a _fresh_ `Repository` handle so libgit2 rebuilds its per-handle ignore cache, inject the candidate via `add_ignore_rule`, walk every path returned by `Repository::statuses(include_ignored=true)` and call `is_path_ignored` to compute the candidate ignore state, then a Drop guard renames the file back — even on panic. Window is single-digit milliseconds. Results are capped at 200 entries per side so the UI doesn't drown on huge monorepos.
+
+3. ✅ **Tests + i18n** — 5 new integration tests: `read_returns_empty_when_missing`, `write_then_read_round_trips`, `preview_marks_newly_ignored_path`, `preview_marks_no_longer_ignored_when_rule_removed`, `templates_are_well_formed`. Total backend now 22 (up from 17). 22 `gitignore.*` i18n keys mirrored in `en` and `zh`.
+
+### Backlog (post-v0.10.1)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

@@ -19,6 +19,8 @@ import {
   type SubmoduleInfo,
   type WorkingFile,
   type WorktreeInfo,
+  type GitignoreTemplate,
+  type IgnorePreview,
 } from "@/ipc/git";
 import {
   joinChunks,
@@ -41,6 +43,7 @@ export type ViewKey =
   | "submodules"
   | "rebase"
   | "worktrees"
+  | "gitignore"
   | "fileHistory";
 export type DiffMode = "sbs" | "unified";
 
@@ -144,6 +147,20 @@ interface WorktreesView {
   error: string | null;
 }
 
+interface GitignoreView {
+  /** Saved-on-disk content of repository root .gitignore (initial load). */
+  saved: string;
+  /** Live editor buffer (may be ahead of `saved`). */
+  draft: string;
+  templates: GitignoreTemplate[];
+  preview: IgnorePreview | null;
+  loading: boolean;
+  /** Saving / previewing / template-loading. */
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+}
+
 interface RebaseView {
   /** Drafted plan before `start` is invoked. Empty when no plan is open. */
   plan: RebaseStep[];
@@ -196,6 +213,7 @@ interface AppState {
   palette: PaletteState;
   fileHistory: FileHistoryView;
   worktrees: WorktreesView;
+  gitignore: GitignoreView;
 
   recentRepos: RecentRepo[];
 
@@ -286,6 +304,13 @@ interface AppState {
   addWorktree: (name: string, targetPath: string, branch?: string) => Promise<void>;
   removeWorktree: (name: string, force?: boolean) => Promise<void>;
   pruneWorktrees: () => Promise<void>;
+
+  // gitignore
+  loadGitignore: () => Promise<void>;
+  setGitignoreDraft: (text: string) => void;
+  saveGitignore: () => Promise<void>;
+  previewGitignore: () => Promise<void>;
+  appendGitignoreTemplate: (id: string) => void;
 
   // interactive rebase
   openRebasePlan: (baseOid: string) => Promise<void>;
@@ -396,6 +421,17 @@ const emptyWorktrees: WorktreesView = {
   error: null,
 };
 
+const emptyGitignore: GitignoreView = {
+  saved: "",
+  draft: "",
+  templates: [],
+  preview: null,
+  loading: false,
+  busy: false,
+  status: null,
+  error: null,
+};
+
 const emptyRebase: RebaseView = {
   plan: [],
   baseOid: null,
@@ -439,6 +475,7 @@ export const useApp = create<AppState>((set, get) => ({
   palette: { ...emptyPalette },
   fileHistory: { ...emptyFileHistory },
   worktrees: { ...emptyWorktrees },
+  gitignore: { ...emptyGitignore },
 
   recentRepos: loadRecent(),
 
@@ -451,6 +488,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "submodules") void get().loadSubmodules();
     if (v === "rebase") void get().refreshRebaseStatus();
     if (v === "worktrees") void get().loadWorktrees();
+    if (v === "gitignore") void get().loadGitignore();
   },
 
   openRepo: async (path) => {
@@ -472,6 +510,7 @@ export const useApp = create<AppState>((set, get) => ({
         palette: { ...emptyPalette },
         fileHistory: { ...emptyFileHistory },
         worktrees: { ...emptyWorktrees },
+        gitignore: { ...emptyGitignore },
       });
       void get().loadHistory();
       void get().refreshRebaseStatus();
@@ -494,6 +533,7 @@ export const useApp = create<AppState>((set, get) => ({
       palette: { ...emptyPalette },
       fileHistory: { ...emptyFileHistory },
       worktrees: { ...emptyWorktrees },
+      gitignore: { ...emptyGitignore },
     }),
 
   refresh: async () => {
@@ -517,6 +557,8 @@ export const useApp = create<AppState>((set, get) => ({
       await get().loadSubmodules();
     } else if (view === "worktrees") {
       await get().loadWorktrees();
+    } else if (view === "gitignore") {
+      await get().loadGitignore();
     }
   },
 
@@ -1317,6 +1359,90 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({ worktrees: { ...s.worktrees, busy: false, error: String(e) } }));
     }
   },
+
+  // ---------- .gitignore editor ----------
+  loadGitignore: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ gitignore: { ...s.gitignore, loading: true, error: null } }));
+    try {
+      const [saved, templates] = await Promise.all([
+        git.gitignoreRead(repo.path),
+        git.gitignoreTemplates(),
+      ]);
+      set((s) => ({
+        gitignore: {
+          ...s.gitignore,
+          saved,
+          // Only overwrite the draft when it had no unsaved edits, so a
+          // user who re-enters the view after typing keeps their work.
+          draft:
+            s.gitignore.draft && s.gitignore.draft !== s.gitignore.saved
+              ? s.gitignore.draft
+              : saved,
+          templates,
+          loading: false,
+          preview: null,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({ gitignore: { ...s.gitignore, loading: false, error: String(e) } }));
+    }
+  },
+
+  setGitignoreDraft: (text) =>
+    set((s) => ({
+      gitignore: { ...s.gitignore, draft: text, status: null, preview: null },
+    })),
+
+  saveGitignore: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const draft = get().gitignore.draft;
+    set((s) => ({ gitignore: { ...s.gitignore, busy: true, status: null, error: null } }));
+    try {
+      await git.gitignoreWrite(repo.path, draft);
+      set((s) => ({
+        gitignore: { ...s.gitignore, busy: false, saved: draft, status: "Saved" },
+      }));
+      // After saving, refresh working-tree status so Changes view picks
+      // up newly ignored / un-ignored files.
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({ gitignore: { ...s.gitignore, busy: false, error: String(e) } }));
+    }
+  },
+
+  previewGitignore: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const draft = get().gitignore.draft;
+    set((s) => ({
+      gitignore: { ...s.gitignore, busy: true, status: null, error: null },
+    }));
+    try {
+      const preview = await git.gitignorePreview(repo.path, draft);
+      set((s) => ({ gitignore: { ...s.gitignore, busy: false, preview } }));
+    } catch (e) {
+      set((s) => ({ gitignore: { ...s.gitignore, busy: false, error: String(e) } }));
+    }
+  },
+
+  appendGitignoreTemplate: (id) =>
+    set((s) => {
+      const tpl = s.gitignore.templates.find((t) => t.id === id);
+      if (!tpl) return s;
+      const sep = s.gitignore.draft.length > 0 && !s.gitignore.draft.endsWith("\n") ? "\n\n" : "\n";
+      const merged = s.gitignore.draft + (s.gitignore.draft ? sep : "") + tpl.content;
+      return {
+        gitignore: {
+          ...s.gitignore,
+          draft: merged,
+          status: `Appended ${tpl.label}`,
+          preview: null,
+        },
+      };
+    }),
 
   // ---------- Interactive Rebase ----------
   openRebasePlan: async (baseOid: string) => {

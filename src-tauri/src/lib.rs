@@ -67,6 +67,10 @@ pub fn run() {
             commands::worktree_add,
             commands::worktree_remove,
             commands::worktree_prune,
+            commands::gitignore_read,
+            commands::gitignore_write,
+            commands::gitignore_preview,
+            commands::gitignore_templates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

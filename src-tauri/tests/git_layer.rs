@@ -388,3 +388,86 @@ fn worktree_prune_cleans_dangling_metadata() {
     assert_eq!(wts_after.len(), 1);
     assert!(wts_after[0].is_main);
 }
+
+// ---------------------------------------------------------------------------
+// gitignore editor
+// ---------------------------------------------------------------------------
+
+#[test]
+fn gitignore_read_returns_empty_when_missing() {
+    let r = TempRepo::init();
+    let s = git::gitignore::read(&r.path_str()).unwrap();
+    assert_eq!(s, "");
+}
+
+#[test]
+fn gitignore_write_then_read_round_trips() {
+    let r = TempRepo::init();
+    let body = "node_modules/\ndist/\n*.log\n";
+    git::gitignore::write(&r.path_str(), body).unwrap();
+
+    let read_back = git::gitignore::read(&r.path_str()).unwrap();
+    assert_eq!(read_back, body);
+
+    // Also verify the file actually lives at <workdir>/.gitignore.
+    let on_disk = std::fs::read_to_string(r.path().join(".gitignore")).unwrap();
+    assert_eq!(on_disk, body);
+}
+
+#[test]
+fn gitignore_preview_marks_newly_ignored_path() {
+    let r = TempRepo::init();
+    // Create an untracked file the candidate rule will want to ignore.
+    r.write_file("debug.log", "noise\n");
+    // Also a tracked file that should NOT show up.
+    r.commit_file("a.txt", "1\n", "init");
+
+    let pv = git::gitignore::preview(&r.path_str(), "*.log\n").unwrap();
+    assert!(pv.scanned >= 1);
+    assert!(
+        pv.newly_ignored.iter().any(|p| p == "debug.log"),
+        "expected debug.log in newly_ignored, got {:?}",
+        pv.newly_ignored
+    );
+    assert!(pv.no_longer_ignored.is_empty());
+}
+
+#[test]
+fn gitignore_preview_marks_no_longer_ignored_when_rule_removed() {
+    let r = TempRepo::init();
+    r.write_file("debug.log", "noise\n");
+    r.commit_file("a.txt", "1\n", "init");
+
+    // Ignore *.log on disk, then preview an empty candidate (effectively
+    // the user is deleting the rule).
+    git::gitignore::write(&r.path_str(), "*.log\n").unwrap();
+
+    let pv = git::gitignore::preview(&r.path_str(), "").unwrap();
+    assert!(
+        pv.no_longer_ignored.iter().any(|p| p == "debug.log"),
+        "expected debug.log to flip back to tracked, got {:?}",
+        pv.no_longer_ignored
+    );
+    assert!(pv.newly_ignored.is_empty());
+}
+
+#[test]
+fn gitignore_templates_are_well_formed() {
+    let tpls = git::gitignore::templates();
+    assert!(tpls.len() >= 6, "expected at least 6 starter templates");
+    for t in &tpls {
+        assert!(!t.id.is_empty(), "template id must not be empty");
+        assert!(!t.label.is_empty(), "template label must not be empty");
+        assert!(
+            t.content.contains('\n'),
+            "template `{}` should have multi-line content",
+            t.id
+        );
+    }
+    // ids must be unique
+    let mut ids: Vec<&str> = tpls.iter().map(|t| t.id.as_str()).collect();
+    ids.sort();
+    let before = ids.len();
+    ids.dedup();
+    assert_eq!(ids.len(), before, "duplicate template ids");
+}
