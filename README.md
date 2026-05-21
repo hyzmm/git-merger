@@ -293,10 +293,23 @@ G:\GitTools
 
 5. ✅ **Store + i18n** — New `groupBy` / `recents` / `saved` fields on the SearchView slice, hydrated from localStorage at store creation and re-saved on every successful `runSearch` / `saveCurrentSearch` / `deleteSavedSearch` / `clearSearchRecents`. `clearSearch` now preserves the persisted side-state too (legacy clear was already preserving mode/kind/case). 19 new `search.*` i18n keys mirrored in `en` and `zh`.
 
-### Backlog (post-v0.13.4)
+### v0.13.5 — Shipped
+
+1. ✅ **Tabs v2 — cross-session persistence** — The list of open tabs (id + repoPath + label + pinned flag) and the active tab id are now mirrored to `localStorage` under `gittools.tabs.v1` via a Zustand `subscribe()` listener. Per-tab session payloads (history, refs, diff, …) are intentionally **not** persisted — they're rebuilt cheaply by the existing `switchTab → openRepo` lazy-load path the first time the user surfaces a restored tab. App start kicks off a one-shot `openRepo(activeTab.repoPath)` for the previously active tab so the first paint after a restart already has its history loaded. Blank "(new)" tabs are dropped at write time so they don't get resurrected. `MAX_TABS = 32` cap.
+
+2. ✅ **Pinned tabs** — Each tab now carries a `pinned: boolean`. Pinned tabs sort to the front of the bar (stable partition), refuse to be closed by `Ctrl+W` (the keyboard handler in `App.tsx` checks the active tab's `pinned` flag and silently no-ops), and swap their `×` close button for an inline ⊘ unpin button. Right-click → **Pin tab** / **Unpin tab** to flip the state. Drag-to-reorder honours the pinned/unpinned boundary: dragging a tab into the pinned region auto-pins it, dragging out auto-unpins — matching VS Code / browser behaviour.
+
+3. ✅ **Drag-to-reorder** — Tabs are now `draggable={true}` HTML5 sources. While dragging, the tab fades to 50% opacity and a primary-coloured 2px insertion bar appears between target tabs (or at the very end for an end-of-list drop). Drop semantics: dropping on the right half of a tab inserts after it, left half before it. Reorder is a single store action `reorderTab(fromIdx, toIdx)` that delegates to a pure `reorderTabs` helper in `src/lib/tabsPersist.ts` — fully unit-tested in isolation rather than via DOM events.
+
+4. ✅ **Right-click context menu** — A `ContextMenu` (reusing the existing component shared by `RefsPane` / `CommitList`) opens at cursor on right-click of any tab. Items: **Pin / Unpin** · **Close** (disabled for pinned) · **Close other tabs** (disabled when only the current tab + pinned tabs remain) · **Close tabs to the right** (disabled when nothing non-pinned is to the right). Pinned tabs are spared by all "close batch" operations on purpose — explicit user intent.
+
+5. ✅ **Tab cycling** — `Ctrl+PageDown` / `Ctrl+PageUp` cycle to the next / previous tab, wrapping at the edges. Hit `Ctrl+PageDown` past the last tab to wrap back to the first; same for `Ctrl+PageUp` going the other way. Implemented via the pure `nextTabId` helper for trivial unit-testability. The bar also no longer disappears when there's only one tab open (was `tabs.length <= 1` in v0.12.0) — shows whenever ≥1 tab exists, matching the persistence model.
+
+6. ✅ **Pure-helper extraction + tests** — `src/lib/tabsPersist.ts` exposes `loadTabs` / `saveTabs` (with strict validation: malformed entries / blank-repo tabs / unknown active id are dropped) plus four pure helpers — `reorderTabs`, `stablePartitionPinned`, `togglePin`, `nextTabId` — each independently tested. **17** new `bun:test` cases including a brute-force invariant property check ("for every (from, to) pair across mixed pinned/unpinned input, all pinned still come before all non-pinned in the output"). Totals: backend **72** (unchanged); frontend **130** (up from 113).
+
+### Backlog (post-v0.13.5)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Tabs v2: cross-process persistence, drag-to-reorder, pinned tabs.
 
 ## Cross-platform notes
 

@@ -45,6 +45,14 @@ import {
   type SavedSearch,
   type SearchSnapshot,
 } from "@/lib/searchPersist";
+import {
+  loadTabs,
+  saveTabs,
+  reorderTabs as reorderTabsList,
+  togglePin as togglePinList,
+  stablePartitionPinned,
+  nextTabId,
+} from "@/lib/tabsPersist";
 
 export type ViewKey =
   | "history"
@@ -319,6 +327,16 @@ interface AppState {
   renameTab: (id: string, label: string) => void;
   /** Open a new blank tab pointed at the welcome page (no repo). */
   newBlankTab: () => string;
+  /** v0.13.5 — toggle pinned state and re-partition the bar. */
+  togglePinTab: (id: string) => void;
+  /** v0.13.5 — drag-and-drop reorder. `toIdx` is "drop before original index". */
+  reorderTab: (fromIdx: number, toIdx: number) => void;
+  /** v0.13.5 — close every tab except `keepId` (pinned tabs are kept too). */
+  closeOtherTabs: (keepId: string) => void;
+  /** v0.13.5 — close every non-pinned tab to the right of `id`. */
+  closeRightTabs: (id: string) => void;
+  /** v0.13.5 — cycle to the next/prev tab (wraps). */
+  cycleTab: (dir: 1 | -1) => void;
 
   // history
   loadHistory: () => Promise<void>;
@@ -654,6 +672,8 @@ export interface RepoTab {
   repoPath: string;
   /** Display label — last segment of `repoPath` by default. */
   label: string;
+  /** v0.13.5 — pinned tabs sort to the front and refuse Ctrl+W. */
+  pinned: boolean;
 }
 
 interface SessionSnapshot {
@@ -756,8 +776,24 @@ export const useApp = create<AppState>((set, get) => ({
 
   recentRepos: loadRecent(),
 
-  tabs: [],
-  activeTabId: null,
+  // v0.13.5 — restore the list of open tabs from localStorage at start-up.
+  // Sessions are NOT persisted; each restored tab starts in the "lazy" state
+  // (its session will be built from scratch the first time the user
+  // switches to it via switchTab → openRepo).
+  ...(() => {
+    const persisted = loadTabs();
+    return {
+      tabs: persisted.tabs.map(
+        (t): RepoTab => ({
+          id: t.id,
+          repoPath: t.repoPath,
+          label: t.label,
+          pinned: t.pinned,
+        }),
+      ),
+      activeTabId: persisted.activeTabId,
+    };
+  })(),
   sessionsById: {},
 
   setView: (v) => {
@@ -795,7 +831,12 @@ export const useApp = create<AppState>((set, get) => ({
       let { tabs, activeTabId } = cur;
       if (!activeTabId) {
         const id = newTabId();
-        const tab: RepoTab = { id, repoPath: repo.path, label: tabLabelFromPath(repo.path) };
+        const tab: RepoTab = {
+          id,
+          repoPath: repo.path,
+          label: tabLabelFromPath(repo.path),
+          pinned: false,
+        };
         tabs = [...tabs, tab];
         activeTabId = id;
       } else {
@@ -880,7 +921,12 @@ export const useApp = create<AppState>((set, get) => ({
     const cur = get();
     // Stash the currently-active session before creating a new empty one.
     const newTabIdValue = newTabId();
-    const newTab: RepoTab = { id: newTabIdValue, repoPath: "", label: "(new)" };
+    const newTab: RepoTab = {
+      id: newTabIdValue,
+      repoPath: "",
+      label: "(new)",
+      pinned: false,
+    };
     let nextSessions = cur.sessionsById;
     if (cur.activeTabId) {
       nextSessions = { ...cur.sessionsById, [cur.activeTabId]: snapshotSession(cur) };
@@ -1040,6 +1086,47 @@ export const useApp = create<AppState>((set, get) => ({
     if (!trimmed) return;
     const tabs = cur.tabs.map((t) => (t.id === id ? { ...t, label: trimmed } : t));
     set({ tabs });
+  },
+
+  togglePinTab: (id) => {
+    const cur = get();
+    if (!cur.tabs.some((t) => t.id === id)) return;
+    set({ tabs: togglePinList(cur.tabs, id) });
+  },
+
+  reorderTab: (fromIdx, toIdx) => {
+    const cur = get();
+    set({ tabs: reorderTabsList(cur.tabs, fromIdx, toIdx) });
+  },
+
+  closeOtherTabs: (keepId) => {
+    // Closes every non-pinned tab whose id !== keepId. The kept tab plus
+    // any pinned tabs survive; pinned tabs are preserved on purpose because
+    // the user explicitly opted-in to keeping them across this kind of bulk
+    // operation. We chain through closeTab so the activeTabId / session
+    // bookkeeping stays correct even when the active tab is among those
+    // being closed.
+    const targets = get()
+      .tabs.filter((t) => t.id !== keepId && !t.pinned)
+      .map((t) => t.id);
+    for (const id of targets) get().closeTab(id);
+  },
+
+  closeRightTabs: (id) => {
+    const cur = get();
+    const idx = cur.tabs.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    const targets = cur.tabs
+      .slice(idx + 1)
+      .filter((t) => !t.pinned)
+      .map((t) => t.id);
+    for (const tid of targets) get().closeTab(tid);
+  },
+
+  cycleTab: (dir) => {
+    const cur = get();
+    const id = nextTabId(cur.tabs, cur.activeTabId, dir);
+    if (id && id !== cur.activeTabId) get().switchTab(id);
   },
 
   refresh: async () => {
@@ -2557,4 +2644,33 @@ function applyRebaseStatus(_set: unknown, get: () => AppState, status: RebaseSta
     void get().loadMerge();
     void get().loadChanges();
   }
+}
+
+// ---------------------------------------------------------------------------
+// v0.13.5 — Tabs v2 persistence subscriber
+// ---------------------------------------------------------------------------
+// Whenever the tab list or the active id changes, mirror the new shape to
+// localStorage. We deliberately don't persist `sessionsById` (too heavy and
+// rebuilds cheaply on switchTab → openRepo), and we strip out blank tabs at
+// write time so a restart doesn't resurrect "(new)" tabs the user never
+// bound to a repo.
+if (typeof window !== "undefined") {
+  let lastSnapshot = "";
+  useApp.subscribe((s) => {
+    // Cheap structural diff so we only hit localStorage when something
+    // actually moved — Zustand fires for every set() regardless of which
+    // slice changed.
+    const persistable = stablePartitionPinned(s.tabs.filter((t) => t.repoPath.length > 0)).map(
+      (t) => ({
+        id: t.id,
+        repoPath: t.repoPath,
+        label: t.label,
+        pinned: t.pinned,
+      }),
+    );
+    const key = JSON.stringify({ tabs: persistable, activeTabId: s.activeTabId });
+    if (key === lastSnapshot) return;
+    lastSnapshot = key;
+    saveTabs({ tabs: persistable, activeTabId: s.activeTabId });
+  });
 }

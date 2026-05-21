@@ -255,6 +255,10 @@ export const en = {
   "tabs.add": "New tab (Ctrl+T)",
   "tabs.close": "Close tab (Ctrl+W)",
   "tabs.blank": "Blank tab — pick a repository",
+  "tabs.pin": "Pin tab",
+  "tabs.unpin": "Unpin tab",
+  "tabs.closeOthers": "Close other tabs",
+  "tabs.closeRight": "Close tabs to the right",
   "menu.newTab": "New tab",
 } as const;
 

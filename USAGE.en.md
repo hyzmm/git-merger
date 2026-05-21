@@ -31,7 +31,7 @@ IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tau
 - [4. Topbar & remote ops](#4-topbar--remote-ops)
   - [4.1 App menu (☰)](#41-app-menu-)
   - [4.2 Undo button (reflog quick actions)](#42-undo-button-reflog-quick-actions)
-  - [4.3 Multi-repo tabs (v0.12.0)](#43-multi-repo-tabs-v0120)
+  - [4.3 Multi-repo tabs (v0.12.0 / v0.13.5)](#43-multi-repo-tabs-v0120--v0135)
 - [5. Command Palette (Ctrl+K)](#5-command-palette-ctrlk)
 - [6. Settings panel](#6-settings-panel)
 - [7. Auto-update](#7-auto-update)
@@ -480,37 +480,49 @@ Since v0.10.2, an **↺Undo** split-button sits after the remote group on the To
 
 The button **auto-hides** when there's nothing undoable at the top of reflog.
 
-### 4.3 Multi-repo tabs (v0.12.0)
+### 4.3 Multi-repo tabs (v0.12.0 / v0.13.5)
 
 A new **RepoTabs** strip above the Topbar lets you keep several repositories open at once and bounce between them — IDE-style.
 
 **Core interactions**:
 
-| Action             | Behavior                                                     |
-| ------------------ | ------------------------------------------------------------ |
-| `Ctrl+T`           | new blank tab, immediately shows Welcome page                |
-| click a tab        | switch to that tab                                           |
-| double-click label | rename the tab (default = last segment of repo path)         |
-| click × on a tab   | close the tab; if it was the last, fall back to Welcome page |
-| `Ctrl+W`           | close the current tab                                        |
-| AppMenu → New tab  | equivalent to `Ctrl+T`                                       |
-
-**Auto-hidden when single tab** (`tabs.length <= 1`) — keeps the single-repo workflow uncluttered.
+| Action             | Behavior                                                               |
+| ------------------ | ---------------------------------------------------------------------- |
+| `Ctrl+T`           | new blank tab, immediately shows Welcome page                          |
+| click a tab        | switch to that tab                                                     |
+| double-click label | rename the tab (default = last segment of repo path)                   |
+| click × on a tab   | close the tab; if it was the last, fall back to Welcome page           |
+| `Ctrl+W`           | close the current tab (refused when pinned — unpin first)              |
+| `Ctrl+PageDown`    | switch to the next tab, wraps (v0.13.5)                                |
+| `Ctrl+PageUp`      | switch to the previous tab, wraps (v0.13.5)                            |
+| drag a tab         | reorder tabs; dragging across the pinned/unpinned boundary toggles pin |
+| right-click a tab  | popup menu: Pin / Unpin / Close / Close others / Close to right        |
+| AppMenu → New tab  | equivalent to `Ctrl+T`                                                 |
 
 **Per-tab state isolation**: each tab independently retains view (History/Diff/Merge/...), history scroll position / filter / selected commit, stash / reflog / submodules / rebase state, Diff selected file, Worktrees list, .gitignore draft, Search query. Switching tabs **snapshots the full state of the current tab** and restores the target tab's snapshot to the top — zero-cost swap that doesn't slow down with tab count.
+
+**v0.13.5 — cross-session persistence + pinning + drag + right-click menu**:
+
+- **Persistence**: the tab list (id / repoPath / label / pinned) plus the active tab id are written to `localStorage` under `gittools.tabs.v1` and restored on next launch. Per-tab session payloads (history / refs / diff / …) are intentionally **not** persisted — each restored tab calls `openRepo` lazily the first time it's surfaced, which is way cheaper than serializing entire `SessionSnapshot`s. Blank "(new)" tabs are deliberately excluded so they don't get resurrected. `MAX_TABS = 32` cap.
+- **Pinned tabs**: right-click → **Pin tab**. Pinned tabs sort to the front of the bar (stable partition), refuse `Ctrl+W` (the keyboard handler in `App.tsx` checks the active tab's `pinned` flag and silently no-ops), and swap their `×` button for an inline ⊘ unpin glyph. **Close other tabs** / **Close tabs to the right** keep all pinned tabs intact — they respect the user's explicit pinning intent.
+- **Drag-to-reorder**: `draggable={true}` HTML5 drag sources. Mid-drag the moved tab fades to 50% opacity and a 2px primary-coloured insertion bar appears between target tabs (or at the very end). Drop on the right half of a tab → insert after it; left half → insert before it; past the rightmost tab → drop at the end. **Dragging into the pinned region pins automatically; dragging out unpins** — matching VS Code / browser behaviour.
+- **Right-click menu**: `ContextMenu` popup (reuses the same component shared by `RefsPane` / `CommitList`). Items: Pin/Unpin · Close · Close other tabs · Close tabs to the right. Items that would be no-ops (e.g. nothing non-pinned to the right) auto-disable.
 
 **Implementation notes**:
 
 - The top-level store always mirrors the active tab's state, so all existing `useApp(s => s.history.commits)` selectors needed zero changes.
 - Inactive tabs park their state in `sessionsById: Record<tabId, SessionSnapshot>`. Switching is one batch swap.
 - When `openRepo` is called for a repo already open in some tab, it switches to that tab instead of creating a duplicate.
-- This release does NOT persist tabs across processes (restart clears tabs; recover via Recent repos). Within-session tab state is fully preserved.
+- Persistence runs through a `useApp.subscribe(...)` listener attached after store creation — every `set()` that touches tabs / activeTabId triggers `saveTabs`, with a structural diff to skip redundant writes.
+- The reorder algorithm `reorderTabs(from, to)` is a pure function; the unit tests cover the "all pinned remain before all unpinned no matter the move" invariant via brute-force enumeration of `(from, to)` pairs.
 
 **Typical scenarios**:
 
 1. Frontend / backend repos open simultaneously, switching frequently while reviewing PRs
 2. One tab on `main` browsing history, another tab on a feature branch running a rebase plan
 3. Open a third repo briefly to look up a commit hash, `Ctrl+W` to close
+4. Pin your primary monorepo tab so opening/closing N temporary repos can never accidentally close it (v0.13.5)
+5. Quit the app and relaunch the next day — every tab + its pinned state comes back exactly as it was (v0.13.5)
 
 ---
 
@@ -582,26 +594,28 @@ Backend: GitHub Releases' `latest.json`. CI signs updater bundles with the `TAUR
 
 ## 8. Keyboard shortcuts
 
-| Shortcut            | Action                                   | Scope  |
-| ------------------- | ---------------------------------------- | ------ |
-| `Ctrl+1`            | History                                  | global |
-| `Ctrl+2`            | Changes                                  | global |
-| `Ctrl+3`            | Stash                                    | global |
-| `Ctrl+4`            | Reflog                                   | global |
-| `Ctrl+5`            | Submodules                               | global |
-| `Ctrl+6`            | Diff                                     | global |
-| `Ctrl+7`            | Merge                                    | global |
-| `Ctrl+8`            | Interactive Rebase                       | global |
-| `Ctrl+9`            | Worktrees                                | global |
-| `Ctrl+0`            | .gitignore editor                        | global |
-| `Ctrl+Shift+F`      | History search (cross-commit)            | global |
-| `Ctrl+T`            | new repo tab (v0.12.0)                   | global |
-| `Ctrl+W`            | close current tab (v0.12.0)              | global |
-| `Ctrl+K` / `Ctrl+P` | Command Palette                          | global |
-| `Ctrl+O`            | Open repository (v0.9.1)                 | global |
-| `F5` / `Ctrl+R`     | refresh current view                     | global |
-| `n` / `p`           | next / previous hunk                     | Diff   |
-| `Alt+1` / `2` / `3` | first pending conflict's Left/Right/Both | Merge  |
+| Shortcut            | Action                                           | Scope  |
+| ------------------- | ------------------------------------------------ | ------ |
+| `Ctrl+1`            | History                                          | global |
+| `Ctrl+2`            | Changes                                          | global |
+| `Ctrl+3`            | Stash                                            | global |
+| `Ctrl+4`            | Reflog                                           | global |
+| `Ctrl+5`            | Submodules                                       | global |
+| `Ctrl+6`            | Diff                                             | global |
+| `Ctrl+7`            | Merge                                            | global |
+| `Ctrl+8`            | Interactive Rebase                               | global |
+| `Ctrl+9`            | Worktrees                                        | global |
+| `Ctrl+0`            | .gitignore editor                                | global |
+| `Ctrl+Shift+F`      | History search (cross-commit)                    | global |
+| `Ctrl+T`            | new repo tab (v0.12.0)                           | global |
+| `Ctrl+W`            | close current tab; refused when pinned (v0.13.5) | global |
+| `Ctrl+PageDown`     | switch to next tab, wraps (v0.13.5)              | global |
+| `Ctrl+PageUp`       | switch to previous tab, wraps (v0.13.5)          | global |
+| `Ctrl+K` / `Ctrl+P` | Command Palette                                  | global |
+| `Ctrl+O`            | Open repository (v0.9.1)                         | global |
+| `F5` / `Ctrl+R`     | refresh current view                             | global |
+| `n` / `p`           | next / previous hunk                             | Diff   |
+| `Alt+1` / `2` / `3` | first pending conflict's Left/Right/Both         | Merge  |
 
 > These shortcuts are auto-disabled inside input/textarea/contenteditable elements, so they won't interfere with typing (unless explicitly modified by `Ctrl+`).
 
@@ -910,30 +924,31 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 14. Version history
 
-| Version | Highlights                                                                                                                                                                                                                                                                                                                                                            |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0  | History / Diff / Merge / Blame / Changes / remote ops (system git) / baseline UI                                                                                                                                                                                                                                                                                      |
-| v0.2.0  | Stash / branch & tag CRUD / commit context menu (cherry-pick / revert / reset) / Diff hunk nav + Ignore Whitespace / advanced filters                                                                                                                                                                                                                                 |
-| v0.3.0  | Reflog / Annotate previous (cross-rename trace) / Submodules                                                                                                                                                                                                                                                                                                          |
-| v0.4.0  | GitHub Actions CI + 4-platform releases / Settings panel (theme/font/tab/autocrlf) / auto-update (minisign) / i18n (en + zh)                                                                                                                                                                                                                                          |
-| v0.5.0  | Native push/pull/fetch (git2-rs, no system git) / credential dialog (SSH agent → keys → helper → prompt) / live progress events                                                                                                                                                                                                                                       |
-| v0.6.0  | Interactive Rebase (pick/reword/squash/fixup/drop + reorder + persisted state + conflict pause)                                                                                                                                                                                                                                                                       |
-| v0.7.0  | Command Palette (Ctrl+K, search commits/refs/files/views) + custom subsequence fuzzy matcher                                                                                                                                                                                                                                                                          |
-| v0.8.0  | File History (`git log --follow`, follows renames) with on-click diff at each revision                                                                                                                                                                                                                                                                                |
-| v0.9.0  | Test suite (frontend 42 / backend 14) + CI integration; fixed file_history follow-rename bug                                                                                                                                                                                                                                                                          |
-| v0.9.1  | Refs panel HEAD pin at the top; Topbar app menu (☰) collapses Open / Recent / Close / About / Quit; new `Ctrl+O`                                                                                                                                                                                                                                                     |
-| v0.10.0 | Worktrees view: list + add (with branch & dir picker) + remove (incl. force) + prune; Sidebar 7th entry, `Ctrl+9`                                                                                                                                                                                                                                                     |
-| v0.10.1 | .gitignore editor: 3-column layout + 8 templates + live preview (`is_path_ignored`-based), atomic save; `Ctrl+0`                                                                                                                                                                                                                                                      |
-| v0.10.2 | Topbar Undo button: infers latest dangerous op from reflog, one-click mixed reset; dropdown lists 8 most recent undoables                                                                                                                                                                                                                                             |
-| v0.10.3 | History large-repo perf: cursor-based pagination (1000 first / 1000 incremental) + incremental graph layout (lane state across pages)                                                                                                                                                                                                                                 |
-| v0.11.0 | History search (Ctrl+Shift+F): message + diff pickaxe + regex/literal + path scope; cargo `regex` dep added; sidebar grows to 11                                                                                                                                                                                                                                      |
-| v0.12.0 | Multi-repo tabs: RepoTabs strip above Topbar, `Ctrl+T` new / `Ctrl+W` close / double-click rename; per-tab view/filter/selection state                                                                                                                                                                                                                                |
-| v0.12.1 | Test coverage push: 15 new diff/blame/commit_ops/workspace integration tests (35 → 50); fixed `blame::previous_filename` cross-rename bug                                                                                                                                                                                                                             |
-| v0.13.0 | Bilingual docs: introduced `README.zh.md` and `USAGE.en.md`; both originals gain a language switcher header                                                                                                                                                                                                                                                           |
-| v0.13.1 | Structured error handling: backend `AppError` (10-kind tagged enum auto-derived from `git2::Error`) + frontend toast queue (`useToasts` + `ToastContainer`) + global `unhandledrejection` safety net; Topbar banner now distinguishes NonFastForward / Auth                                                                                                           |
-| v0.13.2 | Release-pipeline signing-key governance: new `signing-preflight` job (fails fast when the secret is missing) + `scripts/check-signing-key.ts` (pubkey ↔ privkey fingerprint check) + `publish-latest-json` job (aggregates `.sig`s into the updater index); README gains a "Configuring updater signing keys" section                                                 |
-| v0.13.3 | Bidirectional Diff editor: Side-by-side mode on a working-tree file gains an Edit toggle that turns the right pane into a live textarea while the left pane stays a read-only HEAD reference; Save atomically writes back and refreshes the underlying diff; backend `read/write_working_file` + `read_head_file` ship with path-traversal / binary / 8 MB safeguards |
-| v0.13.4 | Search v2: Group-by toggle (commit / file rollup), recent-12 queries dropdown (structurally deduped), ★ Save (named, localStorage-backed); pure helpers `searchAggregate` + `searchPersist` shipped with 8 / 14 bun:test cases respectively                                                                                                                           |
+| Version | Highlights                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0  | History / Diff / Merge / Blame / Changes / remote ops (system git) / baseline UI                                                                                                                                                                                                                                                                                                                                                                                                              |
+| v0.2.0  | Stash / branch & tag CRUD / commit context menu (cherry-pick / revert / reset) / Diff hunk nav + Ignore Whitespace / advanced filters                                                                                                                                                                                                                                                                                                                                                         |
+| v0.3.0  | Reflog / Annotate previous (cross-rename trace) / Submodules                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| v0.4.0  | GitHub Actions CI + 4-platform releases / Settings panel (theme/font/tab/autocrlf) / auto-update (minisign) / i18n (en + zh)                                                                                                                                                                                                                                                                                                                                                                  |
+| v0.5.0  | Native push/pull/fetch (git2-rs, no system git) / credential dialog (SSH agent → keys → helper → prompt) / live progress events                                                                                                                                                                                                                                                                                                                                                               |
+| v0.6.0  | Interactive Rebase (pick/reword/squash/fixup/drop + reorder + persisted state + conflict pause)                                                                                                                                                                                                                                                                                                                                                                                               |
+| v0.7.0  | Command Palette (Ctrl+K, search commits/refs/files/views) + custom subsequence fuzzy matcher                                                                                                                                                                                                                                                                                                                                                                                                  |
+| v0.8.0  | File History (`git log --follow`, follows renames) with on-click diff at each revision                                                                                                                                                                                                                                                                                                                                                                                                        |
+| v0.9.0  | Test suite (frontend 42 / backend 14) + CI integration; fixed file_history follow-rename bug                                                                                                                                                                                                                                                                                                                                                                                                  |
+| v0.9.1  | Refs panel HEAD pin at the top; Topbar app menu (☰) collapses Open / Recent / Close / About / Quit; new `Ctrl+O`                                                                                                                                                                                                                                                                                                                                                                             |
+| v0.10.0 | Worktrees view: list + add (with branch & dir picker) + remove (incl. force) + prune; Sidebar 7th entry, `Ctrl+9`                                                                                                                                                                                                                                                                                                                                                                             |
+| v0.10.1 | .gitignore editor: 3-column layout + 8 templates + live preview (`is_path_ignored`-based), atomic save; `Ctrl+0`                                                                                                                                                                                                                                                                                                                                                                              |
+| v0.10.2 | Topbar Undo button: infers latest dangerous op from reflog, one-click mixed reset; dropdown lists 8 most recent undoables                                                                                                                                                                                                                                                                                                                                                                     |
+| v0.10.3 | History large-repo perf: cursor-based pagination (1000 first / 1000 incremental) + incremental graph layout (lane state across pages)                                                                                                                                                                                                                                                                                                                                                         |
+| v0.11.0 | History search (Ctrl+Shift+F): message + diff pickaxe + regex/literal + path scope; cargo `regex` dep added; sidebar grows to 11                                                                                                                                                                                                                                                                                                                                                              |
+| v0.12.0 | Multi-repo tabs: RepoTabs strip above Topbar, `Ctrl+T` new / `Ctrl+W` close / double-click rename; per-tab view/filter/selection state                                                                                                                                                                                                                                                                                                                                                        |
+| v0.12.1 | Test coverage push: 15 new diff/blame/commit_ops/workspace integration tests (35 → 50); fixed `blame::previous_filename` cross-rename bug                                                                                                                                                                                                                                                                                                                                                     |
+| v0.13.0 | Bilingual docs: introduced `README.zh.md` and `USAGE.en.md`; both originals gain a language switcher header                                                                                                                                                                                                                                                                                                                                                                                   |
+| v0.13.1 | Structured error handling: backend `AppError` (10-kind tagged enum auto-derived from `git2::Error`) + frontend toast queue (`useToasts` + `ToastContainer`) + global `unhandledrejection` safety net; Topbar banner now distinguishes NonFastForward / Auth                                                                                                                                                                                                                                   |
+| v0.13.2 | Release-pipeline signing-key governance: new `signing-preflight` job (fails fast when the secret is missing) + `scripts/check-signing-key.ts` (pubkey ↔ privkey fingerprint check) + `publish-latest-json` job (aggregates `.sig`s into the updater index); README gains a "Configuring updater signing keys" section                                                                                                                                                                         |
+| v0.13.3 | Bidirectional Diff editor: Side-by-side mode on a working-tree file gains an Edit toggle that turns the right pane into a live textarea while the left pane stays a read-only HEAD reference; Save atomically writes back and refreshes the underlying diff; backend `read/write_working_file` + `read_head_file` ship with path-traversal / binary / 8 MB safeguards                                                                                                                         |
+| v0.13.4 | Search v2: Group-by toggle (commit / file rollup), recent-12 queries dropdown (structurally deduped), ★ Save (named, localStorage-backed); pure helpers `searchAggregate` + `searchPersist` shipped with 8 / 14 bun:test cases respectively                                                                                                                                                                                                                                                   |
+| v0.13.5 | Tabs v2: cross-session persistence (`gittools.tabs.v1` localStorage, restores tab order + pinned state on next launch), tab pinning (`Ctrl+W` refused, batch closes preserve), HTML5 drag-to-reorder (drag across pinned/unpinned boundary auto-pins/unpins), right-click menu (Pin/Close/Close others/Close to right), `Ctrl+PageDown` / `Ctrl+PageUp` cycle; pure helpers `reorderTabs` + `togglePin` + `nextTabId` covered by 17 bun:test cases including a brute-force invariant property |
 
 ---
 

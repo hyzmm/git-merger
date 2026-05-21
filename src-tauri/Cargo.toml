@@ -1,6 +1,6 @@
 [package]
 name = "git-tools"
-version = "0.13.4"
+version = "0.13.5"
 description = "IDEA-style Git tools (History / Diff / Merge)"
 authors = ["you"]
 edition = "2021"

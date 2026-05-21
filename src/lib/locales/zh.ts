@@ -246,5 +246,9 @@ export const zh: Dict = {
   "tabs.add": "新建 tab（Ctrl+T）",
   "tabs.close": "关闭 tab（Ctrl+W）",
   "tabs.blank": "空白 tab — 请选择仓库",
+  "tabs.pin": "钉住 tab",
+  "tabs.unpin": "取消钉住",
+  "tabs.closeOthers": "关闭其他 tab",
+  "tabs.closeRight": "关闭右侧 tab",
   "menu.newTab": "新建 tab",
 };

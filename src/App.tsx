@@ -37,6 +37,8 @@ export default function App() {
   const newBlankTab = useApp((s) => s.newBlankTab);
   const closeTab = useApp((s) => s.closeTab);
   const activeTabId = useApp((s) => s.activeTabId);
+  const tabs = useApp((s) => s.tabs);
+  const cycleTab = useApp((s) => s.cycleTab);
 
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
@@ -62,8 +64,18 @@ export default function App() {
         newBlankTab();
       },
       "ctrl+w": () => {
-        if (activeTabId) closeTab(activeTabId);
+        // v0.13.5 — refuse to close pinned tabs via the keyboard. The user
+        // has to right-click → Unpin (or click the inline unpin glyph)
+        // first, matching VS Code / browsers.
+        if (!activeTabId) return;
+        const cur = tabs.find((t) => t.id === activeTabId);
+        if (cur?.pinned) return;
+        closeTab(activeTabId);
       },
+      // v0.13.5 — cycle through tabs in either direction. Ctrl+PageDown is
+      // the platform-standard "next tab" combo (browsers, terminal apps).
+      "ctrl+pagedown": () => cycleTab(1),
+      "ctrl+pageup": () => cycleTab(-1),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
       "ctrl+o": async () => {
@@ -87,6 +99,8 @@ export default function App() {
       newBlankTab,
       closeTab,
       activeTabId,
+      tabs,
+      cycleTab,
     ],
   );
 
@@ -106,6 +120,21 @@ export default function App() {
     };
     window.addEventListener("unhandledrejection", onRejection);
     return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
+
+  // v0.13.5 — lazy-load the active tab's repo on first paint after a
+  // restart. Tab order/labels/pinned-state come from localStorage but the
+  // session payload (history, refs, …) does not, so we kick off the
+  // initial openRepo() here. Subsequent tab switches handle their own
+  // lazy-load via switchTab → openRepo. Run exactly once at mount.
+  useEffect(() => {
+    const st = useApp.getState();
+    if (!st.repo && st.activeTabId) {
+      const t = st.tabs.find((x) => x.id === st.activeTabId);
+      if (t && t.repoPath) {
+        void st.openRepo(t.repoPath);
+      }
+    }
   }, []);
 
   return (

@@ -31,7 +31,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
-  - [4.3 多仓库 tabs（v0.12.0）](#43-多仓库-tabsv0120)
+  - [4.3 多仓库 tabs（v0.12.0 / v0.13.5）](#43-多仓库-tabsv0120--v0135)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
@@ -479,37 +479,49 @@ v0.10.2 起在 Topbar 远程按钮组之后加入 **↺Undo** 一键撤销按钮
 
 按钮在 reflog 顶端没有可撤销项时**自动隐藏**，不占空间。
 
-### 4.3 多仓库 tabs（v0.12.0）
+### 4.3 多仓库 tabs（v0.12.0 / v0.13.5）
 
 Topbar 上方新增一栏 **RepoTabs**，支持同时打开多个仓库并在它们之间快速切换——类似 IDE 的标签页。
 
 **核心交互**：
 
-| 操作              | 行为                                            |
-| ----------------- | ----------------------------------------------- |
-| `Ctrl+T`          | 新建一个空白 tab，立即显示 Welcome 页           |
-| 点击 tab          | 切换到该 tab                                    |
-| 双击 tab 标签     | 重命名该 tab（默认是仓库末段路径名）            |
-| 点击 tab 上的 ×   | 关闭该 tab；如果是最后一个 tab，回到 Welcome 页 |
-| `Ctrl+W`          | 关闭当前 tab                                    |
-| AppMenu → New tab | 等价于 `Ctrl+T`                                 |
-
-**单 tab 时栏不显示**（`tabs.length <= 1`）——保持单仓库场景的 UI 整洁。
+| 操作              | 行为                                                          |
+| ----------------- | ------------------------------------------------------------- |
+| `Ctrl+T`          | 新建一个空白 tab，立即显示 Welcome 页                         |
+| 点击 tab          | 切换到该 tab                                                  |
+| 双击 tab 标签     | 重命名该 tab（默认是仓库末段路径名）                          |
+| 点击 tab 上的 ×   | 关闭该 tab；如果是最后一个 tab，回到 Welcome 页               |
+| `Ctrl+W`          | 关闭当前 tab（pinned tab 会被拒绝，需要先取消钉选）           |
+| `Ctrl+PageDown`   | 切到下一个 tab，循环（v0.13.5）                               |
+| `Ctrl+PageUp`     | 切到上一个 tab，循环（v0.13.5）                               |
+| 拖拽 tab          | 重排 tab 顺序；拖入/拖出 pinned 区会自动 pin/unpin            |
+| 右键 tab          | 弹出菜单：Pin / Unpin / Close / Close others / Close to right |
+| AppMenu → New tab | 等价于 `Ctrl+T`                                               |
 
 **Per-tab 状态隔离**：每个 tab 独立保留 view（History/Diff/Merge/...）、history 滚动位置 / filter / 选中 commit、stash / reflog / submodules / rebase 状态、Diff 选中文件、Worktrees 列表、.gitignore 草稿、Search 查询。切换 tab 时**当前 tab 的全部状态被快照存档**，目标 tab 的状态被恢复到顶层——这是 zero-cost 切换，不会因为 tab 数量增加而拖慢。
+
+**v0.13.5 — 跨会话持久化 + 钉选 + 拖拽 + 右键菜单**：
+
+- **持久化**：tab 列表（id / repoPath / label / pinned）+ active tab id 写入 `localStorage` 的 `gittools.tabs.v1`，重启自动恢复。Per-tab session（history / refs / diff …）**不**持久化——每个恢复的 tab 第一次被切到时按需重新 `openRepo`，比序列化整个 `SessionSnapshot` 便宜得多。空白 "(new)" tab 被刻意排除（避免重启后复活没用的占位）。`MAX_TABS = 32` 上限。
+- **Pinned tabs**：右键 → **Pin tab**，被钉的 tab 会按稳定分区排到 tab 栏最前（pinned 区域），拒绝被 `Ctrl+W` 关闭，`×` 按钮替换为内联的 ⊘ 取消钉选按钮。Close other tabs / Close right 等批量操作**保留**所有 pinned tab——尊重用户显式的钉选意图。
+- **拖拽重排**：`draggable={true}` 原生 HTML5 拖拽。拖动中 tab 透明度变 50%，目标位置出现 2px 主题色插入条。拖到 tab 右半边插到其后，左半边插到其前，拖过最右边落在末尾。**拖入 pinned 区自动 pin，拖出去自动 unpin**——和 VS Code / 浏览器一致。
+- **右键菜单**：`ContextMenu` 弹层（复用 `RefsPane` / `CommitList` 的同款组件）。菜单项：Pin/Unpin · Close · Close other tabs · Close tabs to the right。无意义项自动 disabled（如所有非 pinned 都已关、当前 tab 右边没非 pinned）。
 
 **实现要点**：
 
 - 顶层 store 始终镜像 active tab 的状态，所有现有的 `useApp(s => s.history.commits)` selectors 完全不需要改动
 - 非 active tab 的状态停泊在 `sessionsById: Record<tabId, SessionSnapshot>`，切换是一次 batch swap
 - 同一 repo 已被某个 tab 打开时，再次 `openRepo` 会自动**切到那个 tab**而不是建新的——避免重复
-- 本版本暂不持久化 tabs 跨进程（重启后 tabs 清空，由 recent repos 恢复）；本会话内 tab 状态完整保留
+- 持久化通过 `useApp.subscribe(...)` 在 store 创建后挂载——任何改 tabs / activeTabId 的 set() 都自动触发 `saveTabs`，结构化 diff 减少冗余写
+- 重排算法 `reorderTabs(from, to)` 是纯函数，单测覆盖了"无论怎么拖，pinned 始终在 unpinned 之前"的 invariant（`bun:test` 里跑了所有 (from, to) 组合的穷举）
 
 **典型用例**：
 
 1. 同时开 frontend / backend 两个仓库，频繁切换看 PR
 2. 一个 tab 在 main 分支查 history，另一个 tab 在 feature 分支跑 rebase plan
 3. 临时打开第三个仓库查个 commit hash，查完 `Ctrl+W` 关闭即可
+4. 把工作区主仓库 pin 住，再开关 N 个临时仓库都不会误关核心 tab（v0.13.5）
+5. 关掉应用第二天打开，所有 tab 顺序 + pinned 状态原样恢复（v0.13.5）
 
 ---
 
@@ -595,7 +607,9 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+0`            | .gitignore 编辑器                     | 全局  |
 | `Ctrl+Shift+F`      | 历史搜索（跨提交）                    | 全局  |
 | `Ctrl+T`            | 新建仓库 tab（v0.12.0）               | 全局  |
-| `Ctrl+W`            | 关闭当前 tab（v0.12.0）               | 全局  |
+| `Ctrl+W`            | 关闭当前 tab；pinned 拒绝（v0.13.5）  | 全局  |
+| `Ctrl+PageDown`     | 切到下一个 tab，循环（v0.13.5）       | 全局  |
+| `Ctrl+PageUp`       | 切到上一个 tab，循环（v0.13.5）       | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
@@ -901,30 +915,31 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 十四、版本历史一览
 
-| 版本    | 关键改动                                                                                                                                                                                                                                           |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0  | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                                                                                                                                           |
-| v0.2.0  | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤                                                                                                                       |
-| v0.3.0  | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                                                                                                                                             |
-| v0.4.0  | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）                                                                                                                                |
-| v0.5.0  | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                                                                                                                                     |
-| v0.6.0  | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                                                                                                                                   |
-| v0.7.0  | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                                                                                                                                         |
-| v0.8.0  | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                                                                                                                                               |
-| v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                                                                                                                                               |
-| v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键                                                                                                                   |
-| v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键                                                                                                                               |
-| v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口                                                                                                                               |
-| v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout                                                                                                                 |
-| v0.10.3 | History 大仓库性能优化：cursor-based 分页（首屏 1000 / 增量 1000）+ 增量 Graph layout（lane 状态跨 page 复用，零跳色）                                                                                                                             |
-| v0.11.0 | 历史搜索（Ctrl+Shift+F）：message + diff pickaxe + regex/literal + path scope，cargo 依赖加 `regex`，Sidebar 升至 11 入口                                                                                                                          |
-| v0.12.0 | 多仓库 tabs：Topbar 上方新增 RepoTabs 栏，支持 `Ctrl+T` 新建、`Ctrl+W` 关闭、双击重命名；每个 tab 独立保留 view/filter/选中态                                                                                                                      |
-| v0.12.1 | 测试覆盖率扩展：diff/blame/commit_ops/workspace 共 15 个新集成测试（35→50）；附带修复 `blame::previous_filename` 跨重命名解析 bug                                                                                                                  |
-| v0.13.0 | 双语化文档：新增 `README.zh.md` 与 `USAGE.en.md`，原 `README.md` / `USAGE.md` 顶部加语言切换链接（English · 简体中文）；无功能变更                                                                                                                 |
-| v0.13.1 | 结构化错误处理：后端 `AppError`（10 种 kind 自动从 `git2::Error` 推断）+ 前端 toast 队列（`useToasts` + `ToastContainer`）+ 全局 `unhandledrejection` 兜底；Topbar 远程操作 banner 区分 NonFastForward / Auth                                      |
-| v0.13.2 | Release 流水线签名密钥治理：新增 `signing-preflight` job（缺 secret 即失败）+ `scripts/check-signing-key.ts`（pubkey ↔ privkey 指纹比对）+ `publish-latest-json` job（聚合 .sig 生成 updater 索引）；README 新增"配置自动更新签名密钥"章节         |
-| v0.13.3 | 双向 Diff 编辑：Side-by-side 模式下查看工作树文件可点击 Edit 切换右侧为可编辑 textarea，HEAD 参考保持只读，Save 原子写回 + 自动重算 diff，dirty 徽章实时提示；后端 `read/write/head_working_file` 三命令带 path-traversal / binary / 8 MB 上限保护 |
-| v0.13.4 | Search v2：Group-by 切换（commit / 文件视图）、最近 12 条查询 dropdown（结构化去重）、★ 保存搜索（命名 + 持久化到 localStorage）；纯函数 `searchAggregate` + `searchPersist` 各带 8 / 14 个 bun:test                                               |
+| 版本    | 关键改动                                                                                                                                                                                                                                                                                                                                                               |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0  | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                                                                                                                                                                                                                                                               |
+| v0.2.0  | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤                                                                                                                                                                                                                                           |
+| v0.3.0  | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                                                                                                                                                                                                                                                                 |
+| v0.4.0  | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）                                                                                                                                                                                                                                                    |
+| v0.5.0  | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                                                                                                                                                                                                                                                         |
+| v0.6.0  | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                                                                                                                                                                                                                                                       |
+| v0.7.0  | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                                                                                                                                                                                                                                                             |
+| v0.8.0  | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                                                                                                                                                                                                                                                                   |
+| v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                                                                                                                                                                                                                                                                   |
+| v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键                                                                                                                                                                                                                                       |
+| v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键                                                                                                                                                                                                                                                   |
+| v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口                                                                                                                                                                                                                                                   |
+| v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout                                                                                                                                                                                                                                     |
+| v0.10.3 | History 大仓库性能优化：cursor-based 分页（首屏 1000 / 增量 1000）+ 增量 Graph layout（lane 状态跨 page 复用，零跳色）                                                                                                                                                                                                                                                 |
+| v0.11.0 | 历史搜索（Ctrl+Shift+F）：message + diff pickaxe + regex/literal + path scope，cargo 依赖加 `regex`，Sidebar 升至 11 入口                                                                                                                                                                                                                                              |
+| v0.12.0 | 多仓库 tabs：Topbar 上方新增 RepoTabs 栏，支持 `Ctrl+T` 新建、`Ctrl+W` 关闭、双击重命名；每个 tab 独立保留 view/filter/选中态                                                                                                                                                                                                                                          |
+| v0.12.1 | 测试覆盖率扩展：diff/blame/commit_ops/workspace 共 15 个新集成测试（35→50）；附带修复 `blame::previous_filename` 跨重命名解析 bug                                                                                                                                                                                                                                      |
+| v0.13.0 | 双语化文档：新增 `README.zh.md` 与 `USAGE.en.md`，原 `README.md` / `USAGE.md` 顶部加语言切换链接（English · 简体中文）；无功能变更                                                                                                                                                                                                                                     |
+| v0.13.1 | 结构化错误处理：后端 `AppError`（10 种 kind 自动从 `git2::Error` 推断）+ 前端 toast 队列（`useToasts` + `ToastContainer`）+ 全局 `unhandledrejection` 兜底；Topbar 远程操作 banner 区分 NonFastForward / Auth                                                                                                                                                          |
+| v0.13.2 | Release 流水线签名密钥治理：新增 `signing-preflight` job（缺 secret 即失败）+ `scripts/check-signing-key.ts`（pubkey ↔ privkey 指纹比对）+ `publish-latest-json` job（聚合 .sig 生成 updater 索引）；README 新增"配置自动更新签名密钥"章节                                                                                                                             |
+| v0.13.3 | 双向 Diff 编辑：Side-by-side 模式下查看工作树文件可点击 Edit 切换右侧为可编辑 textarea，HEAD 参考保持只读，Save 原子写回 + 自动重算 diff，dirty 徽章实时提示；后端 `read/write/head_working_file` 三命令带 path-traversal / binary / 8 MB 上限保护                                                                                                                     |
+| v0.13.4 | Search v2：Group-by 切换（commit / 文件视图）、最近 12 条查询 dropdown（结构化去重）、★ 保存搜索（命名 + 持久化到 localStorage）；纯函数 `searchAggregate` + `searchPersist` 各带 8 / 14 个 bun:test                                                                                                                                                                   |
+| v0.13.5 | Tabs v2：跨会话持久化（`gittools.tabs.v1` localStorage，重启自动恢复 tab 顺序 + pinned）、tab 钉选（`Ctrl+W` 拒绝、批量关闭保留）、HTML5 拖拽重排（拖入/出 pinned 区自动 pin/unpin）、右键菜单（Pin/Close/Close others/Close to right）、`Ctrl+PageDown` / `Ctrl+PageUp` 循环切换；纯函数 `reorderTabs` + `togglePin` + `nextTabId` 共 17 个 bun:test 含穷举 invariant |
 
 ---
 

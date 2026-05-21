@@ -293,10 +293,23 @@ G:\GitTools
 
 5. ✅ **Store + i18n** — SearchView slice 新增 `groupBy` / `recents` / `saved` 字段，store 创建时从 localStorage 水合，每次成功 `runSearch` / `saveCurrentSearch` / `deleteSavedSearch` / `clearSearchRecents` 都重新写回。`clearSearch` 现在也保留持久化的副状态（旧版本就保留 mode/kind/case 了）。新增 19 个 `search.*` i18n key，en / zh 双语补齐。
 
-### Backlog（v0.13.4 之后）
+### v0.13.5 — 已完成
+
+1. ✅ **Tabs v2 — 跨会话持久化** — 打开的 tab 列表（id + repoPath + label + pinned 标志）以及 active tab id，现在通过 Zustand `subscribe()` 监听器镜像写入 `localStorage` 的 `gittools.tabs.v1`。Per-tab 的 session payload（history / refs / diff …）**不**持久化——它们由现有的 `switchTab → openRepo` 懒加载路径在用户首次切回该 tab 时按需重建。应用启动时会主动给上次的 active tab 跑一次 `openRepo(activeTab.repoPath)`，重启后第一帧就拿到了 history。空白 "(new)" tab 在写入时被剔除，避免重启复活。`MAX_TABS = 32` 上限。
+
+2. ✅ **Tab 钉选** — 每个 tab 新增 `pinned: boolean` 字段。Pinned tab 会按稳定分区排到 tab 栏最前；`Ctrl+W` 拒绝关 pinned（`App.tsx` 的快捷键 handler 检查 active tab 的 `pinned` 标志后静默跳过）；`×` 关闭按钮会替换为内联的 ⊘ 取消钉选按钮。右键 → **Pin tab** / **Unpin tab** 切换状态。拖拽重排尊重 pinned/unpinned 区域分界：把 tab 拖进 pinned 区会自动钉选，拖出去自动取消钉选——和 VS Code / 浏览器一致。
+
+3. ✅ **拖拽重排** — Tab 现在是 `draggable={true}` 的原生 HTML5 source。拖拽中被拖的 tab 透明度变 50%，目标 tab 之间会出现 2px 主题色插入条（拖到末尾会出现末尾条）。落点语义：落在 tab 右半边插到其后，左半边插到其前。重排只走单一 store action `reorderTab(fromIdx, toIdx)`，调用 `src/lib/tabsPersist.ts` 里的纯函数 `reorderTabs`——孤立单测覆盖，不靠 DOM 事件 e2e。
+
+4. ✅ **右键菜单** — Tab 上右键打开 `ContextMenu`（复用 `RefsPane` / `CommitList` 已经在用的组件）。菜单项：**Pin / Unpin** · **Close**（pinned 时禁用） · **Close other tabs**（除当前 + pinned 外没东西可关时禁用） · **Close tabs to the right**（当前 tab 右边没非 pinned 时禁用）。所有 "批量关闭" 操作都故意保留 pinned tab——尊重用户显式的钉选意图。
+
+5. ✅ **Tab 循环切换** — `Ctrl+PageDown` / `Ctrl+PageUp` 在 tab 之间循环切换，到边界自动绕回（前→后或后→前）。通过纯函数 `nextTabId` 实现，方便孤立单测。tab 栏在只有 1 个 tab 时也会显示了（v0.12.0 的 `tabs.length <= 1` 判断已移除）——只要 ≥1 个 tab 就显示，和持久化模型一致。
+
+6. ✅ **纯函数抽离 + 测试** — `src/lib/tabsPersist.ts` 暴露 `loadTabs` / `saveTabs`（严格校验：格式不对、repo 路径为空、active id 找不到都会被丢弃）以及 4 个纯辅助函数 —— `reorderTabs` / `stablePartitionPinned` / `togglePin` / `nextTabId`，每个都独立测。新增 **17** 个 `bun:test` 用例，包括一个穷举 invariant 属性检查（"对所有 (from, to) 组合在混合 pinned/unpinned 输入上做 reorder 之后，pinned 仍全在 unpinned 之前"）。总计：后端 **72**（不变）；前端 **130**（从 113）。
+
+### Backlog（v0.13.5 之后）
 
 - ⏳ 代码签名（Windows EV cert / macOS notarization），让安装包不再触发 SmartScreen / Gatekeeper 警告。
-- ⏳ Tabs v2：跨进程持久化、tab 拖拽排序、tab 钉选。
 
 ## 跨平台注意
 
