@@ -57,6 +57,30 @@ bun run tauri:build
 - macOS：`src-tauri/target/release/bundle/{dmg,macos}/`
 - Linux：`src-tauri/target/release/bundle/{appimage,deb,rpm}/`
 
+## 配置自动更新签名密钥
+
+自动更新使用的 bundle 由 [minisign](https://jedisct1.github.io/minisign/) 密钥对签名。**公钥** 提交在 `src-tauri/tauri.conf.json::plugins.updater.pubkey`；**私钥** 只放在 GitHub Secret `TAURI_SIGNING_PRIVATE_KEY`（如果生成时带密码，再加 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）。
+
+Fork 本仓库且想发布自己签名版本时：
+
+```bash
+# 1. 生成新的密钥对（Tauri CLI 是 minisign 的薄封装）
+bun x @tauri-apps/cli signer generate -w ~/.tauri/<your-app>.key
+
+# 2. 命令打印的公钥已是 base64 包装的，直接粘贴到
+#    src-tauri/tauri.conf.json 的 plugins.updater.pubkey 字段
+
+# 3. 本地验证 pubkey 与 privkey 指纹一致：
+bun run check-signing-key
+
+# 4. 把 <your-app>.key 文件**完整内容**加到 GitHub Secrets：
+#    Settings → Secrets and variables → Actions →
+#       TAURI_SIGNING_PRIVATE_KEY = （粘贴 .key 文件全部内容）
+#       TAURI_SIGNING_PRIVATE_KEY_PASSWORD = （仅当生成时设了密码）
+```
+
+Release 流水线的 `signing-preflight` job 会在 `TAURI_SIGNING_PRIVATE_KEY` 为空时**直接失败**——避免静默发出无法被 updater 校验的安装包。如果确实想跑一次未签名的演练，把仓库 variable `RELEASE_ALLOW_UNSIGNED` 设为 `true`，流水线会继续但会在 release notes 顶部加显眼警告。
+
 ## 质量门
 
 ```bash
@@ -233,10 +257,21 @@ G:\GitTools
 
 5. ✅ **测试** — 后端在 `src/error.rs` 新增 11 个单元测试，覆盖每条分类路径（`NotFound / MergeConflict / Auth / InvalidArgument / UserCancelled` 走 `ErrorCode`；`NonFastForward / Auth / InvalidArgument` 走消息启发式；未识别的 libgit2 消息仍停在 `Git`；`std::io::Error → Io`；序列化 JSON 在带 / 不带 `code` & `class` 时都验证）。前端 `src/lib/appError.test.ts` + `src/lib/toast.test.ts` 共 19 个 bun:test：parse / format / 谓词 / 10 种 kind 全部 round-trip / 队列力学 / variant / MAX_VISIBLE 截断 / 默认时长排序 / helpers。总计：后端 **61**（50 集成 + 11 单元，从 50）；前端 **79**（从 59）。
 
-### Backlog（v0.13.1 之后）
+### v0.13.2 — 已完成
+
+1. ✅ **Release 流水线不再静默失败** — 在 `release.yml` 头部新增专门的 `signing-preflight` job，**在**启动 4 平台 build matrix **之前**先检查 `${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}` 是否为空。三种结果：(a) secret 已设 → 进入 `signed` 模式；(b) secret 为空**且**仓库 variable `RELEASE_ALLOW_UNSIGNED=true` → 进入 `unsigned` 模式但在 release notes 顶部加显眼"本版本无法被自动更新检测"警告；(c) secret 为空且没启用 override → 立即失败整条流水线。彻底取代了过去"静默产出 broken installer"的故障模式。
+
+2. ✅ **`scripts/check-signing-key.ts`（CI gate + 本地工具）** — Bun 脚本：从 `tauri.conf.json::plugins.updater.pubkey` 解码公钥，从 `TAURI_SIGNING_PRIVATE_KEY`（或本地 `~/.tauri/<id>.key`）解码私钥，提取两侧 16 字符 hex keyId，断言一致。专门防 fork 时最常见的坑：rotate 了一半却忘了另一半。minisign 解析核心抽到 `src/lib/minisignKey.ts`，由 12 个 bun:test 用例覆盖（真实仓库 pubkey 解码、小写归一、encrypted-secret-key header、注释缺 keyId 时回落到 binary blob、畸形输入 reject）。已接到 build matrix：每次 signed release 在 tauri-action 跑前先校验密钥对。
+
+3. ✅ **`scripts/build-latest-json.ts` + 新 `publish-latest-json` job** — `tauri-action` 已经把每个平台的 updater bundle 与对应 `.sig` 都上传到 GitHub Release，但**它不会发布** `tauri-plugin-updater` 真正去拉取的顶层索引 `releases/latest/download/latest.json`。新的聚合 job（gated on `signing-preflight.outputs.signing-mode == 'signed'`）遍历刚发布的 release assets，按扩展名分类（`.nsis.zip` → windows，`.app.tar.gz` → mac arm64/x64，`.AppImage.tar.gz` → linux），各自配对 `.sig`，按 updater plugin 期望的 schema 生成 `latest.json`，再用 `gh release upload --clobber` 附到 release 上。**自动更新链路终于真正能闭环了**。
+
+4. ✅ **`bun run check-signing-key`** — tag 前的本地 sanity check 一行命令。让 keyId mismatch 这种坑在本地就暴露，而不是 CI 25 分钟后才发现。`README.md` / `README.zh.md` 新增"配置自动更新签名密钥"章节文档。
+
+5. ✅ **测试** — 前端在 `src/lib/minisignKey.test.ts` 新增 12 个 bun:test：wrap/unwrap、keyId 提取、binary fallback、`fingerprintFromWrapped` 端到端。总计：后端 **61**（不变）；前端 **91**（从 79）。
+
+### Backlog（v0.13.2 之后）
 
 - ⏳ 代码签名（Windows EV cert / macOS notarization），让安装包不再触发 SmartScreen / Gatekeeper 警告。
-- ⏳ 错误处理统一化：所有 Tauri command 返回 `Result<T, AppError>`，前端集中 toast。
 - ⏳ Diff 双向编辑：在 Side-by-side 模式下直接修改右侧并写回工作区。
 - ⏳ Search v2：结构化结果（按文件聚合）、保存搜索、最近查询历史。
 - ⏳ Tabs v2：跨进程持久化、tab 拖拽排序、tab 钉选。

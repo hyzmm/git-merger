@@ -57,6 +57,30 @@ Artifacts:
 - macOS: `src-tauri/target/release/bundle/{dmg,macos}/`
 - Linux: `src-tauri/target/release/bundle/{appimage,deb,rpm}/`
 
+## Configuring updater signing keys
+
+Auto-update bundles are signed with a [minisign](https://jedisct1.github.io/minisign/) key pair. The public half is committed in `src-tauri/tauri.conf.json::plugins.updater.pubkey`; the private half lives only in the GitHub Secret `TAURI_SIGNING_PRIVATE_KEY` (with optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key was generated with a password).
+
+If you fork this repo and want signed releases of your own:
+
+```bash
+# 1. Generate a fresh keypair (Tauri CLI wraps minisign).
+bun x @tauri-apps/cli signer generate -w ~/.tauri/<your-app>.key
+
+# 2. Copy the printed public key into src-tauri/tauri.conf.json
+#    under plugins.updater.pubkey — it's already base64-wrapped.
+
+# 3. Verify locally that pubkey + privkey share a fingerprint:
+bun run check-signing-key
+
+# 4. Add the contents of <your-app>.key to GitHub Secrets:
+#    Settings → Secrets and variables → Actions →
+#       TAURI_SIGNING_PRIVATE_KEY = (paste the FULL .key file contents)
+#       TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (only if you set one)
+```
+
+The release pipeline's `signing-preflight` job refuses to start the build matrix when `TAURI_SIGNING_PRIVATE_KEY` is empty, so you'll never silently ship installers that the in-app updater can't validate. To opt out (for an explicitly-unsigned dry run) set repo variable `RELEASE_ALLOW_UNSIGNED=true`.
+
 ## Quality
 
 ```bash
@@ -233,10 +257,21 @@ G:\GitTools
 
 5. ✅ **Tests** — Backend gains 11 unit tests in `src/error.rs` covering each classification path (`NotFound / MergeConflict / Auth / InvalidArgument / UserCancelled` via `ErrorCode`; `NonFastForward / Auth / InvalidArgument` via message heuristic; unknown libgit2 messages staying as `Git`; `std::io::Error → Io`; serialised JSON with / without `code` & `class`). Frontend gains 19 bun:test cases across `src/lib/appError.test.ts` (parse, format, predicates, all 10 known kinds round-trip) and `src/lib/toast.test.ts` (queue mechanics, variants, MAX_VISIBLE cap, default-duration ranking, helpers). Totals: backend **61** (50 integration + 11 unit, up from 50); frontend **79** (up from 59).
 
-### Backlog (post-v0.13.1)
+### v0.13.2 — Shipped
+
+1. ✅ **Release pipeline now fails loudly** — Added a dedicated `signing-preflight` job at the head of `release.yml` that checks `${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}` _before_ spinning up the 4-platform build matrix. Three outcomes: (a) secret set → continue in `signed` mode; (b) secret empty _and_ repo variable `RELEASE_ALLOW_UNSIGNED=true` → continue in `unsigned` mode but prepend a clear "this release won't auto-update" warning to the release notes; (c) secret empty and the override is off → fail the pipeline immediately. Replaces the old "silently produce broken installers" failure mode.
+
+2. ✅ **`scripts/check-signing-key.ts` (CI gate + dev tool)** — A bun script that decodes the public key out of `tauri.conf.json::plugins.updater.pubkey`, decodes the private key from `TAURI_SIGNING_PRIVATE_KEY` (or `~/.tauri/<id>.key` when running locally), pulls the 16-character hex keyId out of each, and asserts they match. Catches the most common foot-gun: rotating one half of the pair and forgetting the other. The minisign-parsing core lives in `src/lib/minisignKey.ts` and is covered by 12 bun:test cases (real shipped pubkey decode, lowercase normalisation, encrypted-secret-key headers, binary-blob fallback when the comment lacks the keyId, malformed input rejection). Wired into the build matrix so every signed release has a verified key pair before tauri-action runs.
+
+3. ✅ **`scripts/build-latest-json.ts` + new `publish-latest-json` job** — `tauri-action` already uploads each platform's updater bundle and its `.sig` companion to the GitHub Release, but it does NOT publish the top-level `latest.json` index that `tauri-plugin-updater` actually fetches from `releases/latest/download/latest.json`. The new aggregator job (gated on `signing-preflight.outputs.signing-mode == 'signed'`) walks the freshly-built release's assets, classifies them by extension (`.nsis.zip` → windows, `.app.tar.gz` → mac arm64/x64, `.AppImage.tar.gz` → linux), pairs each with its `.sig`, and emits `latest.json` in exactly the schema the updater plugin expects. Then `gh release upload --clobber` attaches the file. Auto-update finally has a chance of working end-to-end.
+
+4. ✅ **`bun run check-signing-key`** — One-liner for local sanity checks before tagging a release. Surfaces the keyId mismatch case with a clear diagnostic instead of letting CI find out 25 minutes later. Documented in the new "Configuring updater signing keys" section of `README.md` / `README.zh.md`.
+
+5. ✅ **Tests** — Frontend gains 12 new bun:test cases in `src/lib/minisignKey.test.ts` covering wrap/unwrap, keyId extraction, binary fallback path, and end-to-end `fingerprintFromWrapped`. Totals: backend **61** (unchanged); frontend **91** (up from 79).
+
+### Backlog (post-v0.13.2)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Unified error handling: every Tauri command returns `Result<T, AppError>`, frontend funnels into a single toast.
 - ⏳ Bidirectional Diff editing: edit the right side in Side-by-side mode and write straight back to the working tree.
 - ⏳ Search v2: structured results (per-file aggregation), saved searches, recent-query history.
 - ⏳ Tabs v2: cross-process persistence, drag-to-reorder, pinned tabs.

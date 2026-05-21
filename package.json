@@ -1,7 +1,7 @@
 {
   "name": "git-tools",
   "private": true,
-  "version": "0.13.1",
+  "version": "0.13.2",
   "type": "module",
   "description": "IDEA-style Git tools (History / Diff / Merge) built on Tauri 2 + React 19",
   "scripts": {
@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
-    "test": "bun test src/lib"
+    "test": "bun test src/lib",
+    "check-signing-key": "bun run scripts/check-signing-key.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",

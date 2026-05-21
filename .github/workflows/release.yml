@@ -3,7 +3,18 @@ name: Release
 # Builds Tauri installers for Windows / macOS / Linux when a `v*` tag is
 # pushed, and publishes them to a GitHub Release.
 #
-# Trigger:  git tag v0.4.0 && git push --tags
+# Trigger:  git tag v0.13.2 && git push --tags
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           full content of the minisign .key file
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  password used when generating the key
+#
+# When the secret is missing, the `signing-preflight` job intentionally fails
+# the whole pipeline rather than silently shipping an unsigned installer that
+# auto-update can't validate. Set the repo variable RELEASE_ALLOW_UNSIGNED to
+# `true` (Settings → Variables) if you knowingly want to publish an unsigned
+# release — the pipeline will continue and prepend a clear warning to the
+# release notes.
 
 on:
   push:
@@ -15,7 +26,32 @@ permissions:
   contents: write # tauri-action needs this to create the Release
 
 jobs:
+  signing-preflight:
+    name: Verify signing key is configured
+    runs-on: ubuntu-22.04
+    outputs:
+      signing-mode: ${{ steps.detect.outputs.mode }}
+    steps:
+      - id: detect
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          ALLOW_UNSIGNED: ${{ vars.RELEASE_ALLOW_UNSIGNED }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "✓ TAURI_SIGNING_PRIVATE_KEY is set — auto-update bundles will be signed."
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+          elif [ "$ALLOW_UNSIGNED" = "true" ]; then
+            echo "⚠ TAURI_SIGNING_PRIVATE_KEY is empty BUT vars.RELEASE_ALLOW_UNSIGNED=true."
+            echo "  Continuing in unsigned mode. Auto-update will not work for this release."
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not configured."
+            echo "::error::Either set the secret (recommended) or set vars.RELEASE_ALLOW_UNSIGNED=true to opt out explicitly."
+            exit 1
+          fi
+
   build:
+    needs: signing-preflight
     strategy:
       fail-fast: false
       matrix:
@@ -73,15 +109,19 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Verify pubkey ↔ private key fingerprint
+        if: needs.signing-preflight.outputs.signing-mode == 'signed'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: bun run scripts/check-signing-key.ts
+
       - name: Build & publish Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater signing keys — set as repo Secrets in Settings → Secrets:
-          #   TAURI_SIGNING_PRIVATE_KEY        (full content of gittools.key)
-          #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the password used at generate time)
-          # When unset, tauri-action skips updater signing — installers still build but
-          # auto-update will not work.
+          # Updater signing keys are gated by `signing-preflight` above, so
+          # here they are guaranteed-set in `signed` mode and guaranteed-empty
+          # in `unsigned` mode (the second branch is opt-in via repo variable).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Honour user's bun in tauri-action's child invocations.
@@ -97,8 +137,40 @@ jobs:
             - macOS: `.dmg` (universal — pick `aarch64` on Apple Silicon, `x64` on Intel)
             - Linux: `.deb`, `.rpm`, `.AppImage`
 
+            ${{ needs.signing-preflight.outputs.signing-mode == 'unsigned' && '> ⚠️ This release was built without a minisign signing key. The in-app auto-updater will NOT be able to validate or download this version. Manual install only.' || '' }}
+
             > Installers are not yet code-signed; SmartScreen / Gatekeeper may warn on first run.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
           # tauri-action auto-detects bun via `package.json` scripts.
+
+  publish-latest-json:
+    name: Aggregate latest.json for the auto-updater
+    needs:
+      - signing-preflight
+      - build
+    runs-on: ubuntu-22.04
+    # Skip when nothing was signed — there are no .sig files to aggregate.
+    if: needs.signing-preflight.outputs.signing-mode == 'signed'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Build latest.json from release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: bun run scripts/build-latest-json.ts "$TAG" "$REPO"
+
+      - name: Upload latest.json to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" latest.json --clobber --repo "${{ github.repository }}"
