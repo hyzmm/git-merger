@@ -1,4 +1,4 @@
-use git2::{BlameOptions, DiffOptions, Oid, Repository};
+use git2::{BlameOptions, Oid, Repository};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -150,11 +150,11 @@ pub fn previous_filename(
         let new_tree = current.tree()?;
         let parent_tree = parent.tree()?;
 
-        // Diff parent → current, with rename detection.
-        let mut opts = DiffOptions::new();
-        opts.pathspec(&tracked_path);
-        let mut diff =
-            repo.diff_tree_to_tree(Some(&parent_tree), Some(&new_tree), Some(&mut opts))?;
+        // Important: do NOT pathspec-restrict the diff before rename
+        // detection, because find_similar needs to see the deleted *old*
+        // path to pair it with the added *new* path. We filter to
+        // `tracked_path` ourselves once similarity is resolved.
+        let mut diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&new_tree), None)?;
 
         let mut find = git2::DiffFindOptions::new();
         find.renames(true).copies(true);

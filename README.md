@@ -205,7 +205,17 @@ G:\GitTools
 
 4. ✅ **Decisions deferred to a future minor** — Cross-process tab persistence (recall the same set of tabs on app restart) is intentionally NOT implemented in v0.12.0. The recent-repositories list already covers the common "I want to reopen what I was working on" case, and persisting full session snapshots adds quota / serialization complexity (e.g. `Set<string>` in changes view) without a clear short-term payoff.
 
-### Backlog (post-v0.12.0)
+### v0.12.1 — Shipped
+
+1. ✅ **Backend test coverage push** — 15 new integration tests in `tests/git_layer.rs`, taking the suite from 35 → **50**:
+   - **diff** (3): `commit_files` distinguishes Added / Modified / Deleted; `file_diff` returns hunks with proper `+`/`−` lines for a modified file; `working_diff` surfaces unstaged edits in the workdir.
+   - **blame** (3): `blame_file` attributes each line to the right commit; `previous_filename` follows a rename; `previous_filename` returns `None` at the introduction commit (no further history).
+   - **commit_ops** (4): `cherry_pick` stages the target change into the index without auto-committing HEAD; `revert` writes the inverse change to the index; `reset --soft` keeps both the index and the workdir; `reset --mixed` clears the index but keeps the workdir.
+   - **workspace** (5): `working_changes` classifies untracked vs unstaged correctly; stage → unstage round-trips through the right `WorkingFlag` states; `discard_files` reverts tracked files to the index version; `discard_files` deletes untracked files from disk; `commit_changes` advances HEAD and clears working changes.
+
+2. ✅ **Bug fix surfaced by the new tests** — `blame::previous_filename` was applying a `pathspec(file)` filter on `diff_tree_to_tree` _before_ invoking `find_similar`, so libgit2's rename detection had no `delete(old_path)` delta to pair with the `add(new_path)` and rename resolution silently returned `None`. Removed the early pathspec filter and switched to the same pattern `file_history.rs` already uses (do the unrestricted diff, run `find_similar`, then filter to the tracked path ourselves). Result: clicking "Annotate previous" on a renamed file in the Blame view now actually walks back across the rename instead of stopping cold.
+
+### Backlog (post-v0.12.1)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

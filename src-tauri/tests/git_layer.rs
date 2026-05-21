@@ -778,3 +778,339 @@ fn search_max_commits_truncates_walk() {
     assert!(summary.truncated);
     assert!(summary.hits.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// diff
+// ---------------------------------------------------------------------------
+
+#[test]
+fn diff_commit_files_lists_added_modified_and_deleted() {
+    let r = TempRepo::init();
+    r.commit_file("keep.txt", "k1\n", "c1: keep");
+    r.commit_file("mod.txt", "before\n", "c2: add mod");
+    // c3: modify mod.txt + add new.txt + delete keep.txt.
+    std::fs::write(r.path().join("mod.txt"), "after\n").unwrap();
+    std::fs::write(r.path().join("new.txt"), "fresh\n").unwrap();
+    std::fs::remove_file(r.path().join("keep.txt")).unwrap();
+    let oid = r.commit_all("c3: churn").to_string();
+
+    let files = git::diff::commit_files(&r.path_str(), &oid).unwrap();
+    let by_path: std::collections::HashMap<&str, &git::FileChange> =
+        files.iter().map(|f| (f.path.as_str(), f)).collect();
+    assert!(by_path.contains_key("mod.txt"));
+    assert!(by_path.contains_key("new.txt"));
+    assert!(by_path.contains_key("keep.txt"));
+    assert!(matches!(
+        by_path["mod.txt"].status,
+        git::ChangeStatus::Modified
+    ));
+    assert!(matches!(
+        by_path["new.txt"].status,
+        git::ChangeStatus::Added
+    ));
+    assert!(matches!(
+        by_path["keep.txt"].status,
+        git::ChangeStatus::Deleted
+    ));
+}
+
+#[test]
+fn diff_file_diff_returns_hunks_for_a_modified_file() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "alpha\nbeta\ngamma\n", "c1");
+    std::fs::write(r.path().join("a.txt"), "alpha\nBETA\ngamma\n").unwrap();
+    let oid = r.commit_all("c2: change beta").to_string();
+
+    let fd = git::diff::file_diff(&r.path_str(), &oid, "a.txt", false).unwrap();
+    assert!(!fd.is_binary);
+    assert!(!fd.hunks.is_empty(), "expected at least one hunk");
+    let added: Vec<&str> = fd
+        .hunks
+        .iter()
+        .flat_map(|h| h.lines.iter())
+        .filter(|l| l.origin == "+")
+        .map(|l| l.content.as_str())
+        .collect();
+    let removed: Vec<&str> = fd
+        .hunks
+        .iter()
+        .flat_map(|h| h.lines.iter())
+        .filter(|l| l.origin == "-")
+        .map(|l| l.content.as_str())
+        .collect();
+    assert!(added.iter().any(|s| s.contains("BETA")));
+    assert!(removed.iter().any(|s| s.contains("beta")));
+}
+
+#[test]
+fn diff_working_diff_picks_up_unstaged_edits() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "one\ntwo\nthree\n", "init");
+    // Modify in workdir but DON'T stage it.
+    std::fs::write(r.path().join("a.txt"), "one\nTWO\nthree\n").unwrap();
+
+    let fd = git::diff::working_diff(&r.path_str(), "a.txt", false).unwrap();
+    assert!(!fd.is_binary);
+    assert!(!fd.hunks.is_empty());
+    let has_two = fd
+        .hunks
+        .iter()
+        .flat_map(|h| h.lines.iter())
+        .any(|l| l.origin == "+" && l.content.contains("TWO"));
+    assert!(
+        has_two,
+        "working_diff should surface the unstaged 'TWO' line"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// blame
+// ---------------------------------------------------------------------------
+
+#[test]
+fn blame_file_attributes_each_line_to_its_commit() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "first\n", "c1");
+    // c2: append a new line (first stays from c1, second comes from c2).
+    std::fs::write(r.path().join("a.txt"), "first\nsecond\n").unwrap();
+    let c2 = r.commit_all("c2: append");
+
+    let lines = git::blame::blame_file(&r.path_str(), "a.txt").unwrap();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0].line, 1);
+    assert_eq!(lines[0].oid, c1.to_string());
+    assert!(lines[0].content.contains("first"));
+    assert_eq!(lines[1].line, 2);
+    assert_eq!(lines[1].oid, c2.to_string());
+    assert!(lines[1].content.contains("second"));
+}
+
+#[test]
+fn blame_previous_filename_follows_a_rename() {
+    let r = TempRepo::init();
+    r.commit_file("old_name.txt", "v1\n", "c1: introduce");
+    // c2: rename old_name.txt -> new_name.txt.
+    r.rename_file("old_name.txt", "new_name.txt");
+    let c2 = r.commit_all("c2: rename");
+
+    let prev =
+        git::blame::previous_filename(&r.path_str(), "new_name.txt", &c2.to_string()).unwrap();
+    let prev = prev.expect("previous_filename should resolve across the rename");
+    assert_eq!(prev.path, "old_name.txt");
+}
+
+#[test]
+fn blame_previous_filename_returns_none_at_introduction_commit() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1: introduce");
+    // a.txt has no history before c1 — previous_filename should be None.
+    let prev = git::blame::previous_filename(&r.path_str(), "a.txt", &c1.to_string()).unwrap();
+    assert!(prev.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// commit_ops (cherry-pick / revert / reset soft & mixed)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn commit_ops_cherry_pick_stages_target_change_into_index() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1");
+    let c2 = r.commit_file("b.txt", "from-c2\n", "c2: add b");
+
+    // Wind HEAD back to c1 with a hard reset, removing b.txt from disk.
+    git::commit_ops::reset(&r.path_str(), &c1.to_string(), "hard").unwrap();
+    assert!(!r.path().join("b.txt").exists());
+
+    // Now cherry-pick c2: the change should land in the index (b.txt
+    // staged), but cherry_pick deliberately doesn't auto-commit so HEAD
+    // stays at c1.
+    git::commit_ops::cherry_pick(&r.path_str(), &c2.to_string()).unwrap();
+
+    let mut index = r.repo.index().unwrap();
+    index.read(true).unwrap();
+    let staged = index.get_path(std::path::Path::new("b.txt"), 0);
+    assert!(
+        staged.is_some(),
+        "cherry-pick should stage b.txt into the index"
+    );
+
+    let head_now = r.repo.head().unwrap().peel_to_commit().unwrap().id();
+    assert_eq!(head_now, c1, "cherry_pick should not auto-commit");
+}
+
+#[test]
+fn commit_ops_revert_creates_inverse_change_in_index() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "alpha\n", "c1: alpha");
+    let c2 = r.commit_file("a.txt", "alpha\nbeta\n", "c2: add beta line");
+
+    // Revert c2 -> the inverse (drop beta) should land in the index.
+    git::commit_ops::revert(&r.path_str(), &c2.to_string()).unwrap();
+
+    let mut index = r.repo.index().unwrap();
+    index.read(true).unwrap();
+    let entry = index.get_path(std::path::Path::new("a.txt"), 0).unwrap();
+    let blob = r.repo.find_blob(entry.id).unwrap();
+    let content = std::str::from_utf8(blob.content()).unwrap();
+    assert_eq!(
+        content, "alpha\n",
+        "revert of c2 should restore the c1 content of a.txt"
+    );
+}
+
+#[test]
+fn commit_ops_reset_soft_keeps_index_and_workdir() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1");
+    r.commit_file("a.txt", "2\n", "c2");
+
+    git::commit_ops::reset(&r.path_str(), &c1.to_string(), "soft").unwrap();
+
+    // HEAD moved back to c1 ...
+    let head_now = r.repo.head().unwrap().peel_to_commit().unwrap().id();
+    assert_eq!(head_now, c1);
+    // ... but the workdir still has the c2 content.
+    let on_disk = std::fs::read_to_string(r.path().join("a.txt")).unwrap();
+    assert_eq!(on_disk, "2\n");
+    // ... and the index keeps the c2 staged version too (so `git status`
+    // would show "Changes to be committed").
+    let mut index = r.repo.index().unwrap();
+    index.read(true).unwrap();
+    let entry = index.get_path(std::path::Path::new("a.txt"), 0).unwrap();
+    let blob = r.repo.find_blob(entry.id).unwrap();
+    assert_eq!(std::str::from_utf8(blob.content()).unwrap(), "2\n");
+}
+
+#[test]
+fn commit_ops_reset_mixed_clears_index_but_keeps_workdir() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1");
+    r.commit_file("a.txt", "2\n", "c2");
+
+    git::commit_ops::reset(&r.path_str(), &c1.to_string(), "mixed").unwrap();
+
+    // HEAD moved back, workdir untouched.
+    assert_eq!(r.repo.head().unwrap().peel_to_commit().unwrap().id(), c1);
+    assert_eq!(
+        std::fs::read_to_string(r.path().join("a.txt")).unwrap(),
+        "2\n"
+    );
+    // Index resets to c1 — so a.txt in the index now has the c1 content.
+    let mut index = r.repo.index().unwrap();
+    index.read(true).unwrap();
+    let entry = index.get_path(std::path::Path::new("a.txt"), 0).unwrap();
+    let blob = r.repo.find_blob(entry.id).unwrap();
+    assert_eq!(std::str::from_utf8(blob.content()).unwrap(), "1\n");
+}
+
+// ---------------------------------------------------------------------------
+// workspace (status / stage / unstage / discard / commit)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn workspace_working_changes_classifies_untracked_and_unstaged() {
+    let r = TempRepo::init();
+    r.commit_file("tracked.txt", "v1\n", "init");
+    // Modify the tracked file (unstaged) and add an untracked one.
+    std::fs::write(r.path().join("tracked.txt"), "v2\n").unwrap();
+    std::fs::write(r.path().join("new.txt"), "hi\n").unwrap();
+
+    let changes = git::workspace::working_changes(&r.path_str()).unwrap();
+    let by_path: std::collections::HashMap<&str, &git::WorkingFile> =
+        changes.iter().map(|f| (f.path.as_str(), f)).collect();
+    let tracked = by_path.get("tracked.txt").expect("tracked.txt missing");
+    let untracked = by_path.get("new.txt").expect("new.txt missing");
+
+    assert!(matches!(
+        tracked.flag,
+        git::workspace::WorkingFlag::Unstaged
+    ));
+    assert!(matches!(
+        tracked.status,
+        git::workspace::WorkingStatus::Modified
+    ));
+    assert!(matches!(
+        untracked.flag,
+        git::workspace::WorkingFlag::Untracked
+    ));
+}
+
+#[test]
+fn workspace_stage_then_unstage_round_trip() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "init");
+    std::fs::write(r.path().join("a.txt"), "v2\n").unwrap();
+
+    // stage_files: now the change should appear as "staged".
+    git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+    let after_stage = git::workspace::working_changes(&r.path_str()).unwrap();
+    let staged = after_stage
+        .iter()
+        .find(|f| f.path == "a.txt")
+        .expect("a.txt should still be in changes");
+    assert!(matches!(staged.flag, git::workspace::WorkingFlag::Staged));
+
+    // unstage_files: should flip back to "unstaged" (workdir still differs).
+    git::workspace::unstage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+    let after_unstage = git::workspace::working_changes(&r.path_str()).unwrap();
+    let unstaged = after_unstage
+        .iter()
+        .find(|f| f.path == "a.txt")
+        .expect("a.txt should still be in changes after unstage");
+    assert!(matches!(
+        unstaged.flag,
+        git::workspace::WorkingFlag::Unstaged
+    ));
+}
+
+#[test]
+fn workspace_discard_files_reverts_workdir_to_index_for_tracked() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "original\n", "init");
+    std::fs::write(r.path().join("a.txt"), "garbage\n").unwrap();
+
+    git::workspace::discard_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+
+    let on_disk = std::fs::read_to_string(r.path().join("a.txt")).unwrap();
+    assert_eq!(on_disk, "original\n");
+    // No remaining working changes.
+    let after = git::workspace::working_changes(&r.path_str()).unwrap();
+    assert!(after.iter().all(|f| f.path != "a.txt"));
+}
+
+#[test]
+fn workspace_discard_files_deletes_untracked_files() {
+    let r = TempRepo::init();
+    r.commit_file("anchor.txt", "stay\n", "init");
+    // Create an untracked file.
+    std::fs::write(r.path().join("trash.txt"), "noise\n").unwrap();
+    assert!(r.path().join("trash.txt").exists());
+
+    git::workspace::discard_files(&r.path_str(), &["trash.txt".to_string()]).unwrap();
+    assert!(
+        !r.path().join("trash.txt").exists(),
+        "discard should delete untracked files from disk"
+    );
+}
+
+#[test]
+fn workspace_commit_changes_creates_a_new_head_commit() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "init");
+    std::fs::write(r.path().join("a.txt"), "v2\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+    let head_before = r.repo.head().unwrap().target().unwrap();
+
+    let new_oid_str = git::workspace::commit_changes(&r.path_str(), "v2 commit").unwrap();
+    let new_oid = git2::Oid::from_str(&new_oid_str).unwrap();
+
+    let head_after = r.repo.head().unwrap().target().unwrap();
+    assert_ne!(head_before, head_after);
+    assert_eq!(head_after, new_oid);
+    let c = r.repo.find_commit(new_oid).unwrap();
+    assert_eq!(c.summary().unwrap_or(""), "v2 commit");
+    // No remaining working changes.
+    let after = git::workspace::working_changes(&r.path_str()).unwrap();
+    assert!(after.is_empty());
+}
