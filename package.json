@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "bun test src/lib",
-    "check-signing-key": "bun run scripts/check-signing-key.ts"
+    "check-signing-key": "bun run scripts/check-signing-key.ts",
+    "gen:icons": "bun run scripts/gen-icons.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",
