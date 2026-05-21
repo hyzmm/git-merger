@@ -1,8 +1,10 @@
 # Git Tools — 使用说明
 
+[English](./USAGE.en.md) · **简体中文**
+
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.12.1  
+> 适用版本：v0.13.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -855,7 +857,7 @@ registry = "https://registry.npmmirror.com/"
 
 ### Q11：Windows SmartScreen 弹"已保护你的电脑"？
 
-安装包未做 EV 代码签名（v0.7.0 仍在 backlog）。点 "更多信息 → 仍要运行" 即可。
+安装包未做 EV 代码签名（截至 v0.13.0 仍在 backlog）。点 "更多信息 → 仍要运行" 即可。
 
 ### Q12：高 DPI 屏字体太小？
 
@@ -911,6 +913,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.11.0 | 历史搜索（Ctrl+Shift+F）：message + diff pickaxe + regex/literal + path scope，cargo 依赖加 `regex`，Sidebar 升至 11 入口          |
 | v0.12.0 | 多仓库 tabs：Topbar 上方新增 RepoTabs 栏，支持 `Ctrl+T` 新建、`Ctrl+W` 关闭、双击重命名；每个 tab 独立保留 view/filter/选中态      |
 | v0.12.1 | 测试覆盖率扩展：diff/blame/commit_ops/workspace 共 15 个新集成测试（35→50）；附带修复 `blame::previous_filename` 跨重命名解析 bug  |
+| v0.13.0 | 双语化文档：新增 `README.zh.md` 与 `USAGE.en.md`，原 `README.md` / `USAGE.md` 顶部加语言切换链接（English · 简体中文）；无功能变更 |
 
 ---
 

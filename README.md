@@ -1,11 +1,13 @@
 # Git Tools
 
+**English** · [简体中文](./README.zh.md)
+
 [![CI](https://github.com/hyzmm/git-merger/actions/workflows/ci.yml/badge.svg)](https://github.com/hyzmm/git-merger/actions/workflows/ci.yml)
 [![Release](https://github.com/hyzmm/git-merger/actions/workflows/release.yml/badge.svg)](https://github.com/hyzmm/git-merger/actions/workflows/release.yml)
 
 IDEA-style **History / Diff / Merge** for any local Git repository, packaged as a cross-platform desktop app.
 
-> 👉 **End-user docs**: see [`USAGE.md`](./USAGE.md) for installation, keyboard shortcuts, typical workflows and FAQ.
+> 👉 **End-user docs**: see [`USAGE.en.md`](./USAGE.en.md) (English) or [`USAGE.md`](./USAGE.md) (中文) for installation, keyboard shortcuts, typical workflows and FAQ.
 
 ## Tech stack (latest as of 2026-05)
 
@@ -215,9 +217,17 @@ G:\GitTools
 
 2. ✅ **Bug fix surfaced by the new tests** — `blame::previous_filename` was applying a `pathspec(file)` filter on `diff_tree_to_tree` _before_ invoking `find_similar`, so libgit2's rename detection had no `delete(old_path)` delta to pair with the `add(new_path)` and rename resolution silently returned `None`. Removed the early pathspec filter and switched to the same pattern `file_history.rs` already uses (do the unrestricted diff, run `find_similar`, then filter to the tracked path ourselves). Result: clicking "Annotate previous" on a renamed file in the Blame view now actually walks back across the rename instead of stopping cold.
 
-### Backlog (post-v0.12.1)
+### v0.13.0 — Shipped
+
+1. ✅ **Bilingual documentation** — Introduced a Chinese-language `README.zh.md` and an English-language `USAGE.en.md`, mirroring the existing `README.md` / `USAGE.md` one-to-one. Both originals now carry a language-switcher header (English · 简体中文) at the top so readers can flip between locales in one click. No functional changes in this release — purely documentation parity: the developer-facing engineering doc and the end-user manual both have an en/zh pair, cross-linked from the README.
+
+### Backlog (post-v0.13.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
+- ⏳ Unified error handling: every Tauri command returns `Result<T, AppError>`, frontend funnels into a single toast.
+- ⏳ Bidirectional Diff editing: edit the right side in Side-by-side mode and write straight back to the working tree.
+- ⏳ Search v2: structured results (per-file aggregation), saved searches, recent-query history.
+- ⏳ Tabs v2: cross-process persistence, drag-to-reorder, pinned tabs.
 
 ## Cross-platform notes
 
