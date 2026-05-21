@@ -12,6 +12,7 @@ export const en = {
   "sidebar.rebase": "Interactive Rebase",
   "sidebar.worktrees": "Worktrees",
   "sidebar.gitignore": ".gitignore editor",
+  "sidebar.search": "Search history",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
 
@@ -203,6 +204,34 @@ export const en = {
   "undo.recent": "Recent undoable actions",
   "undo.empty": "Nothing to undo on top of the reflog.",
   "undo.hint": "Each entry restores HEAD to the state BEFORE that action (mixed reset).",
+
+  // Cross-history search
+  "search.placeholder": "Search commit messages and diff content…",
+  "search.clear": "Clear",
+  "search.run": "Search",
+  "search.searching": "Searching…",
+  "search.mode": "Mode",
+  "search.mode.both": "Both",
+  "search.mode.message": "Message",
+  "search.mode.diff": "Diff (pickaxe)",
+  "search.kind": "Kind",
+  "search.kind.literal": "Literal",
+  "search.kind.regex": "Regex",
+  "search.caseTitle": "Case-sensitive match",
+  "search.path": "Path",
+  "search.pathPlaceholder": "e.g. src/, *.rs",
+  "search.found": "{n} hits",
+  "search.scanned": "{n} commits scanned",
+  "search.truncated": "truncated",
+  "search.idle": "Type a query and press Enter to search history.",
+  "search.empty": "No commits matched that query.",
+  "search.hint":
+    "Search messages, find which commit added or removed a snippet (pickaxe), or both.",
+  "search.previewHint": "Pick a result to inspect the matching message and diff lines.",
+  "search.messageMatch": "Commit message",
+  "search.noDiffHits": "No diff hits — message-only match.",
+  "search.openInHistory": "Open this commit in History view",
+  "search.open": "Open",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

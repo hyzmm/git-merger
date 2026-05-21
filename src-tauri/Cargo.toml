@@ -1,6 +1,6 @@
 [package]
 name = "git-tools"
-version = "0.10.3"
+version = "0.11.0"
 description = "IDEA-style Git tools (History / Diff / Merge)"
 authors = ["you"]
 edition = "2021"
@@ -26,6 +26,7 @@ thiserror = "1"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
+regex = "1"
 
 [dev-dependencies]
 tempfile = "3"

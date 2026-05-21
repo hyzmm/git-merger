@@ -21,6 +21,9 @@ import {
   type WorktreeInfo,
   type GitignoreTemplate,
   type IgnorePreview,
+  type SearchHit,
+  type SearchMode,
+  type PatternKind,
 } from "@/ipc/git";
 import {
   joinChunks,
@@ -44,6 +47,7 @@ export type ViewKey =
   | "rebase"
   | "worktrees"
   | "gitignore"
+  | "search"
   | "fileHistory";
 export type DiffMode = "sbs" | "unified";
 
@@ -167,6 +171,28 @@ interface GitignoreView {
   error: string | null;
 }
 
+interface SearchView {
+  /** Live editor field — what the user is currently typing. */
+  query: string;
+  mode: SearchMode;
+  patternKind: PatternKind;
+  caseSensitive: boolean;
+  pathspec: string;
+  /** Actual results returned by the most recently dispatched search. */
+  hits: SearchHit[];
+  /** Hit currently shown in the right preview panel. */
+  selectedOid: string | null;
+  /** Number of commits walked by the most recent search. */
+  scanned: number;
+  /** True when the backend stopped before exhausting the DAG. */
+  truncated: boolean;
+  /** True while a search is in flight. */
+  busy: boolean;
+  /** Echo of the query that produced the current `hits`. */
+  appliedQuery: string;
+  error: string | null;
+}
+
 interface RebaseView {
   /** Drafted plan before `start` is invoked. Empty when no plan is open. */
   plan: RebaseStep[];
@@ -220,6 +246,7 @@ interface AppState {
   fileHistory: FileHistoryView;
   worktrees: WorktreesView;
   gitignore: GitignoreView;
+  search: SearchView;
 
   recentRepos: RecentRepo[];
 
@@ -318,6 +345,16 @@ interface AppState {
   saveGitignore: () => Promise<void>;
   previewGitignore: () => Promise<void>;
   appendGitignoreTemplate: (id: string) => void;
+
+  // search
+  setSearchQuery: (q: string) => void;
+  setSearchMode: (m: SearchMode) => void;
+  setSearchPatternKind: (k: PatternKind) => void;
+  toggleSearchCase: () => void;
+  setSearchPathspec: (p: string) => void;
+  selectSearchHit: (oid: string | null) => void;
+  runSearch: () => Promise<void>;
+  clearSearch: () => void;
 
   // interactive rebase
   openRebasePlan: (baseOid: string) => Promise<void>;
@@ -456,6 +493,21 @@ const emptyGitignore: GitignoreView = {
   error: null,
 };
 
+const emptySearch: SearchView = {
+  query: "",
+  mode: "both",
+  patternKind: "literal",
+  caseSensitive: false,
+  pathspec: "",
+  hits: [],
+  selectedOid: null,
+  scanned: 0,
+  truncated: false,
+  busy: false,
+  appliedQuery: "",
+  error: null,
+};
+
 const emptyRebase: RebaseView = {
   plan: [],
   baseOid: null,
@@ -500,6 +552,7 @@ export const useApp = create<AppState>((set, get) => ({
   fileHistory: { ...emptyFileHistory },
   worktrees: { ...emptyWorktrees },
   gitignore: { ...emptyGitignore },
+  search: { ...emptySearch },
 
   recentRepos: loadRecent(),
 
@@ -535,6 +588,7 @@ export const useApp = create<AppState>((set, get) => ({
         fileHistory: { ...emptyFileHistory },
         worktrees: { ...emptyWorktrees },
         gitignore: { ...emptyGitignore },
+        search: { ...emptySearch },
       });
       void get().loadHistory();
       void get().refreshRebaseStatus();
@@ -558,6 +612,7 @@ export const useApp = create<AppState>((set, get) => ({
       fileHistory: { ...emptyFileHistory },
       worktrees: { ...emptyWorktrees },
       gitignore: { ...emptyGitignore },
+      search: { ...emptySearch },
     }),
 
   refresh: async () => {
@@ -1508,6 +1563,79 @@ export const useApp = create<AppState>((set, get) => ({
         },
       };
     }),
+
+  // ---------- Cross-history search ----------
+  setSearchQuery: (q) => set((s) => ({ search: { ...s.search, query: q, error: null } })),
+
+  setSearchMode: (m) => set((s) => ({ search: { ...s.search, mode: m } })),
+
+  setSearchPatternKind: (k) => set((s) => ({ search: { ...s.search, patternKind: k } })),
+
+  toggleSearchCase: () =>
+    set((s) => ({ search: { ...s.search, caseSensitive: !s.search.caseSensitive } })),
+
+  setSearchPathspec: (p) => set((s) => ({ search: { ...s.search, pathspec: p } })),
+
+  selectSearchHit: (oid) => set((s) => ({ search: { ...s.search, selectedOid: oid } })),
+
+  clearSearch: () =>
+    set((s) => ({
+      search: {
+        ...emptySearch,
+        // Preserve the user's mode / kind / case preferences across clears
+        // since changing those is way less frequent than running a new query.
+        mode: s.search.mode,
+        patternKind: s.search.patternKind,
+        caseSensitive: s.search.caseSensitive,
+        pathspec: s.search.pathspec,
+      },
+    })),
+
+  runSearch: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const sv = get().search;
+    const query = sv.query.trim();
+    if (!query) {
+      set((s) => ({
+        search: {
+          ...s.search,
+          hits: [],
+          appliedQuery: "",
+          scanned: 0,
+          truncated: false,
+          selectedOid: null,
+          error: null,
+        },
+      }));
+      return;
+    }
+    set((s) => ({ search: { ...s.search, busy: true, error: null } }));
+    try {
+      const summary = await git.searchCommits(repo.path, query, {
+        mode: sv.mode,
+        patternKind: sv.patternKind,
+        caseSensitive: sv.caseSensitive,
+        pathspec: sv.pathspec.trim() || undefined,
+      });
+      set((s) => ({
+        search: {
+          ...s.search,
+          hits: summary.hits,
+          scanned: summary.scanned,
+          truncated: summary.truncated,
+          appliedQuery: query,
+          busy: false,
+          // Auto-select the first hit so the preview pane has something to show.
+          selectedOid: summary.hits[0]?.oid ?? null,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({
+        search: { ...s.search, busy: false, error: String(e), hits: [] },
+      }));
+    }
+  },
 
   // ---------- Interactive Rebase ----------
   openRebasePlan: async (baseOid: string) => {

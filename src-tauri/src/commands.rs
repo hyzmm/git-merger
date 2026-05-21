@@ -455,3 +455,29 @@ pub fn gitignore_preview(path: String, candidate: String) -> R<git::IgnorePrevie
 pub fn gitignore_templates() -> R<Vec<git::GitignoreTemplate>> {
     Ok(git::gitignore::templates())
 }
+
+// ---------- Cross-history search ----------
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub fn search_commits(
+    path: String,
+    pattern: String,
+    mode: git::SearchMode,
+    pattern_kind: git::PatternKind,
+    case_sensitive: bool,
+    pathspec: Option<String>,
+    max_commits: Option<usize>,
+    max_hits: Option<usize>,
+) -> R<git::SearchSummary> {
+    Ok(git::search::search_commits(
+        &path,
+        &pattern,
+        mode,
+        pattern_kind,
+        case_sensitive,
+        pathspec.as_deref(),
+        max_commits,
+        max_hits,
+    )?)
+}

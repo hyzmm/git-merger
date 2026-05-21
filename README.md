@@ -183,7 +183,19 @@ G:\GitTools
 
 4. ✅ **Tests** — 5 new cargo integration tests in `tests/git_layer.rs` covering `log_page` (first page from HEAD, second page continuation without overlap, empty repo, pathspec filtering, root-commit cursor returning empty). 5 new bun:test cases in `src/lib/graph.test.ts` covering `extendLayout` round-trip equivalence with `layoutGraph`, paged extension stability, deterministic dot-column resolution for waiting parents, empty-input safety, and lane reuse across non-overlapping pages. Totals: backend **27** (up from 22); frontend **59** (up from 54).
 
-### Backlog (post-v0.10.3)
+### v0.11.0 — Shipped
+
+1. ✅ **Cross-history search view** — A new `SearchPage` (sidebar entry 9, `Ctrl+Shift+F`) that surfaces three orthogonal axes of finding things across the entire commit DAG: **mode** (Message / Diff / Both), **kind** (Literal / Regex), **case** (Aa toggle), plus a **path** scope reusing the same pathspec semantics as History. Backend `git/search.rs::search_commits` walks `revwalk` newest-first and per commit runs (a) message regex, (b) `diff_tree_to_tree` against parent[0] (or empty tree at root) with the user's pathspec, then collects every `+`/`-` line whose content matches. Returns `{ hits, scanned, truncated }`.
+
+2. ✅ **Pickaxe done right** — The Diff mode is the practical equivalent of `git log -G<re>` (and `-S<text>` when in Literal kind). Per-commit caps: 20 diff hits max (UI wouldn't be useful with more), 2 MB patch budget (skip auto-bundled vendored files), context_lines=0 to keep output tight. Walk caps: 5000 commits scanned, 500 hits collected. The `truncated` flag surfaces both stop conditions to the UI as an amber badge so users know they may want to narrow with a path scope.
+
+3. ✅ **Two-pane UI** — Left pane: toolbar + result list with per-row badges (`msg` for message match, `+/− N` for diff hits) plus author/time/short-oid metadata. Right pane: the selected hit's commit summary header with a one-click **Open** button that jumps to History view and selects that commit, then below it (a) the matched message excerpt for message hits and (b) per-file grouped diff hits with line numbers, `+`/`−` markers, and proper green/red colouring. Enter submits the search; Esc clears it.
+
+4. ✅ **State + i18n** — New `SearchView` Zustand slice with 8 actions (setQuery / setMode / setPatternKind / toggleCase / setPathspec / selectHit / runSearch / clearSearch) — `clearSearch` deliberately preserves mode/kind/case/path preferences across resets. 24 new `search.*` i18n keys mirrored in en/zh. Sidebar grows to 11 entries (`Search` icon between gitignore and Diff). Cargo dependency `regex = "1"` added.
+
+5. ✅ **Tests** — 8 new cargo integration tests in `tests/git_layer.rs`: message-mode finds matching commit; diff-mode pickaxe finds an added line; both-mode unions message + diff hits; regex kind treats pattern as a regex; case sensitivity is honoured both ways; pathspec scopes to a directory; empty pattern returns no hits; max_commits truncates the walk. Totals: backend **35** (up from 27).
+
+### Backlog (post-v0.11.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

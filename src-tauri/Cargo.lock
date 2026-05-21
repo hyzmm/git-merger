@@ -1138,12 +1138,13 @@ dependencies = [
 
 [[package]]
 name = "git-tools"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "chrono",
  "dirs 5.0.1",
  "git2",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

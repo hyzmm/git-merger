@@ -17,6 +17,7 @@ import { RebasePage } from "@/pages/RebasePage";
 import { FileHistoryPage } from "@/pages/FileHistoryPage";
 import { WorktreesPage } from "@/pages/WorktreesPage";
 import { GitignorePage } from "@/pages/GitignorePage";
+import { SearchPage } from "@/pages/SearchPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 
@@ -48,6 +49,7 @@ export default function App() {
       "ctrl+8": () => repo && setView("rebase"),
       "ctrl+9": () => repo && setView("worktrees"),
       "ctrl+0": () => repo && setView("gitignore"),
+      "ctrl+shift+f": () => repo && setView("search"),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
       "ctrl+o": async () => {
@@ -93,6 +95,8 @@ export default function App() {
             <WorktreesPage />
           ) : view === "gitignore" ? (
             <GitignorePage />
+          ) : view === "search" ? (
+            <SearchPage />
           ) : view === "fileHistory" ? (
             <FileHistoryPage />
           ) : (

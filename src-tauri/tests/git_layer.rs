@@ -561,3 +561,220 @@ fn log_page_cursor_at_root_yields_empty_next_page() {
     assert!(!page.has_more);
     assert!(page.next_cursor.is_none());
 }
+
+// ---------------------------------------------------------------------------
+// search (cross-history grep + pickaxe)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn search_message_mode_finds_matching_commit() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "1\n", "init: scaffold");
+    r.commit_file("b.txt", "2\n", "feat: shiny new feature");
+    r.commit_file("c.txt", "3\n", "fix: typo in README");
+
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "feature",
+        git::SearchMode::Message,
+        git::PatternKind::Literal,
+        false,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(summary.hits.len(), 1);
+    let hit = &summary.hits[0];
+    assert!(hit.message_match);
+    assert!(hit.diff_hits.is_empty());
+    assert!(hit.summary.contains("shiny new feature"));
+    assert!(!summary.truncated);
+}
+
+#[test]
+fn search_diff_mode_finds_added_line_pickaxe() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "alpha\n", "c1");
+    r.commit_file("b.txt", "the secret token is XYZZY\nrest\n", "c2 add token");
+    r.commit_file("c.txt", "unrelated\n", "c3");
+
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "XYZZY",
+        git::SearchMode::Diff,
+        git::PatternKind::Literal,
+        true,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(summary.hits.len(), 1);
+    let hit = &summary.hits[0];
+    assert!(!hit.message_match);
+    assert!(!hit.diff_hits.is_empty());
+    let dh = &hit.diff_hits[0];
+    assert_eq!(dh.side, '+');
+    assert_eq!(dh.file, "b.txt");
+    assert!(dh.text.contains("XYZZY"));
+}
+
+#[test]
+fn search_both_mode_unions_message_and_diff_hits() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "hello world\n", "init: TODO write tests");
+    r.commit_file("b.txt", "alpha\nTODO refactor here\n", "feat: add feature");
+    r.commit_file("c.txt", "calm\n", "chore: noise");
+
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "TODO",
+        git::SearchMode::Both,
+        git::PatternKind::Literal,
+        true,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    // Both commits should match — one via message ("init: TODO ..."), the
+    // other via the added "TODO refactor here" diff line.
+    assert_eq!(summary.hits.len(), 2);
+    let by_message = summary.hits.iter().any(|h| h.message_match);
+    let by_diff = summary
+        .hits
+        .iter()
+        .any(|h| h.diff_hits.iter().any(|d| d.text.contains("TODO")));
+    assert!(by_message);
+    assert!(by_diff);
+}
+
+#[test]
+fn search_regex_kind_treats_pattern_as_regex() {
+    let r = TempRepo::init();
+    r.commit_file("v1.txt", "version=1.2.3\n", "release v1.2.3");
+    r.commit_file("v2.txt", "version=10.20.30\n", "release v10.20.30");
+
+    // Anchored regex: only the strict 1-2-3 pattern matches.
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        r"version=1\.2\.3",
+        git::SearchMode::Both,
+        git::PatternKind::Regex,
+        true,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    // The first commit matches in both message and diff.
+    assert_eq!(summary.hits.len(), 1);
+    let hit = &summary.hits[0];
+    assert!(
+        hit.diff_hits
+            .iter()
+            .any(|d| d.text.contains("version=1.2.3")),
+        "diff should contain v1.2.3 line"
+    );
+}
+
+#[test]
+fn search_case_sensitivity_is_honoured() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "Foo bar\n", "case demo");
+
+    // case_sensitive=true with lowercase pattern should NOT match "Foo".
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "foo",
+        git::SearchMode::Diff,
+        git::PatternKind::Literal,
+        true,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(summary.hits.is_empty());
+
+    // case_sensitive=false should match it.
+    let summary2 = git::search::search_commits(
+        &r.path_str(),
+        "foo",
+        git::SearchMode::Diff,
+        git::PatternKind::Literal,
+        false,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(summary2.hits.len(), 1);
+}
+
+#[test]
+fn search_pathspec_scopes_to_directory() {
+    let r = TempRepo::init();
+    // Same content in two paths; pathspec should keep only one.
+    r.commit_file("src/lib.rs", "TARGET\n", "c1 src");
+    r.commit_file("docs/readme.md", "TARGET\n", "c2 docs");
+
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "TARGET",
+        git::SearchMode::Diff,
+        git::PatternKind::Literal,
+        true,
+        Some("src"),
+        None,
+        None,
+    )
+    .unwrap();
+    // Only the src/ commit should surface a diff hit.
+    assert_eq!(summary.hits.len(), 1);
+    let hit = &summary.hits[0];
+    assert!(hit.diff_hits.iter().all(|d| d.file.starts_with("src/")));
+}
+
+#[test]
+fn search_empty_pattern_returns_no_hits() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "1\n", "init");
+
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "",
+        git::SearchMode::Both,
+        git::PatternKind::Literal,
+        false,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(summary.hits.is_empty());
+    assert_eq!(summary.scanned, 0);
+}
+
+#[test]
+fn search_max_commits_truncates_walk() {
+    let r = TempRepo::init();
+    for i in 0..6 {
+        r.commit_file(&format!("f{i}.txt"), &format!("{i}\n"), &format!("c{i}"));
+    }
+    let summary = git::search::search_commits(
+        &r.path_str(),
+        "nonexistent",
+        git::SearchMode::Both,
+        git::PatternKind::Literal,
+        false,
+        None,
+        Some(3),
+        None,
+    )
+    .unwrap();
+    assert_eq!(summary.scanned, 3);
+    assert!(summary.truncated);
+    assert!(summary.hits.is_empty());
+}

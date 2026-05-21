@@ -240,6 +240,33 @@ export interface LogPage {
   next_cursor: string | null;
 }
 
+export type SearchMode = "message" | "diff" | "both";
+export type PatternKind = "literal" | "regex";
+
+export interface DiffHit {
+  file: string;
+  line_no: number;
+  /** "+" for added lines, "-" for removed. */
+  side: string;
+  text: string;
+}
+
+export interface SearchHit {
+  oid: string;
+  short_oid: string;
+  summary: string;
+  author_name: string;
+  time: number;
+  message_match: boolean;
+  diff_hits: DiffHit[];
+}
+
+export interface SearchSummary {
+  hits: SearchHit[];
+  scanned: number;
+  truncated: boolean;
+}
+
 // ---------- Interactive Rebase ----------
 
 export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
@@ -391,4 +418,26 @@ export const git = {
   gitignorePreview: (path: string, candidate: string) =>
     invoke<IgnorePreview>("gitignore_preview", { path, candidate }),
   gitignoreTemplates: () => invoke<GitignoreTemplate[]>("gitignore_templates"),
+  searchCommits: (
+    path: string,
+    pattern: string,
+    opts?: {
+      mode?: SearchMode;
+      patternKind?: PatternKind;
+      caseSensitive?: boolean;
+      pathspec?: string;
+      maxCommits?: number;
+      maxHits?: number;
+    },
+  ) =>
+    invoke<SearchSummary>("search_commits", {
+      path,
+      pattern,
+      mode: opts?.mode ?? "both",
+      patternKind: opts?.patternKind ?? "literal",
+      caseSensitive: opts?.caseSensitive ?? false,
+      pathspec: opts?.pathspec ?? null,
+      maxCommits: opts?.maxCommits ?? null,
+      maxHits: opts?.maxHits ?? null,
+    }),
 };

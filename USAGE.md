@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.10.3  
+> 适用版本：v0.11.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -25,6 +25,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.10 File History（单文件时间线 + 跟随重命名）](#310-file-history单文件时间线--跟随重命名)
   - [3.11 Worktrees（多工作树）](#311-worktrees多工作树)
   - [3.12 .gitignore 编辑器](#312-gitignore-编辑器)
+  - [3.13 历史搜索（跨提交内容查找）](#313-历史搜索跨提交内容查找)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
@@ -85,20 +86,21 @@ bun run tauri:build
 
 ## 三、视图速览
 
-左侧 Sidebar 共 **10 个视图图标**，对应快捷键 `Ctrl+1..9` 与 `Ctrl+0`：
+左侧 Sidebar 共 **11 个视图图标**，对应快捷键 `Ctrl+1..9`、`Ctrl+0` 与 `Ctrl+Shift+F`：
 
-| Sidebar 顺序 | 快捷键   | 视图               |
-| ------------ | -------- | ------------------ |
-| 1            | `Ctrl+1` | History            |
-| 2            | `Ctrl+2` | Changes            |
-| 3            | `Ctrl+3` | Stash              |
-| 4            | `Ctrl+4` | Reflog             |
-| 5            | `Ctrl+5` | Submodules         |
-| 6            | `Ctrl+8` | Interactive Rebase |
-| 7            | `Ctrl+9` | Worktrees          |
-| 8            | `Ctrl+0` | .gitignore 编辑器  |
-| 9            | `Ctrl+6` | Diff               |
-| 10           | `Ctrl+7` | Merge              |
+| Sidebar 顺序 | 快捷键         | 视图               |
+| ------------ | -------------- | ------------------ |
+| 1            | `Ctrl+1`       | History            |
+| 2            | `Ctrl+2`       | Changes            |
+| 3            | `Ctrl+3`       | Stash              |
+| 4            | `Ctrl+4`       | Reflog             |
+| 5            | `Ctrl+5`       | Submodules         |
+| 6            | `Ctrl+8`       | Interactive Rebase |
+| 7            | `Ctrl+9`       | Worktrees          |
+| 8            | `Ctrl+0`       | .gitignore 编辑器  |
+| 9            | `Ctrl+Shift+F` | 历史搜索           |
+| 10           | `Ctrl+6`       | Diff               |
+| 11           | `Ctrl+7`       | Merge              |
 
 > Blame 没有独立 sidebar 入口，从 Diff 工具栏的 **Blame** 按钮进入。
 
@@ -349,6 +351,48 @@ bun run tauri:build
 2. 想把 `dist/` 加进忽略 → 输入 `dist/` → Preview 显示哪些文件会被新忽略 → 确认无误后 Save
 3. 临时取消某条规则做实验 → 删除规则行 → Preview 看不再忽略的列表 → 不满意点 Reset 一键还原
 
+### 3.13 历史搜索（跨提交内容查找）
+
+按 `Ctrl+Shift+F`。**两栏布局**：左 = 工具栏 + 结果列表，右 = 命中预览。
+
+**三种搜索模式**（toolbar 切换）：
+
+| 模式             | git 等价         | 适用场景                                                         |
+| ---------------- | ---------------- | ---------------------------------------------------------------- |
+| **Both**（默认） | message + 内容   | 不确定关键词在哪里就用这个                                       |
+| **Message**      | `git log --grep` | 只搜 commit message（subject + body）                            |
+| **Diff**         | `git log -S/-G`  | **pickaxe**：定位"哪个 commit 引入/删除了某段代码"——最强大的模式 |
+
+**两种匹配方式**：
+
+- **Literal**（默认）：把输入当作字面量子串
+- **Regex**：Rust 风格正则表达式（支持锚点、字符类、捕获组等）
+
+其它 toolbar 项：
+
+- **Aa**（Case）：切换大小写敏感
+- **Path**：限定 pathspec，比如 `src/` 或 `*.rs`，用与 History 视图相同的语义
+
+**结果行**：每条命中显示短 oid / summary / 作者 / 相对时间 / `msg`（命中 message）/ `+/− N`（diff 命中数）。点选某行 → 右栏显示：
+
+- 命中 message 的高亮预览（如果 message 命中）
+- 按文件分组的 +/- 行清单：行号、`+/−` 标志、内容；新增行用绿色，删除行用红色
+- 标题栏右侧 **Open** 按钮 → 跳转到 History 视图并自动选中该 commit
+
+**安全与性能**：
+
+- 默认扫描上限 **5000 commits**；超过则返回 `truncated` 标识，UI 顶部显示橙色 `truncated` 徽章
+- 单 commit diff 文本若超过 2 MB 自动跳过 diff 检查（避免 `vendored` 大目录拖慢进度）
+- 单 commit 最多记录 **20** 条 diff 命中，单次搜索最多 **500** 条 hits
+- 后端用 `git2 diff_tree_to_tree` + Rust `regex` 实现，没有 fork system git，跨平台一致
+
+**典型用例**：
+
+1. 想知道 `LICENSE` 改动史 → mode=Diff、pattern=`MIT License`、path=`LICENSE`
+2. 找到引入 `unwrap_or_default` 的 commit → mode=Diff、pattern=`unwrap_or_default`
+3. 查所有提到 issue #42 的 commit → mode=Message、pattern=`#42`
+4. 查找硬编码的 IP 地址 → mode=Diff、kind=Regex、pattern=`\b(?:\d{1,3}\.){3}\d{1,3}\b`
+
 ---
 
 ## 四、Topbar 与远程操作
@@ -507,6 +551,7 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+8`            | Interactive Rebase                    | 全局  |
 | `Ctrl+9`            | Worktrees                             | 全局  |
 | `Ctrl+0`            | .gitignore 编辑器                     | 全局  |
+| `Ctrl+Shift+F`      | 历史搜索（跨提交）                    | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
@@ -828,6 +873,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口               |
 | v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout |
 | v0.10.3 | History 大仓库性能优化：cursor-based 分页（首屏 1000 / 增量 1000）+ 增量 Graph layout（lane 状态跨 page 复用，零跳色）             |
+| v0.11.0 | 历史搜索（Ctrl+Shift+F）：message + diff pickaxe + regex/literal + path scope，cargo 依赖加 `regex`，Sidebar 升至 11 入口          |
 
 ---
 
