@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useRef } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useApp } from "@/stores/app";
+import { useApp, WORKING_OID } from "@/stores/app";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { cn } from "@/lib/utils";
 import { SideBySide, Unified } from "./DiffViews";
+import { WorkingDiffEditor } from "./WorkingDiffEditor";
 
 export function DiffViewer() {
   const oid = useApp((s) => s.diff.oid);
@@ -20,6 +21,16 @@ export function DiffViewer() {
   const openBlame = useApp((s) => s.openBlame);
   const openFileHistory = useApp((s) => s.openFileHistory);
   const view = useApp((s) => s.view);
+  const editActive = useApp((s) => s.diff.edit.active);
+  const editBusy = useApp((s) => s.diff.edit.busy);
+  const editBuffer = useApp((s) => s.diff.edit.buffer);
+  const editSaved = useApp((s) => s.diff.edit.savedText);
+  const setEditActive = useApp((s) => s.setEditActive);
+  const saveEditBuffer = useApp((s) => s.saveEditBuffer);
+  const resetEditBuffer = useApp((s) => s.resetEditBuffer);
+
+  const isWorking = oid === WORKING_OID;
+  const dirty = isWorking && editBuffer !== null && editSaved !== null && editBuffer !== editSaved;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +86,17 @@ export function DiffViewer() {
     <section ref={containerRef} className="flex h-full min-w-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
         <span className="truncate font-mono">{file}</span>
-        <span className="font-mono text-[10.5px] text-muted-foreground">{oid.slice(0, 7)}</span>
+        <span className="font-mono text-[10.5px] text-muted-foreground">
+          {isWorking ? "working tree" : oid.slice(0, 7)}
+        </span>
+        {dirty && (
+          <span
+            className="rounded bg-[hsl(var(--diff-modified-bg))] px-1.5 py-0.5 text-[10px] font-medium text-[hsl(var(--diff-modified-fg))]"
+            title="Unsaved edits"
+          >
+            ● dirty
+          </span>
+        )}
         <div className="ml-2 inline-flex overflow-hidden rounded-md border border-border">
           <SegBtn active={mode === "sbs"} onClick={() => setMode("sbs")}>
             Side-by-side
@@ -112,6 +133,49 @@ export function DiffViewer() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {isWorking && mode === "sbs" && (
+            <>
+              <button
+                onClick={() => void setEditActive(!editActive)}
+                disabled={editBusy}
+                className={cn(
+                  "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+                  editActive && "border-border bg-secondary text-foreground",
+                  editBusy && "cursor-not-allowed opacity-50",
+                )}
+                title="Toggle bidirectional editing of the working-tree file"
+              >
+                ✎ Edit
+              </button>
+              {editActive && (
+                <>
+                  <button
+                    onClick={() => void saveEditBuffer()}
+                    disabled={editBusy || !dirty}
+                    className={cn(
+                      "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+                      dirty && !editBusy && "text-foreground",
+                      (editBusy || !dirty) && "cursor-not-allowed opacity-50",
+                    )}
+                    title="Save the buffer to the working tree"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => void resetEditBuffer()}
+                    disabled={editBusy || !dirty}
+                    className={cn(
+                      "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+                      (editBusy || !dirty) && "cursor-not-allowed opacity-50",
+                    )}
+                    title="Discard buffer edits and reload from disk"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
+            </>
+          )}
           <button
             onClick={() => file && void openFileHistory(file)}
             disabled={!file}
@@ -165,7 +229,9 @@ export function DiffViewer() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {!fileDiff ? (
+        {isWorking && editActive && mode === "sbs" ? (
+          <WorkingDiffEditor />
+        ) : !fileDiff ? (
           <div className="p-4 text-xs text-muted-foreground">
             {loading ? "Loading diff..." : "No diff."}
           </div>

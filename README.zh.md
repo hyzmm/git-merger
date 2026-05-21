@@ -269,10 +269,21 @@ G:\GitTools
 
 5. ✅ **测试** — 前端在 `src/lib/minisignKey.test.ts` 新增 12 个 bun:test：wrap/unwrap、keyId 提取、binary fallback、`fingerprintFromWrapped` 端到端。总计：后端 **61**（不变）；前端 **91**（从 79）。
 
-### Backlog（v0.13.2 之后）
+### v0.13.3 — 已完成
+
+1. ✅ **双向 Diff 编辑器** — Diff 工具栏新增 "Edit" 切换按钮（仅在 Side-by-side 模式下查看工作树文件时显示），点击后**右侧面板从静态 diff 切换为绑定到磁盘文本的实时 `<textarea>`**。左侧仍是只读 HEAD 参考（带行号 gutter）；双面板共享行高（`lineHeight: 18px`）并通过成对 `onScroll` handler 同步滚动，所以中等强度编辑不会让视觉对齐错位。**Save** 原子写回 buffer 并重跑 `working_diff` 让底部 hunk 预览刷新；**Reset** 重读磁盘版本丢弃 buffer 编辑。只要 buffer ≠ savedText 工具栏就显示 `● dirty` 徽章，避免用户误关 tab 丢工作。脏态时右侧 gutter 背景染 `--diff-modified-bg` 让状态一目了然。
+
+2. ✅ **三个新后端命令 + 安全加固** — `src-tauri/src/git/workspace.rs` 新增 `read_working_file` / `read_head_file` / `write_working_file`。所有路径走新 `safe_workdir_path` 辅助：向上找最近存在的祖先（让写入能创建新的父目录）、canonicalize 后断言其在 workdir 内、再额外拒绝未解析尾部里出现的 `..` 段（防 symlink 逃逸）。读命令拒绝二进制（前 8 KiB 含 NUL byte 即拒绝）；写命令限制 8 MB 上限，使用 `tmp + rename` 原子写避免半写状态。`read_head_file` 干净处理"文件还没在 HEAD"的情况（返回 `missing: true` 而不报错），所以新建的 untracked 文件也能驱动编辑器。
+
+3. ✅ **ChangesPage 入口** — Staged / unstaged / unmerged 段中的文件名现在是可点击的 button，调用 `openWorkingDiff(file)` 切到 Diff 视图（`oid === WORKING_OID`）并通过 `Promise.all` 并行预载 HEAD 参考 + working buffer。复选框与文件名点击区解耦，所以批量 stage / discard / stash 仍可用而不会误打开 Diff。
+
+4. ✅ **Store 接线** — Diff store 新增 `WORKING_OID` 哨兵常量 + `WorkingEditState` 子切片（`active` / `headText` / `buffer` / `savedText` / `busy` / `error`）。5 个新 actions：`openWorkingDiff` / `setEditActive`（若在 `openWorkingDiff` 完成前就被激活，自行懒加载 buffer）/ `setEditBuffer` / `saveEditBuffer`（保留 save 往返中到达的新键入，不会被旧 buffer 覆盖）/ `resetEditBuffer`。所有 action 都用 `oid === WORKING_OID` 守卫，从历史 commit 视图误调时直接 no-op 而不污染状态。
+
+5. ✅ **测试** — `tests/git_layer.rs` 新增 9 个后端集成测试：`working_file_read_returns_disk_contents` / `working_file_read_missing_marks_flag` / `working_file_read_rejects_path_traversal` / `working_file_read_rejects_binary` / `write_working_file_round_trips_through_disk` / `write_working_file_creates_missing_parent_dirs` / `write_working_file_refuses_path_traversal` / `read_head_file_returns_blob_at_head` / `read_head_file_marks_missing_when_file_not_in_head`。总计：后端 **72**（59 集成 + 13 单元，从 61），前端 **91**（不变）。
+
+### Backlog（v0.13.3 之后）
 
 - ⏳ 代码签名（Windows EV cert / macOS notarization），让安装包不再触发 SmartScreen / Gatekeeper 警告。
-- ⏳ Diff 双向编辑：在 Side-by-side 模式下直接修改右侧并写回工作区。
 - ⏳ Search v2：结构化结果（按文件聚合）、保存搜索、最近查询历史。
 - ⏳ Tabs v2：跨进程持久化、tab 拖拽排序、tab 钉选。
 

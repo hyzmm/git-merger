@@ -86,6 +86,33 @@ interface DiffState {
   showWhitespace: boolean;
   ignoreWhitespace: boolean;
   error: string | null;
+  /**
+   * Bidirectional editor sub-state. Only engaged when `oid === WORKING_OID`
+   * (i.e. when viewing a working-tree file from the Changes view).
+   */
+  edit: WorkingEditState;
+}
+
+/**
+ * Sentinel `oid` used to mark a "working tree" diff (vs HEAD). The diff
+ * payload comes from `git.workingDiff` instead of `git.fileDiff`, and the
+ * SideBySide view enables an editable right pane when this is set.
+ */
+export const WORKING_OID = "WORKING";
+
+interface WorkingEditState {
+  /** When true, the right pane is in editable mode. */
+  active: boolean;
+  /** Read-only HEAD reference text shown in the left pane. `null` while loading. */
+  headText: string | null;
+  /** Editable buffer (right pane). `null` while loading. */
+  buffer: string | null;
+  /** Last text saved to disk — used to detect the dirty state. */
+  savedText: string | null;
+  /** True when an async load / save is in flight. */
+  busy: boolean;
+  /** Last error from a load / save attempt. */
+  error: string | null;
 }
 
 interface MergeView {
@@ -288,6 +315,16 @@ interface AppState {
   setDiffMode: (m: DiffMode) => void;
   toggleWhitespace: () => void;
   toggleIgnoreWhitespace: () => void;
+  /** Open the working-tree diff for `file` and load HEAD reference + buffer. */
+  openWorkingDiff: (file: string) => Promise<void>;
+  /** Toggle the editable right pane (only meaningful when oid===WORKING_OID). */
+  setEditActive: (active: boolean) => Promise<void>;
+  /** Update the editor buffer (drives dirty state). */
+  setEditBuffer: (buffer: string) => void;
+  /** Persist the buffer to disk via `write_working_file`. */
+  saveEditBuffer: () => Promise<void>;
+  /** Discard buffer edits and restore the on-disk version. */
+  resetEditBuffer: () => Promise<void>;
 
   // merge
   loadMerge: () => Promise<void>;
@@ -426,6 +463,15 @@ const emptyHistory: HistoryState = {
   error: null,
 };
 
+const emptyEdit: WorkingEditState = {
+  active: false,
+  headText: null,
+  buffer: null,
+  savedText: null,
+  busy: false,
+  error: null,
+};
+
 const emptyDiff: DiffState = {
   oid: null,
   files: [],
@@ -436,6 +482,7 @@ const emptyDiff: DiffState = {
   showWhitespace: false,
   ignoreWhitespace: false,
   error: null,
+  edit: { ...emptyEdit },
 };
 
 const emptyMerge: MergeView = {
@@ -1136,6 +1183,177 @@ export const useApp = create<AppState>((set, get) => ({
     const { diff } = get();
     if (diff.oid && diff.selectedFile) {
       void get().openDiff(diff.oid, diff.selectedFile, diff.files);
+    }
+  },
+
+  // ---------- Working-tree Diff editor (v0.13.3) ----------
+  //
+  // The editor's left pane shows the HEAD blob (read-only); the right pane
+  // shows the on-disk working-tree text in an editable buffer. Actions:
+  //  - openWorkingDiff: load both and switch to the Diff view in non-edit mode
+  //  - setEditActive: toggle the editable right pane on/off
+  //  - setEditBuffer: receive keystrokes
+  //  - saveEditBuffer: write buffer back via write_working_file
+  //  - resetEditBuffer: re-read on-disk text, discarding edits
+
+  openWorkingDiff: async (file) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({
+      view: "diff",
+      diff: {
+        ...s.diff,
+        oid: WORKING_OID,
+        selectedFile: file,
+        fileDiff: null,
+        loading: true,
+        error: null,
+        edit: { ...emptyEdit },
+      },
+    }));
+    try {
+      const [fd, head, working] = await Promise.all([
+        git.workingDiff(repo.path, file, get().diff.ignoreWhitespace),
+        git.readHeadFile(repo.path, file),
+        git.readWorkingFile(repo.path, file),
+      ]);
+      set((s) =>
+        s.diff.oid === WORKING_OID && s.diff.selectedFile === file
+          ? {
+              diff: {
+                ...s.diff,
+                fileDiff: fd,
+                loading: false,
+                edit: {
+                  active: false,
+                  headText: head.missing ? "" : head.content,
+                  buffer: working.missing ? "" : working.content,
+                  savedText: working.missing ? "" : working.content,
+                  busy: false,
+                  error: null,
+                },
+              },
+            }
+          : s,
+      );
+    } catch (e) {
+      set((s) =>
+        s.diff.oid === WORKING_OID && s.diff.selectedFile === file
+          ? { diff: { ...s.diff, loading: false, error: String(e) } }
+          : s,
+      );
+    }
+  },
+
+  setEditActive: async (active) => {
+    const repo = get().repo;
+    const { diff } = get();
+    // Refuse to enable editing in any context other than a working-tree diff.
+    if (active && (diff.oid !== WORKING_OID || !diff.selectedFile || !repo)) {
+      return;
+    }
+    // If buffers haven't been loaded yet (race against openWorkingDiff), do
+    // a fresh fetch — keeps the toggle resilient against stale state.
+    if (active && (diff.edit.buffer === null || diff.edit.headText === null)) {
+      set((s) => ({ diff: { ...s.diff, edit: { ...s.diff.edit, busy: true, error: null } } }));
+      try {
+        const [head, working] = await Promise.all([
+          git.readHeadFile(repo!.path, diff.selectedFile!),
+          git.readWorkingFile(repo!.path, diff.selectedFile!),
+        ]);
+        set((s) => ({
+          diff: {
+            ...s.diff,
+            edit: {
+              active: true,
+              headText: head.missing ? "" : head.content,
+              buffer: working.missing ? "" : working.content,
+              savedText: working.missing ? "" : working.content,
+              busy: false,
+              error: null,
+            },
+          },
+        }));
+      } catch (e) {
+        set((s) => ({
+          diff: { ...s.diff, edit: { ...s.diff.edit, busy: false, error: String(e) } },
+        }));
+      }
+      return;
+    }
+    set((s) => ({ diff: { ...s.diff, edit: { ...s.diff.edit, active } } }));
+  },
+
+  setEditBuffer: (buffer) => {
+    set((s) => ({ diff: { ...s.diff, edit: { ...s.diff.edit, buffer } } }));
+  },
+
+  saveEditBuffer: async () => {
+    const repo = get().repo;
+    const { diff } = get();
+    if (!repo || diff.oid !== WORKING_OID || !diff.selectedFile || diff.edit.buffer === null) {
+      return;
+    }
+    set((s) => ({ diff: { ...s.diff, edit: { ...s.diff.edit, busy: true, error: null } } }));
+    try {
+      const buffer = diff.edit.buffer;
+      await git.writeWorkingFile(repo.path, diff.selectedFile, buffer);
+      // Re-fetch the diff so the hunk preview updates against the new
+      // working-tree text. HEAD didn't change, so leave headText alone.
+      const fd = await git.workingDiff(repo.path, diff.selectedFile, diff.ignoreWhitespace);
+      set((s) =>
+        s.diff.oid === WORKING_OID && s.diff.selectedFile === diff.selectedFile
+          ? {
+              diff: {
+                ...s.diff,
+                fileDiff: fd,
+                edit: {
+                  ...s.diff.edit,
+                  busy: false,
+                  savedText: buffer,
+                  // `buffer` may be more recent than what we just wrote if
+                  // the user kept typing during the save round-trip — keep
+                  // their newer keystrokes instead of clobbering them.
+                  buffer: s.diff.edit.buffer ?? buffer,
+                  error: null,
+                },
+              },
+            }
+          : s,
+      );
+      // Refresh the changes list so Stash / Commit views see the new state.
+      void get().loadChanges();
+    } catch (e) {
+      set((s) => ({
+        diff: { ...s.diff, edit: { ...s.diff.edit, busy: false, error: String(e) } },
+      }));
+    }
+  },
+
+  resetEditBuffer: async () => {
+    const repo = get().repo;
+    const { diff } = get();
+    if (!repo || diff.oid !== WORKING_OID || !diff.selectedFile) return;
+    set((s) => ({ diff: { ...s.diff, edit: { ...s.diff.edit, busy: true, error: null } } }));
+    try {
+      const working = await git.readWorkingFile(repo.path, diff.selectedFile);
+      const text = working.missing ? "" : working.content;
+      set((s) => ({
+        diff: {
+          ...s.diff,
+          edit: {
+            ...s.diff.edit,
+            buffer: text,
+            savedText: text,
+            busy: false,
+            error: null,
+          },
+        },
+      }));
+    } catch (e) {
+      set((s) => ({
+        diff: { ...s.diff, edit: { ...s.diff.edit, busy: false, error: String(e) } },
+      }));
     }
   },
 

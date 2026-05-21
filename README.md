@@ -269,10 +269,21 @@ G:\GitTools
 
 5. ✅ **Tests** — Frontend gains 12 new bun:test cases in `src/lib/minisignKey.test.ts` covering wrap/unwrap, keyId extraction, binary fallback path, and end-to-end `fingerprintFromWrapped`. Totals: backend **61** (unchanged); frontend **91** (up from 79).
 
-### Backlog (post-v0.13.2)
+### v0.13.3 — Shipped
+
+1. ✅ **Bidirectional Diff editor** — A new "Edit" toggle on the Diff toolbar (visible only when viewing a working-tree file in Side-by-side mode) flips the right pane from a static diff into a live `<textarea>` bound to the file's on-disk text. Left pane stays a read-only HEAD reference with line gutter; both panes share row height (`lineHeight: 18px`) and scroll-sync via paired `onScroll` handlers, so visual alignment survives moderate edits. **Save** writes the buffer back atomically and re-runs `working_diff` so the underlying hunk preview refreshes; **Reset** re-reads the on-disk version, discarding buffer edits. A `● dirty` badge appears in the toolbar whenever buffer ≠ savedText, so users can never lose work to a stale tab. The right-pane gutter background tints `--diff-modified-bg` while dirty so the editor's state is visible at a glance.
+
+2. ✅ **Three new backend commands + safety hardening** — `read_working_file`, `read_head_file`, `write_working_file` in `src-tauri/src/git/workspace.rs`. Every command runs through a new `safe_workdir_path` helper that walks up to the nearest existing ancestor (so writes can create new parent directories), canonicalises it, asserts it sits inside the workdir, and additionally rejects any explicit `..` segments in the unresolved tail to defeat symlink-based escape attempts. Read commands refuse binary content (NUL byte in first 8 KiB → reject); write commands cap input at 8 MB and use atomic `tmp + rename` to never leave the working tree in a torn state. `read_head_file` cleanly handles "file not in HEAD yet" (returns `missing: true` instead of erroring) so newly-created untracked files can still drive the editor.
+
+3. ✅ **ChangesPage entry point** — Filenames in the staged / unstaged / unmerged sections are now clickable buttons that call `openWorkingDiff(file)`, which switches to the Diff view with `oid === WORKING_OID` and pre-loads HEAD reference + working buffer in parallel via `Promise.all`. The checkbox is decoupled from the filename click target so users can still select files for batch stage / discard / stash without accidentally opening Diff.
+
+4. ✅ **Store wiring** — New `WORKING_OID` sentinel + `WorkingEditState` slice (`active` / `headText` / `buffer` / `savedText` / `busy` / `error`) on the Diff store. Five new actions: `openWorkingDiff` / `setEditActive` (lazy-loads buffer if engaged before `openWorkingDiff` finished) / `setEditBuffer` / `saveEditBuffer` (preserves keystrokes that arrive during the save round-trip) / `resetEditBuffer`. The store guards every action with `oid === WORKING_OID` checks so accidentally calling them from a historical-commit context is a no-op rather than corrupting state.
+
+5. ✅ **Tests** — 9 new backend integration tests in `tests/git_layer.rs`: `working_file_read_returns_disk_contents` / `working_file_read_missing_marks_flag` / `working_file_read_rejects_path_traversal` / `working_file_read_rejects_binary` / `write_working_file_round_trips_through_disk` / `write_working_file_creates_missing_parent_dirs` / `write_working_file_refuses_path_traversal` / `read_head_file_returns_blob_at_head` / `read_head_file_marks_missing_when_file_not_in_head`. Totals: backend **72** (50 → 59 integration; 11 → 13 unit), frontend **91** (unchanged).
+
+### Backlog (post-v0.13.3)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
-- ⏳ Bidirectional Diff editing: edit the right side in Side-by-side mode and write straight back to the working tree.
 - ⏳ Search v2: structured results (per-file aggregation), saved searches, recent-query history.
 - ⏳ Tabs v2: cross-process persistence, drag-to-reorder, pinned tabs.
 

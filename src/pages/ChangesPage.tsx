@@ -41,6 +41,7 @@ export function ChangesPage() {
   const commit = useApp((s) => s.commitWorking);
   const setView = useApp((s) => s.setView);
   const saveStash = useApp((s) => s.saveStash);
+  const openWorkingDiff = useApp((s) => s.openWorkingDiff);
 
   const staged = files.filter((f) => f.flag === "staged" || f.flag === "both");
   const unstaged = files.filter(
@@ -143,10 +144,22 @@ export function ChangesPage() {
 
         <div className="min-h-0 flex-1 overflow-auto">
           {conflicts.length > 0 && (
-            <Section title="Unmerged" files={conflicts} selected={selected} toggle={toggle} />
+            <Section
+              title="Unmerged"
+              files={conflicts}
+              selected={selected}
+              toggle={toggle}
+              openDiff={openWorkingDiff}
+            />
           )}
           {staged.length > 0 && (
-            <Section title="Staged changes" files={staged} selected={selected} toggle={toggle} />
+            <Section
+              title="Staged changes"
+              files={staged}
+              selected={selected}
+              toggle={toggle}
+              openDiff={openWorkingDiff}
+            />
           )}
           {unstaged.length > 0 && (
             <Section
@@ -154,6 +167,7 @@ export function ChangesPage() {
               files={unstaged}
               selected={selected}
               toggle={toggle}
+              openDiff={openWorkingDiff}
             />
           )}
           {!loading && files.length === 0 && (
@@ -204,11 +218,14 @@ function Section({
   files,
   selected,
   toggle,
+  openDiff,
 }: {
   title: string;
   files: WorkingFile[];
   selected: Set<string>;
   toggle: (path: string) => void;
+  /** Click on the filename text → open the working-tree Diff view (editable). */
+  openDiff: (path: string) => Promise<void>;
 }) {
   return (
     <div>
@@ -218,10 +235,10 @@ function Section({
       {files.map((f) => {
         const isSelected = selected.has(f.path);
         return (
-          <label
+          <div
             key={f.path}
             className={cn(
-              "flex cursor-pointer items-center gap-2 border-b border-border/30 px-3 py-1 text-xs",
+              "flex items-center gap-2 border-b border-border/30 px-3 py-1 text-xs",
               "hover:bg-accent/40",
               isSelected && "bg-accent/60",
             )}
@@ -231,6 +248,7 @@ function Section({
               checked={isSelected}
               onChange={() => toggle(f.path)}
               className="accent-[hsl(var(--branch-1))]"
+              aria-label={`Select ${f.path}`}
             />
             <span
               className={cn(
@@ -240,9 +258,16 @@ function Section({
             >
               {STATUS_LABEL[f.status]}
             </span>
-            <span className="flex-1 truncate font-mono">{f.path}</span>
+            <button
+              type="button"
+              onClick={() => void openDiff(f.path)}
+              className="flex-1 cursor-pointer truncate text-left font-mono hover:underline"
+              title="Open in Diff view (click for editable working-tree diff)"
+            >
+              {f.path}
+            </button>
             <span className="text-[10.5px] text-muted-foreground">{f.flag}</span>
-          </label>
+          </div>
         );
       })}
     </div>

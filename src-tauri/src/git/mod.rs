@@ -32,7 +32,7 @@ pub use remote::{CredReply, RemoteOpResult};
 pub use search::{DiffHit, PatternKind, SearchHit, SearchMode, SearchSummary};
 pub use stash::StashEntry;
 pub use submodule::SubmoduleInfo;
-pub use workspace::WorkingFile;
+pub use workspace::{WorkingFile, WorkingFileText};
 pub use worktree::WorktreeInfo;
 
 use serde::{Deserialize, Serialize};

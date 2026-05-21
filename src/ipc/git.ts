@@ -154,6 +154,14 @@ export interface WorkingFile {
   status: WorkingStatus;
 }
 
+/** Returned by `read_working_file` / `read_head_file`. */
+export interface WorkingFileText {
+  /** Full UTF-8 contents of the file (with original line endings). */
+  content: string;
+  /** True when the file does not exist on disk / at HEAD. */
+  missing: boolean;
+}
+
 export interface RemoteOpResult {
   success: boolean;
   /** Short human-readable summary (e.g. "fast-forwarded 3 commits"). */
@@ -358,6 +366,15 @@ export const git = {
   discardFiles: (path: string, paths: string[]) => invoke<void>("discard_files", { path, paths }),
   commitChanges: (path: string, message: string) =>
     invoke<string>("commit_changes", { path, message }),
+  /** Read a working-tree file's full text. Returns `missing: true` when the file doesn't exist on disk. */
+  readWorkingFile: (path: string, file: string) =>
+    invoke<WorkingFileText>("read_working_file", { path, file }),
+  /** Read a file's HEAD blob. Returns `missing: true` when not tracked at HEAD. */
+  readHeadFile: (path: string, file: string) =>
+    invoke<WorkingFileText>("read_head_file", { path, file }),
+  /** Atomically overwrite a working-tree file. */
+  writeWorkingFile: (path: string, file: string, content: string) =>
+    invoke<void>("write_working_file", { path, file, content }),
   fetch: (path: string, remote?: string) =>
     invoke<RemoteOpResult>("git_fetch", { path, remote: remote ?? null }),
   pull: (path: string) => invoke<RemoteOpResult>("git_pull", { path }),

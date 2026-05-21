@@ -1114,3 +1114,114 @@ fn workspace_commit_changes_creates_a_new_head_commit() {
     let after = git::workspace::working_changes(&r.path_str()).unwrap();
     assert!(after.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// working-file editor (read_working_file / read_head_file / write_working_file)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn working_file_read_returns_disk_contents() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "hello\nworld\n", "init");
+    // Modify the working tree.
+    std::fs::write(r.path().join("a.txt"), "hello\nplanet\n").unwrap();
+    let got = git_tools_lib::git::workspace::read_working_file(&r.path_str(), "a.txt").unwrap();
+    assert!(!got.missing);
+    assert_eq!(got.content, "hello\nplanet\n");
+}
+
+#[test]
+fn working_file_read_missing_marks_flag() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "x\n", "init");
+    let got = git_tools_lib::git::workspace::read_working_file(&r.path_str(), "nope.txt").unwrap();
+    assert!(got.missing);
+    assert!(got.content.is_empty());
+}
+
+#[test]
+fn working_file_read_rejects_path_traversal() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "x\n", "init");
+    let err = git_tools_lib::git::workspace::read_working_file(&r.path_str(), "../escape.txt")
+        .unwrap_err();
+    assert!(
+        err.message().to_lowercase().contains("escape")
+            || err.message().to_lowercase().contains("escapes"),
+        "got: {}",
+        err.message()
+    );
+}
+
+#[test]
+fn working_file_read_rejects_binary() {
+    let r = TempRepo::init();
+    let bytes: Vec<u8> = vec![0x00, 0xff, 0x00, 0xff, 0x00];
+    std::fs::write(r.path().join("blob.bin"), &bytes).unwrap();
+    let err =
+        git_tools_lib::git::workspace::read_working_file(&r.path_str(), "blob.bin").unwrap_err();
+    assert!(err.message().to_lowercase().contains("binary"));
+}
+
+#[test]
+fn write_working_file_round_trips_through_disk() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "init");
+
+    git_tools_lib::git::workspace::write_working_file(&r.path_str(), "a.txt", "v2 from editor\n")
+        .unwrap();
+
+    let on_disk = std::fs::read_to_string(r.path().join("a.txt")).unwrap();
+    assert_eq!(on_disk, "v2 from editor\n");
+    // working_changes should now report a.txt as unstaged-modified.
+    let changes = git_tools_lib::git::workspace::working_changes(&r.path_str()).unwrap();
+    assert!(changes.iter().any(|f| f.path == "a.txt"));
+}
+
+#[test]
+fn write_working_file_creates_missing_parent_dirs() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "init");
+
+    git_tools_lib::git::workspace::write_working_file(
+        &r.path_str(),
+        "deep/nested/path/new.txt",
+        "hi\n",
+    )
+    .unwrap();
+    let on_disk = std::fs::read_to_string(r.path().join("deep/nested/path/new.txt")).unwrap();
+    assert_eq!(on_disk, "hi\n");
+}
+
+#[test]
+fn write_working_file_refuses_path_traversal() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "x\n", "init");
+    let err =
+        git_tools_lib::git::workspace::write_working_file(&r.path_str(), "../evil.txt", "hello")
+            .unwrap_err();
+    assert!(err.message().to_lowercase().contains("escape"));
+    // And nothing was written outside the workdir.
+    assert!(!r.path().parent().unwrap().join("evil.txt").exists());
+}
+
+#[test]
+fn read_head_file_returns_blob_at_head() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "original\n", "init");
+    std::fs::write(r.path().join("a.txt"), "dirty\n").unwrap();
+
+    let head_text = git_tools_lib::git::workspace::read_head_file(&r.path_str(), "a.txt").unwrap();
+    assert!(!head_text.missing);
+    assert_eq!(head_text.content, "original\n");
+}
+
+#[test]
+fn read_head_file_marks_missing_when_file_not_in_head() {
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "only-a\n", "init");
+    let got =
+        git_tools_lib::git::workspace::read_head_file(&r.path_str(), "new-untracked.txt").unwrap();
+    assert!(got.missing);
+    assert!(got.content.is_empty());
+}

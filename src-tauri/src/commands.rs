@@ -163,6 +163,24 @@ pub fn commit_changes(path: String, message: String) -> R<String> {
     Ok(git::workspace::commit_changes(&path, &message)?)
 }
 
+// ---------- Working-tree file editor (v0.13.3) ----------
+
+#[tauri::command]
+pub fn read_working_file(path: String, file: String) -> R<git::WorkingFileText> {
+    Ok(git::workspace::read_working_file(&path, &file)?)
+}
+
+#[tauri::command]
+pub fn read_head_file(path: String, file: String) -> R<git::WorkingFileText> {
+    Ok(git::workspace::read_head_file(&path, &file)?)
+}
+
+#[tauri::command]
+pub fn write_working_file(path: String, file: String, content: String) -> R<()> {
+    git::workspace::write_working_file(&path, &file, &content)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn git_fetch(
     app: tauri::AppHandle,
