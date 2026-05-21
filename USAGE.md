@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.10.1  
+> 适用版本：v0.10.2  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -27,6 +27,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.12 .gitignore 编辑器](#312-gitignore-编辑器)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
+  - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
@@ -350,7 +351,7 @@ bun run tauri:build
 ## 四、Topbar 与远程操作
 
 ```
-┌─[☰]──[F5↻]───────────────────[ Search Ctrl+K ]──[Cloud][↓Pull][↑Push]──[Updater]──[⚙]─┐
+┌─[☰]──[F5↻]──────────[Cloud][↓Pull][↑Push]──[↺Undo▾]──[ Search Ctrl+K ]──[Updater]──[⚙]─┐
 │           branch: main  G:\GitTools                                                    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -391,6 +392,35 @@ v0.9.1 起 Topbar 最左侧的 ☰ 图标点开后弹出"应用菜单"：
 设计原则：高频按钮（Refresh / Fetch / Pull / Push / Search / Settings / Updater）仍直接挂在 Topbar，低频管理项收进菜单，让顶栏更简洁。
 
 > `Ctrl+O` 是全局快捷键，无需打开菜单也能直接弹起目录选择。
+
+### 4.2 Undo 按钮（reflog quick actions）
+
+v0.10.2 起在 Topbar 远程按钮组之后加入 **↺Undo** 一键撤销按钮，目标是把 Reflog 视图里"恢复到操作前状态"的常用动作前置出来。
+
+**主按钮**：直接撤销最近一次"有意义"的操作（**reset / merge / pull / cherry-pick / revert / rebase（开始/结束）/ commit (amend)**）。点击后调用 `git reset --mixed` 把 HEAD 重置到该操作发生**前**的 oid——保留工作目录的改动，安全可逆。
+
+**下拉箭头**：展开浮层，列出最近 8 条可撤销项，每条 inline 一键回退。每行显示：
+
+- `HEAD@{N}`：reflog 索引
+- 操作类型徽章（reset / merge / pull / …，不同色）
+- reflog 原始 message
+- 目标短 oid
+
+**重要安全设计**：
+
+- **不展示普通 commit**——避免一键删除你刚写完的代码
+- **不展示 checkout / branch / push / stash**——这些不是危险操作，没必要预置
+- **顶端遇到 commit 即停**——`findQuickUndo` 在 reflog 顺序里碰到普通 commit 后立刻 `return null`，意味着"你提交完后，按钮就消失了"，需要去 Reflog 视图手动操作
+- **rebase 中间步骤被排除**——只有 `(start)` / `(finish)` 视为可 undo，`(pick)` 等过程态不能直接撤销
+
+**典型用例**：
+
+1. 不小心 `git reset --hard` 多了 → 一键 Undo reset
+2. 误 merge 了错分支 → 一键 Undo merge
+3. cherry-pick 错 commit → 一键 Undo cherry-pick
+4. amend 了不该 amend 的 message → 一键 Undo amend
+
+按钮在 reflog 顶端没有可撤销项时**自动隐藏**，不占空间。
 
 ---
 
@@ -779,20 +809,21 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 十四、版本历史一览
 
-| 版本    | 关键改动                                                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0  | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                         |
-| v0.2.0  | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤     |
-| v0.3.0  | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                           |
-| v0.4.0  | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）              |
-| v0.5.0  | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                   |
-| v0.6.0  | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                 |
-| v0.7.0  | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                       |
-| v0.8.0  | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                             |
-| v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                             |
-| v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键 |
-| v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键             |
-| v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口             |
+| 版本    | 关键改动                                                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0  | History / Diff / Merge / Blame / Changes / 远程操作（系统 git）/ 基础 UI                                                           |
+| v0.2.0  | Stash / 分支 & Tag CRUD / Commit 右键菜单（cherry-pick / revert / reset）/ Diff hunk 导航 + Ignore Whitespace / 历史高级过滤       |
+| v0.3.0  | Reflog / Annotate previous（跨重命名追溯）/ Submodules                                                                             |
+| v0.4.0  | GitHub Actions CI + 4 平台自动发版 / 设置面板（主题/字号/tab/autocrlf）/ 自动更新（minisign 签名）/ i18n（en + zh）                |
+| v0.5.0  | 原生 push/pull/fetch（git2-rs，告别 system git）/ 凭据弹窗（SSH agent → keys → helper → prompt）/ 实时进度事件                     |
+| v0.6.0  | 交互式 Rebase（pick/reword/squash/fixup/drop + reorder + 状态持久化 + 冲突暂停）                                                   |
+| v0.7.0  | Command Palette（Ctrl+K，搜 commits/refs/files/views）+ 自研子序列模糊匹配                                                         |
+| v0.8.0  | File History（`git log --follow`，跨重命名追溯单文件提交时间线 + 选中提交即时 diff）                                               |
+| v0.9.0  | 单元测试（前端 42 用例 / 后端 14 用例）+ CI 集成；同时修复 file_history 跨重命名 bug                                               |
+| v0.9.1  | UI 调整：Refs 面板顶部置顶 HEAD item；Topbar 引入应用菜单（☰），收纳 Open / Recent / Close / About / Quit；新增 `Ctrl+O` 快捷键   |
+| v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键               |
+| v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口               |
+| v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout |
 
 ---
 

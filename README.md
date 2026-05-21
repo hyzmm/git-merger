@@ -165,7 +165,15 @@ G:\GitTools
 
 3. ✅ **Tests + i18n** — 5 new integration tests: `read_returns_empty_when_missing`, `write_then_read_round_trips`, `preview_marks_newly_ignored_path`, `preview_marks_no_longer_ignored_when_rule_removed`, `templates_are_well_formed`. Total backend now 22 (up from 17). 22 `gitignore.*` i18n keys mirrored in `en` and `zh`.
 
-### Backlog (post-v0.10.1)
+### v0.10.2 — Shipped
+
+1. ✅ **Reflog quick actions (Topbar Undo button)** — A new `↺Undo` split-button surfaces the most recent meaningfully-undoable HEAD movement straight from the Topbar, no Reflog-view detour required. The classifier in `src/lib/reflogActions.ts` parses each `ReflogEntry.message` and labels it with one of `commit / amend / reset / merge / pull / push / cherry-pick / revert / rebase / checkout / branch / stash / other`, marking only `amend / reset / merge / pull / cherry-pick / revert / rebase(start|finish)` as undoable. Plain `commit` is intentionally excluded so the button can't silently drop authored work — and `findQuickUndo` further refuses to scan past a plain commit barrier, so the button hides itself the moment you make new authored progress. `listUndoables` extracts up to 8 candidates for the chevron's dropdown menu, each with one-click undo.
+
+2. ✅ **One-click semantics** — Click main button → `git reset --mixed <oldOid>` to the OID HEAD pointed at _before_ the action ran (preserves working-tree edits, fully recoverable from reflog itself). The chevron's dropdown lists every other undoable entry with the same one-click action. Tooltip dynamically reads "Undo merge" / "Undo reset --hard" / "Undo cherry-pick" matching the verb.
+
+3. ✅ **Tests** — 12 new bun:test cases in `src/lib/reflogActions.test.ts` covering the classifier (commit / amend / reset / merge / pull / cherry-pick / revert / rebase start vs (pick) vs (finish), and all the non-undoable shapes) plus `findQuickUndo` (empty / most-recent / skip-non-undoables / commit-barrier) and `listUndoables` (filtering and limit). Total frontend bun:test now 54 (up from 42). 7 new `undo.*` i18n keys mirrored in `en` and `zh`.
+
+### Backlog (post-v0.10.2)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

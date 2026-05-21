@@ -193,6 +193,16 @@ export const en = {
   "gitignore.noChange": "No working-tree paths would change.",
   "gitignore.newlyIgnored": "newly ignored",
   "gitignore.noLongerIgnored": "no longer ignored",
+
+  // Undo button (reflog quick actions)
+  "undo.label": "Undo {verb}",
+  "undo.shortLabel": "Undo",
+  "undo.tooltip":
+    "Undo last {verb} (mixed reset to the state right before it; working-tree edits preserved)",
+  "undo.moreTitle": "Show recent undoable actions",
+  "undo.recent": "Recent undoable actions",
+  "undo.empty": "Nothing to undo on top of the reflog.",
+  "undo.hint": "Each entry restores HEAD to the state BEFORE that action (mixed reset).",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

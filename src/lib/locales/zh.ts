@@ -186,4 +186,13 @@ export const zh: Dict = {
   "gitignore.noChange": "没有工作目录文件会受影响。",
   "gitignore.newlyIgnored": "新增忽略",
   "gitignore.noLongerIgnored": "不再忽略",
+
+  // 撤销按钮（reflog 快捷操作）
+  "undo.label": "撤销 {verb}",
+  "undo.shortLabel": "撤销",
+  "undo.tooltip": "撤销最近一次 {verb}（mixed reset 回到操作前状态；工作区改动保留）",
+  "undo.moreTitle": "显示最近可撤销的操作",
+  "undo.recent": "最近可撤销的操作",
+  "undo.empty": "reflog 顶部没有可撤销的操作。",
+  "undo.hint": "每条记录都会把 HEAD 重置到该操作之前的状态（mixed reset）。",
 };

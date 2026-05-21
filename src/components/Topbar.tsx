@@ -14,6 +14,7 @@ import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AppMenu } from "@/components/AppMenu";
+import { UndoButton } from "@/components/UndoButton";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
 
@@ -156,6 +157,10 @@ export function Topbar() {
                 onClick={() => runRemote("push")}
                 title={t("topbar.push")}
               />
+            </div>
+
+            <div className="ml-2 flex items-center">
+              <UndoButton />
             </div>
           </>
         )}
