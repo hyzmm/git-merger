@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Filter, X } from "lucide-react";
+import { Filter, X, GitBranch, Eye, EyeOff } from "lucide-react";
 import { useApp } from "@/stores/app";
+import { useSettings, type GraphMode } from "@/stores/settings";
 import { cn } from "@/lib/utils";
 
 /** Filter chip-style row that sits in the CommitList toolbar.
@@ -18,6 +19,20 @@ export function HistoryFilterBar() {
   const setDateRange = useApp((s) => s.setDateRange);
   const setPathspec = useApp((s) => s.setPathspec);
   const resetFilters = useApp((s) => s.resetHistoryFilters);
+
+  // v0.13.6 — Graph display mode (normal / compact / hidden). Cycle on
+  // each click of the graph button so dense-fork repos can collapse the
+  // lane chart without diving into Settings.
+  const graphMode = useSettings((s) => s.graphMode);
+  const setSettings = useSettings((s) => s.set);
+  const cycleGraphMode = () => {
+    const order: GraphMode[] = ["normal", "compact", "hidden"];
+    const next = order[(order.indexOf(graphMode) + 1) % order.length];
+    setSettings({ graphMode: next });
+  };
+  const graphLabel = (m: GraphMode) =>
+    m === "normal" ? "Graph: full" : m === "compact" ? "Graph: compact" : "Graph: hidden";
+  const GraphIcon = graphMode === "hidden" ? EyeOff : graphMode === "compact" ? Eye : GitBranch;
 
   // Distinct authors, sorted by frequency desc then name.
   const authorList = useMemo(() => {
@@ -76,6 +91,19 @@ export function HistoryFilterBar() {
         >
           <Filter className="h-3 w-3" />
           More
+        </button>
+        <button
+          onClick={cycleGraphMode}
+          className={cn(
+            "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px]",
+            graphMode === "normal"
+              ? "text-muted-foreground hover:bg-accent"
+              : "bg-secondary text-foreground",
+          )}
+          title={`${graphLabel(graphMode)} — click to cycle (full → compact → hidden)`}
+        >
+          <GraphIcon className="h-3 w-3" />
+          {graphMode === "normal" ? "Full" : graphMode === "compact" ? "Compact" : "Hidden"}
         </button>
         {hasAnyFilter && (
           <button

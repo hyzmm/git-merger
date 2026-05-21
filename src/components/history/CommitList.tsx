@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
+import { useSettings } from "@/stores/settings";
 import { createLayoutState, extendLayout, type LayoutState, type RowLayout } from "@/lib/graph";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { GraphRow } from "./GraphRow";
+import { GraphRow, GRAPH_LANE_WIDTH } from "./GraphRow";
 import { HistoryFilterBar } from "./HistoryFilterBar";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { CommitSummary } from "@/ipc/git";
 
 const ROW_HEIGHT = 28;
+
+/**
+ * v0.13.6 — hard cap on the graph column's pixel width, no matter how many
+ * lanes the history actually has. Heavy-fork repos used to push this past
+ * 200 px and crowd out the commit summary; now we cap and let the graph
+ * SVG scroll horizontally **inside** its own column instead.
+ */
+const GRAPH_COL_CAP = { normal: 220, compact: 140 } as const;
 
 interface MenuState {
   pos: ContextMenuPos;
@@ -53,6 +62,10 @@ export function CommitList() {
   const openRebasePlan = useApp((s) => s.openRebasePlan);
   const createBranch = useApp((s) => s.createBranch);
   const createTag = useApp((s) => s.createTag);
+
+  // v0.13.6 — graph display mode (normal / compact / hidden). Persisted in
+  // the settings store so the user's choice survives restarts.
+  const graphMode = useSettings((s) => s.graphMode);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 
@@ -118,6 +131,20 @@ export function CommitList() {
   }, [commits]);
 
   const graphCols = totalGraphCols;
+
+  // v0.13.6 — derive concrete pixel sizes from graphMode + max lane count.
+  // The "natural" width (lanes × cell) is what the SVG truly needs; the
+  // "track" width is what we let the grid cell occupy (capped so the
+  // commit summary always has room). When natural > track, the SVG just
+  // scrolls horizontally inside the cell.
+  const compact = graphMode === "compact";
+  const hidden = graphMode === "hidden";
+  const laneW = compact ? GRAPH_LANE_WIDTH.compact : GRAPH_LANE_WIDTH.normal;
+  const naturalGraphW = graphCols * laneW;
+  const cap = compact ? GRAPH_COL_CAP.compact : GRAPH_COL_CAP.normal;
+  const trackGraphW = hidden ? 0 : Math.min(naturalGraphW, cap);
+  const graphOverflows = !hidden && naturalGraphW > trackGraphW;
+  const gridCols = hidden ? `1fr 180px 110px 80px` : `${trackGraphW}px 1fr 180px 110px 80px`;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({
@@ -298,13 +325,37 @@ export function CommitList() {
                   style={{
                     height: ROW_HEIGHT,
                     transform: `translateY(${vRow.start}px)`,
-                    gridTemplateColumns: `${graphCols * 14}px 1fr 180px 110px 80px`,
+                    gridTemplateColumns: gridCols,
                   }}
                   title="Right-click for actions"
                 >
-                  <div className="flex h-7 items-center">
-                    {row && <GraphRow row={row} cols={graphCols} />}
-                  </div>
+                  {!hidden && (
+                    <div
+                      className={cn(
+                        "flex h-7 items-center",
+                        // When the SVG is wider than the track, allow it
+                        // to scroll horizontally inside its own cell so
+                        // the commit summary column never gets squeezed.
+                        graphOverflows && "overflow-x-auto",
+                      )}
+                      // Hide the inline scrollbar so the row stays clean
+                      // visually; users still scroll via wheel + shift /
+                      // touchpad. The graph dot's color is enough cue
+                      // that the lane is alive even when off-screen.
+                      style={
+                        graphOverflows
+                          ? { scrollbarWidth: "none", msOverflowStyle: "none" }
+                          : undefined
+                      }
+                      title={
+                        graphOverflows
+                          ? `${graphCols} lanes — scroll horizontally or switch graph to compact / hidden`
+                          : undefined
+                      }
+                    >
+                      {row && <GraphRow row={row} cols={graphCols} compact={compact} />}
+                    </div>
+                  )}
                   <div className="flex min-w-0 items-center gap-1.5">
                     <RefBadges refs={c.refs} />
                     <span className="truncate">{c.summary}</span>

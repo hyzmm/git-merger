@@ -16,14 +16,25 @@ function colorOf(idx: number): string {
   return BRANCH_COLORS[idx % BRANCH_COLORS.length] ?? BRANCH_COLORS[0];
 }
 
+// Default geometry (used when no `compact` prop is passed). Compact mode
+// scales these down ~36% so dense fork histories don't crowd out the
+// commit summary column.
 const COL_W = 14;
 const ROW_H = 28;
 const DOT_R = 4.5;
+const COMPACT_COL_W = 9;
+const COMPACT_DOT_R = 3;
+
+/** Per-lane horizontal pixel width — exported so CommitList can size the
+ *  graph track to exactly match the SVG output. */
+export const GRAPH_LANE_WIDTH = { normal: COL_W, compact: COMPACT_COL_W } as const;
 
 interface Props {
   row: RowLayout;
   cols?: number;
   height?: number;
+  /** v0.13.6 — when true, render with the compact lane width / dot size. */
+  compact?: boolean;
 }
 
 /**
@@ -31,10 +42,12 @@ interface Props {
  * Lines from the previous row come in at the top center; lines to the next
  * row go out at the bottom center.
  */
-export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H }: Props) {
+export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H, compact }: Props) {
+  const colW = compact ? COMPACT_COL_W : COL_W;
+  const dotR = compact ? COMPACT_DOT_R : DOT_R;
   const totalCols = Math.max(cols ?? row.width, row.width, 1);
-  const width = totalCols * COL_W;
-  const xOf = (col: number) => col * COL_W + COL_W / 2;
+  const width = totalCols * colW;
+  const xOf = (col: number) => col * colW + colW / 2;
   const top = 0;
   const mid = height / 2;
   const bot = height;
@@ -108,7 +121,7 @@ export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H }: Pr
       key="dot"
       cx={dotX}
       cy={mid}
-      r={DOT_R}
+      r={dotR}
       fill={colorOf(row.dotColor)}
       stroke="hsl(220 13% 9%)"
       strokeWidth={2}

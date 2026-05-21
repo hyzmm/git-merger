@@ -145,6 +145,16 @@ Three panes: left **Refs panel**, center **Commit list + DAG**, right **Commit d
   - **Checkout (detached HEAD)** (with confirmation)
   - **Copy SHA** / **Copy commit message**
 
+> **Graph display modes (v0.13.6)**: on fork-heavy repos (≥ 15 lanes), the graph column used to crowd out the commit summary. The filter bar gains a **Graph** toggle (icon-as-mode-indicator) that cycles through three modes on click:
+>
+> | Mode        | Lane width | Dot radius | Column cap | Use when                                      |
+> | ----------- | ---------- | ---------- | ---------- | --------------------------------------------- |
+> | **Full**    | 14 px      | 4.5 px     | 220 px     | default; ordinary repos (≤ 15 lanes)          |
+> | **Compact** | 9 px       | 3 px       | 140 px     | fork-heavy repos where you still want the DAG |
+> | **Hidden**  | —          | —          | 0 px       | summary-only — graph column not rendered      |
+>
+> When the actual graph width exceeds the column cap (e.g. 30 lanes × 14 px = 420 px > 220 px), the SVG scrolls horizontally **inside** its own grid cell — guaranteeing the commit summary always has room. The chosen mode is persisted to `localStorage` under `gittools.settings.v1` so it survives restarts.
+
 **Right — Commit details**
 
 - Full oid / parent short hashes / author + email / localized timestamp / all ref chips

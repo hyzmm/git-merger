@@ -144,6 +144,16 @@ bun run tauri:build
   - **Checkout (detached HEAD)**（带二次确认）
   - **Copy SHA** / **Copy commit message**
 
+> **Graph 显示模式（v0.13.6）**：在 fork 数极多的仓库（≥ 15 lanes）里，graph 列默认会把 commit summary 挤瘪。过滤栏右侧新增一个 **Graph** 按钮（图标即视觉档位），单击循环 3 档：
+>
+> | 档位        | 单 lane 宽 | dot 半径 | 列宽硬上限 | 适用场景                             |
+> | ----------- | ---------- | -------- | ---------- | ------------------------------------ |
+> | **Full**    | 14 px      | 4.5 px   | 220 px     | 默认；常规仓库（≤ 15 lanes）         |
+> | **Compact** | 9 px       | 3 px     | 140 px     | fork 数较多时仍想看全图              |
+> | **Hidden**  | —          | —        | 0 px       | 只关心 commit 文案，graph 完全不渲染 |
+>
+> 当 graph 实际宽度超过列宽硬上限（比如 30 lanes × 14 px = 420 px > 220 px），SVG 会在 graph 列**内部**横向滚动，保证 commit summary 永远有足够宽度。模式选择持久化到 localStorage（`gittools.settings.v1`），跨会话保留。
+
 **右 — Commit Details**
 
 - 完整 oid / parents 短哈希 / author + email / 本地化时间 / 所有 ref chips
