@@ -221,7 +221,19 @@ G:\GitTools
 
 1. ✅ **Bilingual documentation** — Introduced a Chinese-language `README.zh.md` and an English-language `USAGE.en.md`, mirroring the existing `README.md` / `USAGE.md` one-to-one. Both originals now carry a language-switcher header (English · 简体中文) at the top so readers can flip between locales in one click. No functional changes in this release — purely documentation parity: the developer-facing engineering doc and the end-user manual both have an en/zh pair, cross-linked from the README.
 
-### Backlog (post-v0.13.0)
+### v0.13.1 — Shipped
+
+1. ✅ **Structured error handling** — Backend errors are now first-class. Replaced the throwaway `CmdError` (a stringified `git2::Error`) with `crate::error::AppError`, a tagged enum that classifies failures into 10 kinds: `NotFound / MergeConflict / NonFastForward / Auth / UserCancelled / InvalidArgument / Git / Io / Internal / Other`. Mapping is automatic (`From<git2::Error>`) — `git2::ErrorCode::NotFound` → `NotFound`, `Conflict / MergeConflict` → `MergeConflict`, `Auth / Certificate` → `Auth`, `User` → `UserCancelled`, etc. — with a small message-heuristic fallback for `git2::Error::from_str` errors that come back stamped as `GenericError` (so legacy "non-fast-forward" / "authentication required" / "unknown reset mode" strings still classify correctly).
+
+2. ✅ **Compact wire format** — `AppError` serialises as `{ kind, message, code?, class? }`. The optional `code` / `class` fields are omitted entirely when absent (custom `Serialize` impl) so the JSON stays small. The frontend mirror in `src/lib/appError.ts` is symmetric: `parseAppError(unknown)` validates the shape and falls back to `{ kind: "Other", message }` on anything malformed (legacy plain-string errors, native `Error`, `null`, etc.).
+
+3. ✅ **Central toast queue + global safety net** — New `src/lib/toast.ts` (zustand-backed, ~110 LOC) and `src/components/ToastContainer.tsx` render up to 4 simultaneous toasts at the bottom of the window with per-variant colors / glyphs / auto-dismiss timers. `App.tsx` mounts a single `unhandledrejection` listener that catches any `AppErrorThrown` not consumed by a local `catch` and pushes an error toast — so users always get _some_ feedback for backend failures, even where the call site forgot to handle the rejection.
+
+4. ✅ **Zero-touch invoke upgrade** — Routed `src/ipc/git.ts` through a new `src/ipc/invoke.ts` wrapper that converts every Tauri rejection into `AppErrorThrown extends Error`. Existing `catch (e) { String(e) }` patterns continue to work unchanged (the `toString` is `"Kind: message"`), but new code can branch on `e.appError.kind` for typed handling. The Topbar's remote-op banner now uses this to show pointed messages like "Remote has diverged from your branch — open the Merge view or rebase first." for `NonFastForward`, instead of a raw libgit2 string.
+
+5. ✅ **Tests** — Backend gains 11 unit tests in `src/error.rs` covering each classification path (`NotFound / MergeConflict / Auth / InvalidArgument / UserCancelled` via `ErrorCode`; `NonFastForward / Auth / InvalidArgument` via message heuristic; unknown libgit2 messages staying as `Git`; `std::io::Error → Io`; serialised JSON with / without `code` & `class`). Frontend gains 19 bun:test cases across `src/lib/appError.test.ts` (parse, format, predicates, all 10 known kinds round-trip) and `src/lib/toast.test.ts` (queue mechanics, variants, MAX_VISIBLE cap, default-duration ranking, helpers). Totals: backend **61** (50 integration + 11 unit, up from 50); frontend **79** (up from 59).
+
+### Backlog (post-v0.13.1)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 - ⏳ Unified error handling: every Tauri command returns `Result<T, AppError>`, frontend funnels into a single toast.

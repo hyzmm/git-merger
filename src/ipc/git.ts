@@ -1,8 +1,24 @@
 /**
  * Strongly-typed wrappers around Tauri `invoke` for our Git backend.
  * Keep all Rust command names + payload shapes here, never elsewhere.
+ *
+ * Errors thrown across this boundary are upgraded to `AppErrorThrown`
+ * (see `./invoke.ts`). The legacy `catch (e) { String(e) }` pattern keeps
+ * working because `AppErrorThrown` extends `Error` with a formatted message.
+ * New call sites can branch on `e.appError.kind` for typed handling.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
+
+// ---------- Re-exports for convenience ----------
+export {
+  AppErrorThrown,
+  isAppErrorThrown,
+  invoke,
+  toastingInvoke,
+  type InvokeOptions,
+} from "./invoke";
+export type { AppError, AppErrorKind } from "../lib/appError";
+export { isAppError, isErrorOfKind, parseAppError, formatAppError } from "../lib/appError";
 
 // ---------- Types (mirror Rust commands.rs) ----------
 export interface RepoInfo {

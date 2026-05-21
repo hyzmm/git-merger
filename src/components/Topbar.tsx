@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
+import { isAppErrorThrown } from "@/ipc/invoke";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AppMenu } from "@/components/AppMenu";
@@ -98,11 +99,28 @@ export function Topbar() {
         void loadChanges();
       }
     } catch (e) {
+      // For known remote-op shapes, surface a more pointed banner title than
+      // a raw libgit2 message. The full text still goes into `details` so the
+      // user can copy the original for bug reports.
+      const original = String(e);
+      let message = original;
+      if (isAppErrorThrown(e)) {
+        const ae = e.appError;
+        if (ae.kind === "NonFastForward") {
+          message = "Remote has diverged from your branch — open the Merge view or rebase first.";
+        } else if (ae.kind === "Auth") {
+          message = "Authentication failed — check your credentials or SSH key.";
+        } else if (ae.kind === "UserCancelled") {
+          message = "Cancelled.";
+        } else {
+          message = ae.message;
+        }
+      }
       setOpResult({
         op,
         ok: false,
-        message: String(e),
-        details: [],
+        message,
+        details: original === message ? [] : [original],
       });
     } finally {
       setRunning(null);

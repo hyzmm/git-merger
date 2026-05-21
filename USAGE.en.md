@@ -903,26 +903,27 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 
 ## 14. Version history
 
-| Version | Highlights                                                                                                                                |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| v0.1.0  | History / Diff / Merge / Blame / Changes / remote ops (system git) / baseline UI                                                          |
-| v0.2.0  | Stash / branch & tag CRUD / commit context menu (cherry-pick / revert / reset) / Diff hunk nav + Ignore Whitespace / advanced filters     |
-| v0.3.0  | Reflog / Annotate previous (cross-rename trace) / Submodules                                                                              |
-| v0.4.0  | GitHub Actions CI + 4-platform releases / Settings panel (theme/font/tab/autocrlf) / auto-update (minisign) / i18n (en + zh)              |
-| v0.5.0  | Native push/pull/fetch (git2-rs, no system git) / credential dialog (SSH agent → keys → helper → prompt) / live progress events           |
-| v0.6.0  | Interactive Rebase (pick/reword/squash/fixup/drop + reorder + persisted state + conflict pause)                                           |
-| v0.7.0  | Command Palette (Ctrl+K, search commits/refs/files/views) + custom subsequence fuzzy matcher                                              |
-| v0.8.0  | File History (`git log --follow`, follows renames) with on-click diff at each revision                                                    |
-| v0.9.0  | Test suite (frontend 42 / backend 14) + CI integration; fixed file_history follow-rename bug                                              |
-| v0.9.1  | Refs panel HEAD pin at the top; Topbar app menu (☰) collapses Open / Recent / Close / About / Quit; new `Ctrl+O`                         |
-| v0.10.0 | Worktrees view: list + add (with branch & dir picker) + remove (incl. force) + prune; Sidebar 7th entry, `Ctrl+9`                         |
-| v0.10.1 | .gitignore editor: 3-column layout + 8 templates + live preview (`is_path_ignored`-based), atomic save; `Ctrl+0`                          |
-| v0.10.2 | Topbar Undo button: infers latest dangerous op from reflog, one-click mixed reset; dropdown lists 8 most recent undoables                 |
-| v0.10.3 | History large-repo perf: cursor-based pagination (1000 first / 1000 incremental) + incremental graph layout (lane state across pages)     |
-| v0.11.0 | History search (Ctrl+Shift+F): message + diff pickaxe + regex/literal + path scope; cargo `regex` dep added; sidebar grows to 11          |
-| v0.12.0 | Multi-repo tabs: RepoTabs strip above Topbar, `Ctrl+T` new / `Ctrl+W` close / double-click rename; per-tab view/filter/selection state    |
-| v0.12.1 | Test coverage push: 15 new diff/blame/commit_ops/workspace integration tests (35 → 50); fixed `blame::previous_filename` cross-rename bug |
-| v0.13.0 | Bilingual docs: introduced `README.zh.md` and `USAGE.en.md`; both originals gain a language switcher header                               |
+| Version | Highlights                                                                                                                                                                                                                                                  |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1.0  | History / Diff / Merge / Blame / Changes / remote ops (system git) / baseline UI                                                                                                                                                                            |
+| v0.2.0  | Stash / branch & tag CRUD / commit context menu (cherry-pick / revert / reset) / Diff hunk nav + Ignore Whitespace / advanced filters                                                                                                                       |
+| v0.3.0  | Reflog / Annotate previous (cross-rename trace) / Submodules                                                                                                                                                                                                |
+| v0.4.0  | GitHub Actions CI + 4-platform releases / Settings panel (theme/font/tab/autocrlf) / auto-update (minisign) / i18n (en + zh)                                                                                                                                |
+| v0.5.0  | Native push/pull/fetch (git2-rs, no system git) / credential dialog (SSH agent → keys → helper → prompt) / live progress events                                                                                                                             |
+| v0.6.0  | Interactive Rebase (pick/reword/squash/fixup/drop + reorder + persisted state + conflict pause)                                                                                                                                                             |
+| v0.7.0  | Command Palette (Ctrl+K, search commits/refs/files/views) + custom subsequence fuzzy matcher                                                                                                                                                                |
+| v0.8.0  | File History (`git log --follow`, follows renames) with on-click diff at each revision                                                                                                                                                                      |
+| v0.9.0  | Test suite (frontend 42 / backend 14) + CI integration; fixed file_history follow-rename bug                                                                                                                                                                |
+| v0.9.1  | Refs panel HEAD pin at the top; Topbar app menu (☰) collapses Open / Recent / Close / About / Quit; new `Ctrl+O`                                                                                                                                           |
+| v0.10.0 | Worktrees view: list + add (with branch & dir picker) + remove (incl. force) + prune; Sidebar 7th entry, `Ctrl+9`                                                                                                                                           |
+| v0.10.1 | .gitignore editor: 3-column layout + 8 templates + live preview (`is_path_ignored`-based), atomic save; `Ctrl+0`                                                                                                                                            |
+| v0.10.2 | Topbar Undo button: infers latest dangerous op from reflog, one-click mixed reset; dropdown lists 8 most recent undoables                                                                                                                                   |
+| v0.10.3 | History large-repo perf: cursor-based pagination (1000 first / 1000 incremental) + incremental graph layout (lane state across pages)                                                                                                                       |
+| v0.11.0 | History search (Ctrl+Shift+F): message + diff pickaxe + regex/literal + path scope; cargo `regex` dep added; sidebar grows to 11                                                                                                                            |
+| v0.12.0 | Multi-repo tabs: RepoTabs strip above Topbar, `Ctrl+T` new / `Ctrl+W` close / double-click rename; per-tab view/filter/selection state                                                                                                                      |
+| v0.12.1 | Test coverage push: 15 new diff/blame/commit_ops/workspace integration tests (35 → 50); fixed `blame::previous_filename` cross-rename bug                                                                                                                   |
+| v0.13.0 | Bilingual docs: introduced `README.zh.md` and `USAGE.en.md`; both originals gain a language switcher header                                                                                                                                                 |
+| v0.13.1 | Structured error handling: backend `AppError` (10-kind tagged enum auto-derived from `git2::Error`) + frontend toast queue (`useToasts` + `ToastContainer`) + global `unhandledrejection` safety net; Topbar banner now distinguishes NonFastForward / Auth |
 
 ---
 

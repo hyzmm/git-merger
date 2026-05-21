@@ -1,4 +1,5 @@
 mod commands;
+pub mod error;
 pub mod git;
 
 pub fn run() {

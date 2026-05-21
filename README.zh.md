@@ -221,7 +221,19 @@ G:\GitTools
 
 1. ✅ **双语化文档** — 新增中文 `README.zh.md` 与英文 `USAGE.en.md`，与现有 `README.md` / `USAGE.md` 一一对应；两个母版顶部加上语言切换链接（English · 简体中文）。这一版没有功能变更，只是把多语言外观补齐：终端用户的"使用说明"与开发者的"工程说明"现在都有 en/zh 两份等价文档，由 README 顶部的双向链接互通。
 
-### Backlog（v0.13.0 之后）
+### v0.13.1 — 已完成
+
+1. ✅ **结构化错误处理** — 后端错误现在是一等公民。把临时拼凑的 `CmdError`（一个被 `to_string` 的 `git2::Error`）替换为 `crate::error::AppError`，枚举式标签把失败分类成 10 种 kind：`NotFound / MergeConflict / NonFastForward / Auth / UserCancelled / InvalidArgument / Git / Io / Internal / Other`。映射全自动（`From<git2::Error>`）—— `git2::ErrorCode::NotFound` → `NotFound`、`Conflict / MergeConflict` → `MergeConflict`、`Auth / Certificate` → `Auth`、`User` → `UserCancelled` 等等——并有一小段消息启发式兜底处理 `git2::Error::from_str` 这类被标为 `GenericError` 的旧错误（让 "non-fast-forward" / "authentication required" / "unknown reset mode" 字符串仍能正确归类）。
+
+2. ✅ **紧凑的线上格式** — `AppError` 序列化为 `{ kind, message, code?, class? }`。可选的 `code` / `class` 在 `None` 时**完全省略**（自定义 `Serialize` impl），JSON 保持精简。前端 `src/lib/appError.ts` 的镜像对称：`parseAppError(unknown)` 校验形状，碰到任何畸形（旧版 plain-string 错误、原生 `Error`、`null` 等）一律降级到 `{ kind: "Other", message }`。
+
+3. ✅ **集中 toast 队列 + 全局兜底** — 新增 `src/lib/toast.ts`（zustand 实现，约 110 LOC）和 `src/components/ToastContainer.tsx`，最多同时渲染 4 个 toast 在窗口底部，每种 variant 有独立颜色 / 图标 / 自动消失时长。`App.tsx` 挂载了一个 `unhandledrejection` 全局监听器，捕获任何**没被本地 catch 消费**的 `AppErrorThrown` 并 push 一个 error toast——这样后端调用失败时，即便代码忘了处理 rejection，用户也总能看到反馈。
+
+4. ✅ **零侵入 invoke 升级** — `src/ipc/git.ts` 内部走新的 `src/ipc/invoke.ts` wrapper：每个 Tauri rejection 都被转成 `AppErrorThrown extends Error`。现有的 `catch (e) { String(e) }` 模式无需任何修改即可继续工作（`toString` 返回 `"Kind: message"`），新代码则可以基于 `e.appError.kind` 做精细分支。Topbar 远程操作 banner 已经利用这一点：`NonFastForward` 时显示"Remote has diverged from your branch — open the Merge view or rebase first."，而不是原始的 libgit2 字符串。
+
+5. ✅ **测试** — 后端在 `src/error.rs` 新增 11 个单元测试，覆盖每条分类路径（`NotFound / MergeConflict / Auth / InvalidArgument / UserCancelled` 走 `ErrorCode`；`NonFastForward / Auth / InvalidArgument` 走消息启发式；未识别的 libgit2 消息仍停在 `Git`；`std::io::Error → Io`；序列化 JSON 在带 / 不带 `code` & `class` 时都验证）。前端 `src/lib/appError.test.ts` + `src/lib/toast.test.ts` 共 19 个 bun:test：parse / format / 谓词 / 10 种 kind 全部 round-trip / 队列力学 / variant / MAX_VISIBLE 截断 / 默认时长排序 / helpers。总计：后端 **61**（50 集成 + 11 单元，从 50）；前端 **79**（从 59）。
+
+### Backlog（v0.13.1 之后）
 
 - ⏳ 代码签名（Windows EV cert / macOS notarization），让安装包不再触发 SmartScreen / Gatekeeper 警告。
 - ⏳ 错误处理统一化：所有 Tauri command 返回 `Result<T, AppError>`，前端集中 toast。

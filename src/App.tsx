@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { RepoTabs } from "@/components/RepoTabs";
 import { CredentialDialog } from "@/components/CredentialDialog";
 import { CommandPalette } from "@/components/CommandPalette";
+import { ToastContainer } from "@/components/ToastContainer";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
 import { MergePage } from "@/pages/MergePage";
@@ -21,6 +22,9 @@ import { GitignorePage } from "@/pages/GitignorePage";
 import { SearchPage } from "@/pages/SearchPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
+import { isAppErrorThrown } from "@/ipc/invoke";
+import { formatAppError } from "@/lib/appError";
+import { toast } from "@/lib/toast";
 
 export default function App() {
   const { repo, view } = useApp();
@@ -88,6 +92,22 @@ export default function App() {
 
   useShortcuts(shortcutMap);
 
+  // Bottom-line safety net: any backend rejection that nobody else handled
+  // pops a toast so users get *some* feedback. Local catch blocks that already
+  // route into per-pane error state still take precedence (the rejection is
+  // consumed before bubbling up).
+  useEffect(() => {
+    const onRejection = (ev: PromiseRejectionEvent) => {
+      const reason = ev.reason;
+      if (isAppErrorThrown(reason)) {
+        toast.error(formatAppError(reason.appError));
+        ev.preventDefault();
+      }
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <Sidebar />
@@ -128,6 +148,7 @@ export default function App() {
       </div>
       <CredentialDialog />
       <CommandPalette />
+      <ToastContainer />
     </div>
   );
 }

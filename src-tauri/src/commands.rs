@@ -1,24 +1,15 @@
 //! Tauri command surface — thin wrappers around the `git` module.
+//!
+//! Every command returns `Result<T, AppError>`. `AppError` is serialised as a
+//! tagged JSON object (`{ kind, message, code?, class? }`), so the frontend
+//! can react to specific failure shapes (e.g. `NonFastForward`, `Auth`)
+//! without parsing free-form strings.
 
+use crate::error::AppError;
 use crate::git;
-use serde::Serialize;
 
-#[derive(Debug, thiserror::Error)]
-pub enum CmdError {
-    #[error("{0}")]
-    Git(#[from] git2::Error),
-    #[error("{0}")]
-    #[allow(dead_code)]
-    Other(String),
-}
-
-impl Serialize for CmdError {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&self.to_string())
-    }
-}
-
-type R<T> = Result<T, CmdError>;
+/// Local alias kept for brevity at every command site.
+type R<T> = Result<T, AppError>;
 
 #[tauri::command]
 pub fn open_repo(path: String) -> R<git::RepoInfo> {
