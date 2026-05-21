@@ -71,6 +71,7 @@ pub fn run() {
             commands::gitignore_write,
             commands::gitignore_preview,
             commands::gitignore_templates,
+            commands::git_log_page,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

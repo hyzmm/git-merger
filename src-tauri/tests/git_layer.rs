@@ -471,3 +471,93 @@ fn gitignore_templates_are_well_formed() {
     ids.dedup();
     assert_eq!(ids.len(), before, "duplicate template ids");
 }
+
+// ---------------------------------------------------------------------------
+// log_page (cursor pagination)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn log_page_first_page_starts_from_head_and_signals_more() {
+    let r = TempRepo::init();
+    // Build a 7-commit linear history.
+    let mut last_oid = git2::Oid::zero();
+    for i in 0..7 {
+        last_oid = r.commit_file(&format!("f{i}.txt"), &format!("{i}\n"), &format!("c{i}"));
+    }
+
+    let page = git::log::log_page(&r.path_str(), None, 4, None).unwrap();
+    assert_eq!(page.commits.len(), 4);
+    assert!(page.has_more, "7 commits with limit 4 must signal has_more");
+    // First page newest-first: commit[0] is the latest.
+    assert_eq!(page.commits[0].oid, last_oid.to_string());
+    // next_cursor is the OID of the last commit on this page.
+    assert_eq!(
+        page.next_cursor.as_deref(),
+        Some(page.commits.last().unwrap().oid.as_str())
+    );
+}
+
+#[test]
+fn log_page_second_page_continues_from_cursor_without_overlap() {
+    let r = TempRepo::init();
+    let mut all: Vec<git2::Oid> = Vec::new();
+    for i in 0..6 {
+        all.push(r.commit_file(&format!("f{i}.txt"), &format!("{i}\n"), &format!("c{i}")));
+    }
+
+    let p1 = git::log::log_page(&r.path_str(), None, 3, None).unwrap();
+    let p2 = git::log::log_page(&r.path_str(), p1.next_cursor.as_deref(), 10, None).unwrap();
+
+    // Combined we should see all 6 commits, in newest-first order, with
+    // no duplicates and no gaps.
+    let combined: Vec<String> = p1
+        .commits
+        .iter()
+        .chain(p2.commits.iter())
+        .map(|c| c.oid.clone())
+        .collect();
+    assert_eq!(combined.len(), 6);
+    let mut expected: Vec<String> = all.iter().rev().map(|o| o.to_string()).collect();
+    // log_page is newest-first; `all` is oldest-first, so reverse for the cmp.
+    assert_eq!(combined, expected, "no overlap, no gap");
+    expected.clear(); // silence unused-mut warning if compiler nags
+    assert!(!p2.has_more);
+}
+
+#[test]
+fn log_page_empty_repo_returns_empty_page() {
+    let r = TempRepo::init();
+    let page = git::log::log_page(&r.path_str(), None, 100, None).unwrap();
+    assert!(page.commits.is_empty());
+    assert!(!page.has_more);
+    assert!(page.next_cursor.is_none());
+}
+
+#[test]
+fn log_page_with_pathspec_filters_and_paginates() {
+    let r = TempRepo::init();
+    // 5 commits: only commits 0, 2, 4 touch foo.txt; 1, 3 touch bar.txt.
+    for i in 0..5 {
+        let f = if i % 2 == 0 { "foo.txt" } else { "bar.txt" };
+        r.commit_file(f, &format!("{i}\n"), &format!("c{i}"));
+    }
+
+    let page = git::log::log_page(&r.path_str(), None, 100, Some("foo.txt")).unwrap();
+    // Expect 3 commits all touching foo.txt.
+    assert_eq!(page.commits.len(), 3);
+    assert!(!page.has_more);
+}
+
+#[test]
+fn log_page_cursor_at_root_yields_empty_next_page() {
+    let r = TempRepo::init();
+    // Single commit.
+    let oid = r.commit_file("a.txt", "1\n", "init");
+
+    // Asking for the page after the root commit must return nothing
+    // (the root has no parents, so the walker has no starting point).
+    let page = git::log::log_page(&r.path_str(), Some(&oid.to_string()), 10, None).unwrap();
+    assert!(page.commits.is_empty());
+    assert!(!page.has_more);
+    assert!(page.next_cursor.is_none());
+}

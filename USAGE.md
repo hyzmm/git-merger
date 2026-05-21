@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.10.2  
+> 适用版本：v0.10.3  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -143,6 +143,9 @@ bun run tauri:build
 - 完整 oid / parents 短哈希 / author + email / 本地化时间 / 所有 ref chips
 - **Changed files** 列表（A / M / D / R / C / T 状态 + 行级 +N -N）
 - 点击文件名 → 跳到 Diff 视图
+
+> **大仓库性能（v0.10.3 起）**：History 视图采用 cursor-based 分页，首屏只加载 1000 条 commit；当虚拟滚动到接近列表尾部（默认距底部 20 行）时自动 fetch 下一页 1000 条并追加。Graph layout（lane 分配 + curve 计算）也升级为增量算法，新加载的 page 只对新增 commit 计算，并完全沿用上一 page 的 lane 状态——所以滚动加载不会"跳色"，性能也不会随着列表增大而退化。  
+> 状态栏的 `· +more` 提示后端还有更多页；`· loading more...` 表示正在追加。
 
 ### 3.2 Diff（差异查看）
 
@@ -824,6 +827,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.10.0 | Worktrees 视图：列表 + 添加（带分支选择 + 目录选择器）+ 移除（含 force）+ prune；Sidebar 第 7 入口与 `Ctrl+9` 快捷键               |
 | v0.10.1 | .gitignore 编辑器：三栏布局 + 8 个内置模板 + 实时 preview（基于 libgit2 `is_path_ignored`），原子保存；`Ctrl+0` 入口               |
 | v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout |
+| v0.10.3 | History 大仓库性能优化：cursor-based 分页（首屏 1000 / 增量 1000）+ 增量 Graph layout（lane 状态跨 page 复用，零跳色）             |
 
 ---
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { layoutGraph } from "./graph";
+import { createLayoutState, extendLayout, layoutGraph } from "./graph";
 
 /**
  * Helper: build a CommitInput from a compact spec.
@@ -78,5 +78,76 @@ describe("layoutGraph", () => {
     // remain consistent for the lane's continuation.
     expect(typeof out[0]!.dotColor).toBe("number");
     expect(typeof out[1]!.dotColor).toBe("number");
+  });
+});
+
+describe("extendLayout (incremental)", () => {
+  it("produces the same rows as layoutGraph for the same input", () => {
+    const all = [c("M", "A", "B"), c("A", "A1"), c("B", "C"), c("A1", "C"), c("C")];
+    const oneShot = layoutGraph(all);
+    const inc = extendLayout(createLayoutState(), all);
+    expect(inc).toEqual(oneShot);
+  });
+
+  it("paged extension matches one-shot when split mid-branch", () => {
+    // Same DAG, but feed it in two halves like a paginated walker.
+    const all = [c("M", "A", "B"), c("A", "A1"), c("B", "C"), c("A1", "C"), c("C")];
+    const state = createLayoutState();
+    const page1 = extendLayout(state, all.slice(0, 2));
+    const page2 = extendLayout(state, all.slice(2));
+
+    const oneShot = layoutGraph(all);
+    const merged = [...page1, ...page2];
+
+    // Lane allocation depends on internal state; the merged result must be
+    // byte-identical to the one-shot layout.
+    expect(merged).toEqual(oneShot);
+  });
+
+  it("resolves a still-waiting parent to a deterministic dot column", () => {
+    // A merge commit M references parents A and B. We feed M alone first,
+    // then A, then B as separate "pages". Each parent must eventually land
+    // on some lane that was alive in M's row — i.e. extendLayout never
+    // forgets a waiting parent across calls.
+    const state = createLayoutState();
+    const [rowM] = extendLayout(state, [c("M", "A", "B")]);
+    const [rowA] = extendLayout(state, [c("A", "B")]);
+    const [rowB] = extendLayout(state, [c("B")]);
+    expect(rowM).toBeTruthy();
+    expect(rowA).toBeTruthy();
+    expect(rowB).toBeTruthy();
+
+    // M's curves reach to the lanes of A and B respectively.
+    const reached = new Set(rowM!.curves.map((cc) => cc.toCol));
+    expect(reached.has(rowA!.dotCol)).toBe(true);
+    expect(reached.has(rowB!.dotCol)).toBe(true);
+
+    // And B's color was assigned exactly once (deterministic, not random).
+    const sameRunAgain = createLayoutState();
+    extendLayout(sameRunAgain, [c("M", "A", "B")]);
+    extendLayout(sameRunAgain, [c("A", "B")]);
+    const [rowB2] = extendLayout(sameRunAgain, [c("B")]);
+    expect(rowB2!.dotColor).toBe(rowB!.dotColor);
+  });
+
+  it("extends an empty state without throwing", () => {
+    const state = createLayoutState();
+    expect(extendLayout(state, [])).toEqual([]);
+    // State should still be usable afterwards.
+    const out = extendLayout(state, [c("only")]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.dotCol).toBe(0);
+  });
+
+  it("treats two non-overlapping pages as truly independent in lane usage", () => {
+    // First page is a self-contained walk; second page is unrelated.
+    const state = createLayoutState();
+    const p1 = extendLayout(state, [c("A", "B"), c("B")]);
+    const p2 = extendLayout(state, [c("X", "Y"), c("Y")]);
+    expect(p1.map((r) => r.oid)).toEqual(["A", "B"]);
+    expect(p2.map((r) => r.oid)).toEqual(["X", "Y"]);
+    // After page 1 finished, lane 0 was freed (B is root). Page 2 should be
+    // able to reuse col 0 again.
+    expect(p2[0]!.dotCol).toBe(0);
   });
 });

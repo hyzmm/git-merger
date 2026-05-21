@@ -232,6 +232,14 @@ export interface IgnorePreview {
   no_longer_ignored: string[];
 }
 
+export interface LogPage {
+  commits: CommitSummary[];
+  /** True when the walker hit the requested limit before exhausting the DAG. */
+  has_more: boolean;
+  /** OID of the last commit on this page; pass back as `after` to load more. */
+  next_cursor: string | null;
+}
+
 // ---------- Interactive Rebase ----------
 
 export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
@@ -272,6 +280,13 @@ export const git = {
       path,
       limit: opts?.limit ?? 5000,
       skip: opts?.skip ?? 0,
+      pathspec: opts?.pathspec ?? null,
+    }),
+  logPage: (path: string, opts?: { after?: string; limit?: number; pathspec?: string }) =>
+    invoke<LogPage>("git_log_page", {
+      path,
+      after: opts?.after ?? null,
+      limit: opts?.limit ?? 1000,
       pathspec: opts?.pathspec ?? null,
     }),
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),

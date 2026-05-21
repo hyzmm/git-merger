@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
-import { layoutGraph } from "@/lib/graph";
+import { createLayoutState, extendLayout, type LayoutState, type RowLayout } from "@/lib/graph";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { GraphRow } from "./GraphRow";
@@ -41,8 +41,11 @@ export function CommitList() {
   const pathspec = useApp((s) => s.history.pathspec);
   const selectedOid = useApp((s) => s.history.selectedOid);
   const loading = useApp((s) => s.history.loading);
+  const loadingMore = useApp((s) => s.history.loadingMore);
+  const hasMore = useApp((s) => s.history.hasMore);
   const error = useApp((s) => s.history.error);
   const selectCommit = useApp((s) => s.selectCommit);
+  const loadMoreHistory = useApp((s) => s.loadMoreHistory);
   const checkoutCommit = useApp((s) => s.checkoutCommit);
   const cherryPick = useApp((s) => s.cherryPick);
   const revertCommit = useApp((s) => s.revertCommit);
@@ -72,12 +75,49 @@ export function CommitList() {
     });
   }, [commits, filter, authorFilter, sinceFilter, untilFilter]);
 
-  const layout = useMemo(
-    () => layoutGraph(filtered.map((c) => ({ oid: c.oid, parents: c.parents }))),
-    [filtered],
-  );
+  // ---------- Incremental graph layout ----------
+  // The layout allocator is stateful (parent commits on previous pages keep
+  // lanes alive), so we carry state across renders and only walk *new*
+  // commits when the array grows by appending. If `commits` is reset
+  // (loadHistory after a filter change or repo switch), we rebuild from
+  // scratch. We key by `commits` array identity + length to detect both.
+  const layoutCache = useRef<{
+    arr: CommitSummary[] | null;
+    state: LayoutState;
+    rowsByOid: Map<string, RowLayout>;
+  }>({
+    arr: null,
+    state: createLayoutState(),
+    rowsByOid: new Map(),
+  });
 
-  const graphCols = useMemo(() => Math.max(2, ...layout.map((r) => r.width)), [layout]);
+  const { rowsByOid, totalGraphCols } = useMemo(() => {
+    const cache = layoutCache.current;
+    const isExtension =
+      cache.arr === commits || // identity hit (no append happened, hot reload of memo)
+      (cache.arr !== null &&
+        commits.length >= cache.arr.length &&
+        cache.arr.every((c, i) => commits[i]?.oid === c.oid));
+    if (!isExtension) {
+      cache.state = createLayoutState();
+      cache.rowsByOid = new Map();
+      const rows = extendLayout(cache.state, commits);
+      for (const r of rows) cache.rowsByOid.set(r.oid, r);
+      cache.arr = commits;
+    } else if (commits.length > (cache.arr?.length ?? 0)) {
+      const start = cache.arr?.length ?? 0;
+      const newRows = extendLayout(cache.state, commits.slice(start));
+      for (const r of newRows) cache.rowsByOid.set(r.oid, r);
+      cache.arr = commits;
+    }
+    let maxCols = 2;
+    for (const r of cache.rowsByOid.values()) {
+      if (r.width > maxCols) maxCols = r.width;
+    }
+    return { rowsByOid: cache.rowsByOid, totalGraphCols: maxCols };
+  }, [commits]);
+
+  const graphCols = totalGraphCols;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({
@@ -95,6 +135,37 @@ export function CommitList() {
     if (idx < 0) return;
     virtualizer.scrollToIndex(idx, { align: "center" });
   }, [selectedOid, filtered, virtualizer]);
+
+  // Infinite scroll: when the last virtualized row is within ~20 rows of the
+  // tail of the *unfiltered* list, ask the store for the next backend page.
+  // Important: we trigger off the unfiltered length because filtering is a
+  // local concern, while paging is about the global walk.
+  const virtualItems = virtualizer.getVirtualItems();
+  useEffect(() => {
+    if (!hasMore || loadingMore || loading) return;
+    if (filter || authorFilter || sinceFilter !== null || untilFilter !== null) {
+      // While the user has an active filter, the visible row index doesn't
+      // map cleanly to walk progress. Be conservative and trigger only when
+      // the filtered list itself is near its end.
+      const last = virtualItems[virtualItems.length - 1];
+      if (last && last.index >= filtered.length - 5) void loadMoreHistory();
+      return;
+    }
+    const last = virtualItems[virtualItems.length - 1];
+    if (last && last.index >= commits.length - 20) void loadMoreHistory();
+  }, [
+    virtualItems,
+    hasMore,
+    loadingMore,
+    loading,
+    filter,
+    authorFilter,
+    sinceFilter,
+    untilFilter,
+    filtered.length,
+    commits.length,
+    loadMoreHistory,
+  ]);
 
   const onContextMenu = (e: React.MouseEvent, c: CommitSummary) => {
     e.preventDefault();
@@ -178,6 +249,7 @@ export function CommitList() {
         {filtered.length !== commits.length && (
           <span className="text-muted-foreground">· filtered from {commits.length}</span>
         )}
+        {hasMore && !loading && <span className="text-muted-foreground">· +more</span>}
         {pathspec && (
           <span className="rounded bg-secondary px-1.5 font-mono text-[10.5px] text-foreground">
             path: {pathspec}
@@ -189,6 +261,9 @@ export function CommitList() {
           </span>
         )}
         {loading && <span className="text-muted-foreground">· loading...</span>}
+        {loadingMore && !loading && (
+          <span className="text-muted-foreground">· loading more...</span>
+        )}
         {error && <span className="text-destructive">· {error}</span>}
       </div>
 
@@ -208,7 +283,7 @@ export function CommitList() {
             {virtualizer.getVirtualItems().map((vRow) => {
               const c = filtered[vRow.index];
               if (!c) return null;
-              const row = layout[vRow.index];
+              const row = rowsByOid.get(c.oid);
               const selected = c.oid === selectedOid;
               return (
                 <div

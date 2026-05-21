@@ -173,7 +173,17 @@ G:\GitTools
 
 3. ✅ **Tests** — 12 new bun:test cases in `src/lib/reflogActions.test.ts` covering the classifier (commit / amend / reset / merge / pull / cherry-pick / revert / rebase start vs (pick) vs (finish), and all the non-undoable shapes) plus `findQuickUndo` (empty / most-recent / skip-non-undoables / commit-barrier) and `listUndoables` (filtering and limit). Total frontend bun:test now 54 (up from 42). 7 new `undo.*` i18n keys mirrored in `en` and `zh`.
 
-### Backlog (post-v0.10.2)
+### v0.10.3 — Shipped
+
+1. ✅ **Cursor-based history pagination** — Replaces the previous "load 5000 commits up front" model with a real streaming walker. Backend `git/log.rs` exposes a new `log_page(after: Option<oid>, limit, pathspec)` returning `{ commits, has_more, next_cursor }`; cursor is the OID of the page's last commit, and the next call pushes that commit's parents into a fresh `revwalk` so the cursor itself isn't yielded twice. The old `git_log` command stays put for compatibility, but the History view now uses `git_log_page` with first-page limit 1000 and identical 1000-commit follow-up pages, fetched lazily as the user virtually scrolls the list.
+
+2. ✅ **Incremental graph layout** — `src/lib/graph.ts` is split into `createLayoutState()` + `extendLayout(state, commits)` so the lane allocator can carry across pages. A merge commit on page 1 reserving a lane for a parent that only shows up on page 5 still gets the same dot color resolved when it finally arrives. The `CommitList` component caches the layout state in a ref keyed by the unfiltered `commits` array identity; appending a new page walks only the delta, while a hard reset (filter change, repo switch) rebuilds. End result: scrolling and pulling pages are both O(page-size), not O(history-size).
+
+3. ✅ **Auto-load near tail** — `CommitList` watches the virtualizer's last visible row and triggers `loadMoreHistory()` when within 20 unfiltered rows of the tail. While a user filter is active, the heuristic is conservative (5 rows from the _filtered_ tail) since filtering shadows real walk progress. The header gains `· +more` (when the backend signals there's another page) and `· loading more...` (during the in-flight fetch).
+
+4. ✅ **Tests** — 5 new cargo integration tests in `tests/git_layer.rs` covering `log_page` (first page from HEAD, second page continuation without overlap, empty repo, pathspec filtering, root-commit cursor returning empty). 5 new bun:test cases in `src/lib/graph.test.ts` covering `extendLayout` round-trip equivalence with `layoutGraph`, paged extension stability, deterministic dot-column resolution for waiting parents, empty-input safety, and lane reuse across non-overlapping pages. Totals: backend **27** (up from 22); frontend **59** (up from 54).
+
+### Backlog (post-v0.10.3)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

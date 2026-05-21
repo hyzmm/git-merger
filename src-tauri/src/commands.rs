@@ -54,6 +54,21 @@ pub fn git_log(
 }
 
 #[tauri::command]
+pub fn git_log_page(
+    path: String,
+    after: Option<String>,
+    limit: usize,
+    pathspec: Option<String>,
+) -> R<git::LogPage> {
+    Ok(git::log::log_page(
+        &path,
+        after.as_deref(),
+        limit,
+        pathspec.as_deref(),
+    )?)
+}
+
+#[tauri::command]
 pub fn commit_files(path: String, oid: String) -> R<Vec<git::FileChange>> {
     Ok(git::diff::commit_files(&path, &oid)?)
 }

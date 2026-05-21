@@ -37,24 +37,51 @@ interface CommitInput {
 
 type Lane = { waiting: string; color: number } | null;
 
-export function layoutGraph(commits: CommitInput[]): RowLayout[] {
-  const lanes: Lane[] = [];
-  const oidColor = new Map<string, number>();
-  let nextColor = 0;
+/**
+ * Mutable state carried between calls to {@link extendLayout}. Allocate
+ * once per logical history walk via {@link createLayoutState}, then keep
+ * passing the same instance as you append more commits at the end of
+ * the list. The shape is intentionally JSON-cloneable so a Zustand store
+ * can persist it if needed.
+ */
+export interface LayoutState {
+  lanes: Lane[];
+  oidColor: Map<string, number>;
+  nextColor: number;
+}
 
+export function createLayoutState(): LayoutState {
+  return {
+    lanes: [],
+    oidColor: new Map(),
+    nextColor: 0,
+  };
+}
+
+/**
+ * Append `commits` to a running layout, mutating `state` in place and
+ * returning the rows produced for the new commits only.
+ *
+ * The lane allocator is stateful (a parent commit on the previous page may
+ * be the second parent of a commit on this one and reuse a still-waiting
+ * lane), so callers MUST feed pages in walk order — same order the backend
+ * yielded them — and MUST NOT skip pages. Filtering / re-ordering happens
+ * later, on the laid-out rows.
+ */
+export function extendLayout(state: LayoutState, commits: CommitInput[]): RowLayout[] {
   function colorFor(oid: string): number {
-    let c = oidColor.get(oid);
+    let c = state.oidColor.get(oid);
     if (c === undefined) {
-      c = nextColor++ % 6;
-      oidColor.set(oid, c);
+      c = state.nextColor++ % 6;
+      state.oidColor.set(oid, c);
     }
     return c;
   }
 
   function findFreeLane(): number {
-    for (let i = 0; i < lanes.length; i++) if (lanes[i] === null) return i;
-    lanes.push(null);
-    return lanes.length - 1;
+    for (let i = 0; i < state.lanes.length; i++) if (state.lanes[i] === null) return i;
+    state.lanes.push(null);
+    return state.lanes.length - 1;
   }
 
   const out: RowLayout[] = [];
@@ -62,47 +89,36 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
   for (const c of commits) {
     // 1) Determine the dot column. If some lane is already waiting for this
     //    commit, reuse it; otherwise allocate a fresh lane.
-    let col = lanes.findIndex((l) => l !== null && l.waiting === c.oid);
+    let col = state.lanes.findIndex((l) => l !== null && l.waiting === c.oid);
     let dotColor: number;
     if (col === -1) {
-      col = findFreeLane(); // may push a null entry
+      col = findFreeLane();
       dotColor = colorFor(c.oid);
-      lanes[col] = { waiting: c.oid, color: dotColor }; // placeholder so snapshot captures it
+      state.lanes[col] = { waiting: c.oid, color: dotColor };
     } else {
-      dotColor = lanes[col]!.color;
+      dotColor = state.lanes[col]!.color;
     }
 
-    // 2) Snapshot the lanes BEFORE we mutate them for parents. Note: lanes now
-    //    contains an entry at `col` waiting for c.oid, which represents the
-    //    line *coming into* this row from above.
-    const lanesBefore: Lane[] = lanes.map((l) => (l ? { ...l } : null));
+    const lanesBefore: Lane[] = state.lanes.map((l) => (l ? { ...l } : null));
 
     // 3) Process parents.
     const parents = c.parents;
     if (parents.length === 0) {
-      // Root commit: this lane terminates here.
-      lanes[col] = null;
+      state.lanes[col] = null;
     } else {
-      // First parent continues this lane.
-      lanes[col] = { waiting: parents[0], color: dotColor };
+      state.lanes[col] = { waiting: parents[0], color: dotColor };
       for (let i = 1; i < parents.length; i++) {
         const p = parents[i];
-        const existing = lanes.findIndex((l) => l !== null && l.waiting === p);
+        const existing = state.lanes.findIndex((l) => l !== null && l.waiting === p);
         if (existing === -1) {
           const idx = findFreeLane();
-          lanes[idx] = { waiting: p, color: colorFor(p) };
+          state.lanes[idx] = { waiting: p, color: colorFor(p) };
         }
-        // else: that parent is already waited on by another lane; the curve
-        // will simply merge into it.
       }
     }
 
-    // 4) Snapshot the lanes AFTER mutations.
-    const lanesAfter: Lane[] = lanes.map((l) => (l ? { ...l } : null));
+    const lanesAfter: Lane[] = state.lanes.map((l) => (l ? { ...l } : null));
 
-    // 5) Build "through" segments — lanes that pass through this row vertically
-    //    (i.e. were occupied at top AND at bottom with same target, and are not
-    //    the dot column).
     const through: LaneSegment[] = [];
     const maxLen = Math.max(lanesBefore.length, lanesAfter.length);
     for (let i = 0; i < maxLen; i++) {
@@ -114,13 +130,11 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
       }
     }
 
-    // 6) Build curves — one per parent, going from `col` (top half of dot) to
-    //    the lane that ends up waiting for that parent (bottom half).
     const curves: LaneCurve[] = [];
     parents.forEach((p, i) => {
-      const targetCol = lanes.findIndex((l) => l !== null && l.waiting === p);
+      const targetCol = state.lanes.findIndex((l) => l !== null && l.waiting === p);
       if (targetCol === -1) return;
-      const targetLane = lanes[targetCol];
+      const targetLane = state.lanes[targetCol];
       if (!targetLane) return;
       if (i === 0) {
         if (targetCol === col) {
@@ -164,4 +178,14 @@ export function layoutGraph(commits: CommitInput[]): RowLayout[] {
   }
 
   return out;
+}
+
+/**
+ * One-shot layout for a complete commit list. Equivalent to
+ * `extendLayout(createLayoutState(), commits)` but kept as a top-level
+ * export to preserve the v0.1.0 API and simple call sites that don't
+ * need incremental state.
+ */
+export function layoutGraph(commits: CommitInput[]): RowLayout[] {
+  return extendLayout(createLayoutState(), commits);
 }

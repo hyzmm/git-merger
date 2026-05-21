@@ -63,6 +63,12 @@ interface HistoryState {
   /** Pathspec — when set, the backend filters the walk to commits touching this. */
   pathspec: string;
   loading: boolean;
+  /** Loading the next page on top of an already-populated `commits`. */
+  loadingMore: boolean;
+  /** True when the backend signalled there are more commits beyond `commits`. */
+  hasMore: boolean;
+  /** OID cursor for the next `git_log_page` call (oid of the current last commit). */
+  nextCursor: string | null;
   error: string | null;
 }
 
@@ -225,6 +231,7 @@ interface AppState {
 
   // history
   loadHistory: () => Promise<void>;
+  loadMoreHistory: () => Promise<void>;
   selectCommit: (oid: string) => Promise<void>;
   setFilter: (q: string) => void;
   setAuthorFilter: (a: string | null) => void;
@@ -334,6 +341,20 @@ interface AppState {
   selectFileHistoryEntry: (idx: number) => Promise<void>;
 }
 
+function dedupAppend(prev: CommitSummary[], next: CommitSummary[]): CommitSummary[] {
+  if (next.length === 0) return prev;
+  if (prev.length === 0) return next;
+  const seen = new Set(prev.map((c) => c.oid));
+  const merged = prev.slice();
+  for (const c of next) {
+    if (!seen.has(c.oid)) {
+      merged.push(c);
+      seen.add(c.oid);
+    }
+  }
+  return merged;
+}
+
 const emptyHistory: HistoryState = {
   commits: [],
   refs: [],
@@ -346,6 +367,9 @@ const emptyHistory: HistoryState = {
   untilFilter: null,
   pathspec: "",
   loading: false,
+  loadingMore: false,
+  hasMore: false,
+  nextCursor: null,
   error: null,
 };
 
@@ -568,26 +592,67 @@ export const useApp = create<AppState>((set, get) => ({
   loadHistory: async () => {
     const repo = get().repo;
     if (!repo) return;
-    set((s) => ({ history: { ...s.history, loading: true, error: null } }));
+    set((s) => ({
+      history: {
+        ...s.history,
+        loading: true,
+        error: null,
+        // Reset paging state for the fresh walk.
+        commits: [],
+        hasMore: false,
+        nextCursor: null,
+      },
+    }));
     try {
       const pathspec = get().history.pathspec.trim();
-      const [commits, refs] = await Promise.all([
-        git.log(repo.path, { limit: 5000, skip: 0, pathspec: pathspec || undefined }),
+      const [page, refs] = await Promise.all([
+        git.logPage(repo.path, { limit: 1000, pathspec: pathspec || undefined }),
         git.listRefs(repo.path),
       ]);
       set((s) => ({
         history: {
           ...s.history,
-          commits,
+          commits: page.commits,
+          hasMore: page.has_more,
+          nextCursor: page.next_cursor,
           refs,
           loading: false,
-          selectedOid: commits[0]?.oid ?? null,
+          selectedOid: page.commits[0]?.oid ?? null,
         },
       }));
-      const first = commits[0];
+      const first = page.commits[0];
       if (first) void get().selectCommit(first.oid);
     } catch (e) {
       set((s) => ({ history: { ...s.history, loading: false, error: String(e) } }));
+    }
+  },
+
+  loadMoreHistory: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const h = get().history;
+    if (h.loadingMore || h.loading || !h.hasMore || !h.nextCursor) return;
+    set((s) => ({ history: { ...s.history, loadingMore: true, error: null } }));
+    try {
+      const pathspec = h.pathspec.trim();
+      const page = await git.logPage(repo.path, {
+        after: h.nextCursor,
+        limit: 1000,
+        pathspec: pathspec || undefined,
+      });
+      set((s) => ({
+        history: {
+          ...s.history,
+          // Backend guarantees the cursor commit itself is not yielded again,
+          // but defensively de-dup by oid in case the user reloaded mid-walk.
+          commits: dedupAppend(s.history.commits, page.commits),
+          hasMore: page.has_more,
+          nextCursor: page.next_cursor ?? s.history.nextCursor,
+          loadingMore: false,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({ history: { ...s.history, loadingMore: false, error: String(e) } }));
     }
   },
 
