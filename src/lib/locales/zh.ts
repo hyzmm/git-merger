@@ -223,4 +223,10 @@ export const zh: Dict = {
   "search.noDiffHits": "没有 diff 命中 — 仅 message 匹配。",
   "search.openInHistory": "在 History 视图中打开该 commit",
   "search.open": "打开",
+
+  // 仓库 tabs（多仓库工作区）
+  "tabs.add": "新建 tab（Ctrl+T）",
+  "tabs.close": "关闭 tab（Ctrl+W）",
+  "tabs.blank": "空白 tab — 请选择仓库",
+  "menu.newTab": "新建 tab",
 };

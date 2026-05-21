@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { RepoTabs } from "@/components/RepoTabs";
 import { CredentialDialog } from "@/components/CredentialDialog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { HistoryPage } from "@/pages/HistoryPage";
@@ -29,6 +30,9 @@ export default function App() {
   const chunks = useApp((s) => s.merge.chunks);
   const openPalette = useApp((s) => s.openPalette);
   const openRepo = useApp((s) => s.openRepo);
+  const newBlankTab = useApp((s) => s.newBlankTab);
+  const closeTab = useApp((s) => s.closeTab);
+  const activeTabId = useApp((s) => s.activeTabId);
 
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
@@ -50,6 +54,12 @@ export default function App() {
       "ctrl+9": () => repo && setView("worktrees"),
       "ctrl+0": () => repo && setView("gitignore"),
       "ctrl+shift+f": () => repo && setView("search"),
+      "ctrl+t": () => {
+        newBlankTab();
+      },
+      "ctrl+w": () => {
+        if (activeTabId) closeTab(activeTabId);
+      },
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
       "ctrl+o": async () => {
@@ -62,7 +72,18 @@ export default function App() {
       "alt+2": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "right"),
       "alt+3": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "both"),
     }),
-    [repo, setView, refresh, firstPendingIdx, applyResolution, openPalette, openRepo],
+    [
+      repo,
+      setView,
+      refresh,
+      firstPendingIdx,
+      applyResolution,
+      openPalette,
+      openRepo,
+      newBlankTab,
+      closeTab,
+      activeTabId,
+    ],
   );
 
   useShortcuts(shortcutMap);
@@ -71,6 +92,7 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
+        <RepoTabs />
         <Topbar />
         <main className="min-h-0 flex-1 overflow-hidden">
           {!repo ? (

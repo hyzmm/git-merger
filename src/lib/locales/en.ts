@@ -232,6 +232,12 @@ export const en = {
   "search.noDiffHits": "No diff hits — message-only match.",
   "search.openInHistory": "Open this commit in History view",
   "search.open": "Open",
+
+  // Repo tabs (multi-repo workspace)
+  "tabs.add": "New tab (Ctrl+T)",
+  "tabs.close": "Close tab (Ctrl+W)",
+  "tabs.blank": "Blank tab — pick a repository",
+  "menu.newTab": "New tab",
 } as const;
 
 export type Dict = Record<keyof typeof en, string>;

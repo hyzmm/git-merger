@@ -195,7 +195,17 @@ G:\GitTools
 
 5. ✅ **Tests** — 8 new cargo integration tests in `tests/git_layer.rs`: message-mode finds matching commit; diff-mode pickaxe finds an added line; both-mode unions message + diff hits; regex kind treats pattern as a regex; case sensitivity is honoured both ways; pathspec scopes to a directory; empty pattern returns no hits; max_commits truncates the walk. Totals: backend **35** (up from 27).
 
-### Backlog (post-v0.11.0)
+### v0.12.0 — Shipped
+
+1. ✅ **Multi-repo tabs** — A new `RepoTabs` strip above the Topbar that lets you keep several repositories open at once and bounce between them without losing state. The bar auto-hides when there's only ≤ 1 tab so the single-repo workflow stays uncluttered. New global shortcuts: `Ctrl+T` (new blank tab), `Ctrl+W` (close current tab). Double-click a tab label to rename. Same-repo de-duplication: re-opening a repo that already has a tab routes to the existing tab instead of creating a duplicate.
+
+2. ✅ **Zero-touch refactor pattern** — The store keeps the _active_ tab's state mirrored at the top level so all 240+ `useApp(s => s.history.commits)` selectors and 28 component files keep working unchanged. Inactive tabs park their state in `sessionsById: Record<tabId, SessionSnapshot>`. Switching tabs is a single batch swap: snapshot the current top-level fields into the old tab's slot, then apply the new tab's snapshot onto the top level. Per-tab state spans every existing slice — repo / view / history / diff / merge / blame / changes / stash / reflog / submodules / rebase / fileHistory / worktrees / gitignore / search.
+
+3. ✅ **AppMenu integration** — The hamburger menu gains a "New tab" item right under "Open repository". The existing "Close repository" was redefined to mean "close current tab" (which falls back to a sensible neighbour, or the welcome page if it was the last one).
+
+4. ✅ **Decisions deferred to a future minor** — Cross-process tab persistence (recall the same set of tabs on app restart) is intentionally NOT implemented in v0.12.0. The recent-repositories list already covers the common "I want to reopen what I was working on" case, and persisting full session snapshots adds quota / serialization complexity (e.g. `Set<string>` in changes view) without a clear short-term payoff.
+
+### Backlog (post-v0.12.0)
 
 - ⏳ Code signing (Windows EV cert / macOS notarization) so installers don't trigger SmartScreen / Gatekeeper.
 

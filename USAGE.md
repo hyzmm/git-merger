@@ -2,7 +2,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.11.0  
+> 适用版本：v0.12.0  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -29,6 +29,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
+  - [4.3 多仓库 tabs（v0.12.0）](#43-多仓库-tabsv0120)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
@@ -469,6 +470,38 @@ v0.10.2 起在 Topbar 远程按钮组之后加入 **↺Undo** 一键撤销按钮
 
 按钮在 reflog 顶端没有可撤销项时**自动隐藏**，不占空间。
 
+### 4.3 多仓库 tabs（v0.12.0）
+
+Topbar 上方新增一栏 **RepoTabs**，支持同时打开多个仓库并在它们之间快速切换——类似 IDE 的标签页。
+
+**核心交互**：
+
+| 操作              | 行为                                            |
+| ----------------- | ----------------------------------------------- |
+| `Ctrl+T`          | 新建一个空白 tab，立即显示 Welcome 页           |
+| 点击 tab          | 切换到该 tab                                    |
+| 双击 tab 标签     | 重命名该 tab（默认是仓库末段路径名）            |
+| 点击 tab 上的 ×   | 关闭该 tab；如果是最后一个 tab，回到 Welcome 页 |
+| `Ctrl+W`          | 关闭当前 tab                                    |
+| AppMenu → New tab | 等价于 `Ctrl+T`                                 |
+
+**单 tab 时栏不显示**（`tabs.length <= 1`）——保持单仓库场景的 UI 整洁。
+
+**Per-tab 状态隔离**：每个 tab 独立保留 view（History/Diff/Merge/...）、history 滚动位置 / filter / 选中 commit、stash / reflog / submodules / rebase 状态、Diff 选中文件、Worktrees 列表、.gitignore 草稿、Search 查询。切换 tab 时**当前 tab 的全部状态被快照存档**，目标 tab 的状态被恢复到顶层——这是 zero-cost 切换，不会因为 tab 数量增加而拖慢。
+
+**实现要点**：
+
+- 顶层 store 始终镜像 active tab 的状态，所有现有的 `useApp(s => s.history.commits)` selectors 完全不需要改动
+- 非 active tab 的状态停泊在 `sessionsById: Record<tabId, SessionSnapshot>`，切换是一次 batch swap
+- 同一 repo 已被某个 tab 打开时，再次 `openRepo` 会自动**切到那个 tab**而不是建新的——避免重复
+- 本版本暂不持久化 tabs 跨进程（重启后 tabs 清空，由 recent repos 恢复）；本会话内 tab 状态完整保留
+
+**典型用例**：
+
+1. 同时开 frontend / backend 两个仓库，频繁切换看 PR
+2. 一个 tab 在 main 分支查 history，另一个 tab 在 feature 分支跑 rebase plan
+3. 临时打开第三个仓库查个 commit hash，查完 `Ctrl+W` 关闭即可
+
 ---
 
 ## 五、Command Palette（`Ctrl+K`）
@@ -552,6 +585,8 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+9`            | Worktrees                             | 全局  |
 | `Ctrl+0`            | .gitignore 编辑器                     | 全局  |
 | `Ctrl+Shift+F`      | 历史搜索（跨提交）                    | 全局  |
+| `Ctrl+T`            | 新建仓库 tab（v0.12.0）               | 全局  |
+| `Ctrl+W`            | 关闭当前 tab（v0.12.0）               | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
@@ -874,6 +909,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.10.2 | Topbar Undo 按钮：从 reflog 推断最近一次危险操作，一键 mixed-reset 回滚；下拉列出最近 8 条可撤销项，安全过滤普通 commit / checkout |
 | v0.10.3 | History 大仓库性能优化：cursor-based 分页（首屏 1000 / 增量 1000）+ 增量 Graph layout（lane 状态跨 page 复用，零跳色）             |
 | v0.11.0 | 历史搜索（Ctrl+Shift+F）：message + diff pickaxe + regex/literal + path scope，cargo 依赖加 `regex`，Sidebar 升至 11 入口          |
+| v0.12.0 | 多仓库 tabs：Topbar 上方新增 RepoTabs 栏，支持 `Ctrl+T` 新建、`Ctrl+W` 关闭、双击重命名；每个 tab 独立保留 view/filter/选中态      |
 
 ---
 

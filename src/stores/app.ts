@@ -250,11 +250,27 @@ interface AppState {
 
   recentRepos: RecentRepo[];
 
+  // Multi-tab session model. The active tab's state is mirrored at the top
+  // level of this store (so existing selectors keep working); inactive tabs
+  // have their state parked in `sessionsById`. See snapshotSession /
+  // emptySession in the implementation.
+  tabs: RepoTab[];
+  activeTabId: string | null;
+  sessionsById: Record<string, SessionSnapshot>;
+
   setView: (v: ViewKey) => void;
   openRepo: (path: string) => Promise<void>;
   reset: () => void;
   refresh: () => Promise<void>;
   removeRecentRepo: (path: string) => void;
+
+  // tabs
+  addTab: (path?: string) => Promise<string>;
+  switchTab: (id: string) => void;
+  closeTab: (id: string) => void;
+  renameTab: (id: string, label: string) => void;
+  /** Open a new blank tab pointed at the welcome page (no repo). */
+  newBlankTab: () => string;
 
   // history
   loadHistory: () => Promise<void>;
@@ -534,6 +550,97 @@ const emptyFileHistory: FileHistoryView = {
   error: null,
 };
 
+// ---------------------------------------------------------------------------
+// Multi-tab session model (v0.12.0)
+// ---------------------------------------------------------------------------
+// Each repository the user opens lives in its own *tab*. The *active* tab's
+// state is mirrored at the top level of the store (so all existing selectors
+// `useApp(s => s.history.commits)` keep working unchanged); inactive tabs
+// have their state stashed in `sessionsById` until the user switches back.
+//
+// Switching tabs does a single batch swap: snapshot the current top-level
+// fields into `sessionsById[oldActive]`, then apply the new tab's snapshot
+// onto the top level. Two tabs with the same repo path are allowed (e.g.
+// two views into the same monorepo) but discouraged via the "already open"
+// short-circuit in `addTab`.
+
+export interface RepoTab {
+  id: string;
+  /** Repo workdir path (or empty string when the tab is brand-new without a repo). */
+  repoPath: string;
+  /** Display label — last segment of `repoPath` by default. */
+  label: string;
+}
+
+interface SessionSnapshot {
+  repo: RepoInfo | null;
+  view: ViewKey;
+  history: HistoryState;
+  diff: DiffState;
+  merge: MergeView;
+  blame: BlameView;
+  changes: ChangesView;
+  stash: StashView;
+  reflog: ReflogView;
+  submodules: SubmodulesView;
+  rebase: RebaseView;
+  fileHistory: FileHistoryView;
+  worktrees: WorktreesView;
+  gitignore: GitignoreView;
+  search: SearchView;
+}
+
+function emptySession(): SessionSnapshot {
+  return {
+    repo: null,
+    view: "history",
+    history: { ...emptyHistory },
+    diff: { ...emptyDiff },
+    merge: { ...emptyMerge, resolvedFiles: new Set() },
+    blame: { ...emptyBlame },
+    changes: { ...emptyChanges, selected: new Set() },
+    stash: { ...emptyStash },
+    reflog: { ...emptyReflog },
+    submodules: { ...emptySubmodules },
+    rebase: { ...emptyRebase },
+    fileHistory: { ...emptyFileHistory },
+    worktrees: { ...emptyWorktrees },
+    gitignore: { ...emptyGitignore },
+    search: { ...emptySearch },
+  };
+}
+
+function snapshotSession(s: AppState): SessionSnapshot {
+  return {
+    repo: s.repo,
+    view: s.view,
+    history: s.history,
+    diff: s.diff,
+    merge: s.merge,
+    blame: s.blame,
+    changes: s.changes,
+    stash: s.stash,
+    reflog: s.reflog,
+    submodules: s.submodules,
+    rebase: s.rebase,
+    fileHistory: s.fileHistory,
+    worktrees: s.worktrees,
+    gitignore: s.gitignore,
+    search: s.search,
+  };
+}
+
+function tabLabelFromPath(p: string): string {
+  if (!p) return "(empty)";
+  const norm = p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const idx = norm.lastIndexOf("/");
+  return idx >= 0 ? norm.slice(idx + 1) || norm : norm;
+}
+
+function newTabId(): string {
+  return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const useApp = create<AppState>((set, get) => ({
   repo: null,
   view: "history",
@@ -556,6 +663,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   recentRepos: loadRecent(),
 
+  tabs: [],
+  activeTabId: null,
+  sessionsById: {},
+
   setView: (v) => {
     set({ view: v });
     if (v === "merge") void get().loadMerge();
@@ -573,13 +684,47 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const repo = await git.openRepo(path);
       const recentRepos = pushRecent(repo.path);
+
+      // ---------- multi-tab routing ----------
+      // 1) If some other tab already owns this repo, snapshot the current
+      //    session into the active tab and just switch to that one — no
+      //    point in opening the same repo twice.
+      const cur = get();
+      const existing = cur.tabs.find((t) => t.repoPath === repo.path && t.id !== cur.activeTabId);
+      if (existing) {
+        set({ loading: false });
+        get().switchTab(existing.id);
+        return;
+      }
+
+      // 2) If there is no active tab yet, create one for this repo.
+      // 3) Otherwise reuse the active tab and update its label/path.
+      let { tabs, activeTabId } = cur;
+      if (!activeTabId) {
+        const id = newTabId();
+        const tab: RepoTab = { id, repoPath: repo.path, label: tabLabelFromPath(repo.path) };
+        tabs = [...tabs, tab];
+        activeTabId = id;
+      } else {
+        tabs = tabs.map((t) =>
+          t.id === activeTabId
+            ? { ...t, repoPath: repo.path, label: tabLabelFromPath(repo.path) }
+            : t,
+        );
+      }
+
       set({
         repo,
         loading: false,
         recentRepos,
+        tabs,
+        activeTabId,
+        view: "history",
         history: { ...emptyHistory },
         diff: { ...emptyDiff },
         merge: { ...emptyMerge, resolvedFiles: new Set() },
+        blame: { ...emptyBlame },
+        changes: { ...emptyChanges, selected: new Set() },
         stash: { ...emptyStash },
         reflog: { ...emptyReflog },
         submodules: { ...emptySubmodules },
@@ -597,23 +742,212 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
-  reset: () =>
+  reset: () => {
+    const { activeTabId } = get();
+    if (activeTabId) {
+      get().closeTab(activeTabId);
+    } else {
+      // No tabs at all — nothing to close, but make sure the top-level
+      // session fields are blanked.
+      const blank = emptySession();
+      set({
+        repo: blank.repo,
+        view: blank.view,
+        error: null,
+        history: blank.history,
+        diff: blank.diff,
+        merge: blank.merge,
+        blame: blank.blame,
+        changes: blank.changes,
+        stash: blank.stash,
+        reflog: blank.reflog,
+        submodules: blank.submodules,
+        rebase: blank.rebase,
+        palette: { ...emptyPalette },
+        fileHistory: blank.fileHistory,
+        worktrees: blank.worktrees,
+        gitignore: blank.gitignore,
+        search: blank.search,
+      });
+    }
+  },
+
+  // ---------- Tabs ----------
+  addTab: async (path) => {
+    if (!path) return get().newBlankTab();
+    // Same-repo short-circuit handled inside openRepo below; first create a
+    // blank tab so the new repo's session lands there instead of stomping
+    // the currently active tab.
+    const id = get().newBlankTab();
+    await get().openRepo(path);
+    return id;
+  },
+
+  newBlankTab: () => {
+    const cur = get();
+    // Stash the currently-active session before creating a new empty one.
+    const newTabIdValue = newTabId();
+    const newTab: RepoTab = { id: newTabIdValue, repoPath: "", label: "(new)" };
+    let nextSessions = cur.sessionsById;
+    if (cur.activeTabId) {
+      nextSessions = { ...cur.sessionsById, [cur.activeTabId]: snapshotSession(cur) };
+    }
+    const tabs = [...cur.tabs, newTab];
+    const blank = emptySession();
     set({
-      repo: null,
+      tabs,
+      activeTabId: newTabIdValue,
+      sessionsById: nextSessions,
+      repo: blank.repo,
+      view: blank.view,
       error: null,
-      history: { ...emptyHistory },
-      diff: { ...emptyDiff },
-      merge: { ...emptyMerge, resolvedFiles: new Set() },
-      stash: { ...emptyStash },
-      reflog: { ...emptyReflog },
-      submodules: { ...emptySubmodules },
-      rebase: { ...emptyRebase },
-      palette: { ...emptyPalette },
-      fileHistory: { ...emptyFileHistory },
-      worktrees: { ...emptyWorktrees },
-      gitignore: { ...emptyGitignore },
-      search: { ...emptySearch },
-    }),
+      history: blank.history,
+      diff: blank.diff,
+      merge: blank.merge,
+      blame: blank.blame,
+      changes: blank.changes,
+      stash: blank.stash,
+      reflog: blank.reflog,
+      submodules: blank.submodules,
+      rebase: blank.rebase,
+      fileHistory: blank.fileHistory,
+      worktrees: blank.worktrees,
+      gitignore: blank.gitignore,
+      search: blank.search,
+    });
+    return newTabIdValue;
+  },
+
+  switchTab: (id) => {
+    const cur = get();
+    if (id === cur.activeTabId) return;
+    const targetTab = cur.tabs.find((t) => t.id === id);
+    if (!targetTab) return;
+
+    // 1) Stash the currently-active session (if any).
+    const nextSessions = { ...cur.sessionsById };
+    if (cur.activeTabId) {
+      nextSessions[cur.activeTabId] = snapshotSession(cur);
+    }
+
+    // 2) Pop the target session off `sessionsById` and apply it to the top
+    //    level. If the target was never visited (e.g. just created via
+    //    addTab), fall back to a fresh empty session — and if it has a
+    //    repoPath, lazy-load the repo *after* the swap.
+    const stored = nextSessions[id];
+    delete nextSessions[id];
+    const session = stored ?? emptySession();
+    const needsLazyLoad = !stored && targetTab.repoPath !== "";
+
+    set({
+      activeTabId: id,
+      sessionsById: nextSessions,
+      repo: session.repo,
+      view: session.view,
+      error: null,
+      history: session.history,
+      diff: session.diff,
+      merge: session.merge,
+      blame: session.blame,
+      changes: session.changes,
+      stash: session.stash,
+      reflog: session.reflog,
+      submodules: session.submodules,
+      rebase: session.rebase,
+      fileHistory: session.fileHistory,
+      worktrees: session.worktrees,
+      gitignore: session.gitignore,
+      search: session.search,
+    });
+
+    if (needsLazyLoad) {
+      void get().openRepo(targetTab.repoPath);
+    }
+  },
+
+  closeTab: (id) => {
+    const cur = get();
+    const idx = cur.tabs.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    const remaining = cur.tabs.filter((t) => t.id !== id);
+    const nextSessions = { ...cur.sessionsById };
+    delete nextSessions[id];
+
+    if (id !== cur.activeTabId) {
+      // Closing a background tab: just drop it.
+      set({ tabs: remaining, sessionsById: nextSessions });
+      return;
+    }
+
+    // Closing the currently-active tab: pick a neighbour to surface (prefer
+    // the tab to the right, fall back to the left).
+    const fallback = remaining[idx] ?? remaining[idx - 1] ?? null;
+    if (!fallback) {
+      // Was the last tab — go back to the empty welcome state.
+      const blank = emptySession();
+      set({
+        tabs: [],
+        activeTabId: null,
+        sessionsById: nextSessions,
+        repo: blank.repo,
+        view: blank.view,
+        error: null,
+        history: blank.history,
+        diff: blank.diff,
+        merge: blank.merge,
+        blame: blank.blame,
+        changes: blank.changes,
+        stash: blank.stash,
+        reflog: blank.reflog,
+        submodules: blank.submodules,
+        rebase: blank.rebase,
+        fileHistory: blank.fileHistory,
+        worktrees: blank.worktrees,
+        gitignore: blank.gitignore,
+        search: blank.search,
+      });
+      return;
+    }
+
+    // Switch to the fallback. We've already dropped the closed tab from
+    // remaining + nextSessions; switchTab itself will snapshot the (now
+    // dead) active session, but we don't want that — so do the swap
+    // manually here.
+    const stored = nextSessions[fallback.id];
+    delete nextSessions[fallback.id];
+    const session = stored ?? emptySession();
+    const needsLazyLoad = !stored && fallback.repoPath !== "";
+    set({
+      tabs: remaining,
+      activeTabId: fallback.id,
+      sessionsById: nextSessions,
+      repo: session.repo,
+      view: session.view,
+      error: null,
+      history: session.history,
+      diff: session.diff,
+      merge: session.merge,
+      blame: session.blame,
+      changes: session.changes,
+      stash: session.stash,
+      reflog: session.reflog,
+      submodules: session.submodules,
+      rebase: session.rebase,
+      fileHistory: session.fileHistory,
+      worktrees: session.worktrees,
+      gitignore: session.gitignore,
+      search: session.search,
+    });
+    if (needsLazyLoad) void get().openRepo(fallback.repoPath);
+  },
+
+  renameTab: (id, label) => {
+    const cur = get();
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    const tabs = cur.tabs.map((t) => (t.id === id ? { ...t, label: trimmed } : t));
+    set({ tabs });
+  },
 
   refresh: async () => {
     const { view, repo, diff } = get();

@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exit } from "@tauri-apps/plugin-process";
-import { Folder, FolderOpen, Info, LogOut, Menu, Square, X } from "lucide-react";
+import { Folder, FolderOpen, Info, LogOut, Menu, Square, X, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ export function AppMenu() {
   const repo = useApp((s) => s.repo);
   const openRepo = useApp((s) => s.openRepo);
   const reset = useApp((s) => s.reset);
+  const newBlankTab = useApp((s) => s.newBlankTab);
   const recentRepos = useApp((s) => s.recentRepos);
   const removeRecent = useApp((s) => s.removeRecentRepo);
   const t = useT();
@@ -88,6 +89,15 @@ export function AppMenu() {
               label={t("menu.openRepo")}
               shortcut="Ctrl+O"
               onClick={pickRepo}
+            />
+            <Item
+              icon={<Plus className="h-3.5 w-3.5" />}
+              label={t("menu.newTab")}
+              shortcut="Ctrl+T"
+              onClick={() => {
+                setOpen(false);
+                newBlankTab();
+              }}
             />
 
             {recentRepos.length > 0 && (
