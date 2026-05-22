@@ -54,6 +54,10 @@ export const en = {
   "settings.language": "Language",
   "settings.language.en": "English",
   "settings.language.zh": "中文",
+  "settings.graphMode": "History graph",
+  "settings.graphMode.normal": "Full",
+  "settings.graphMode.compact": "Compact",
+  "settings.graphMode.hidden": "Hidden",
   "settings.resetAppearance": "Reset appearance to defaults",
   "settings.gitConfig": "Git config",
   "settings.gitConfig.subtitle":

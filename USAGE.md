@@ -709,6 +709,7 @@ v0.4.0 起。点 Topbar 右侧 **⚙** 图标打开。
 - **字号**：12 / 13 / 14 / 15 / 16 / 18 px
 - **Tab 宽度**：2 / 4 / 8（影响 Diff / Blame 显示）
 - **语言**：English / 中文（启动时从 `navigator.language` 自动检测，可手动切换）
+- **历史 Graph**（v0.13.10）：完整 / 紧凑 / 隐藏——和 History 视图工具栏的 Graph 按钮**共享**同一字段，在哪改都同步。Settings 这里给"长期偏好"的统一入口；HistoryFilterBar 上的快捷按钮给"临时切换"的便利。详见 [3.1 History](#31-history提交历史--graph) 的 Graph 显示模式表格
 
 **Git config**（v0.4.0）：
 

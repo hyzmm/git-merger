@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useApp } from "@/stores/app";
-import { useSettings, type ThemeMode } from "@/stores/settings";
+import { useSettings, type GraphMode, type ThemeMode } from "@/stores/settings";
 import { useI18n, useT, type Locale } from "@/lib/i18n";
 import { git } from "@/ipc/git";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ export function SettingsDialog({ open, onClose }: Props) {
   const theme = useSettings((s) => s.theme);
   const fontSize = useSettings((s) => s.fontSize);
   const tabSize = useSettings((s) => s.tabSize);
+  const graphMode = useSettings((s) => s.graphMode);
   const setSetting = useSettings((s) => s.set);
   const reset = useSettings((s) => s.reset);
   const locale = useI18n((s) => s.locale);
@@ -140,6 +141,18 @@ export function SettingsDialog({ open, onClose }: Props) {
                   { v: "zh", label: t("settings.language.zh") },
                 ]}
                 onChange={setLocale}
+              />
+            </Row>
+
+            <Row label={t("settings.graphMode")}>
+              <SegGroup<GraphMode>
+                value={graphMode}
+                options={[
+                  { v: "normal", label: t("settings.graphMode.normal") },
+                  { v: "compact", label: t("settings.graphMode.compact") },
+                  { v: "hidden", label: t("settings.graphMode.hidden") },
+                ]}
+                onChange={(v) => setSetting({ graphMode: v })}
               />
             </Row>
 

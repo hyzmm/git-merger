@@ -710,6 +710,7 @@ Since v0.4.0. Click the **⚙** icon at the right of the Topbar.
 - **Font size**: 12 / 13 / 14 / 15 / 16 / 18 px
 - **Tab width**: 2 / 4 / 8 (affects Diff / Blame rendering)
 - **Language**: English / Chinese (auto-detected from `navigator.language` on first run, switchable live)
+- **History graph** (v0.13.10): Full / Compact / Hidden — **shares the same store field** as the Graph button on the History toolbar, so changes here and there stay in sync. Settings is the "long-term preference" entry point; the toolbar button is the "ad-hoc toggle" entry point. See [3.1 History](#31-history-commits--graph) for the per-mode lane width / cap table.
 
 **Git config** (v0.4.0):
 
