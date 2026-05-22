@@ -35,6 +35,14 @@ import {
 } from "@/lib/conflictParser";
 import { loadRecent, pushRecent, removeRecent, type RecentRepo } from "@/lib/recentRepos";
 import {
+  loadFor as loadRecentFiles,
+  saveFor as saveRecentFiles,
+  pushRecent as pushRecentFile,
+  removeRecent as removeRecentFile,
+  type RecentFile,
+  type RecentAction,
+} from "@/lib/recentFiles";
+import {
   loadRecents as loadSearchRecents,
   loadSaved as loadSearchSaved,
   pushRecent as pushSearchRecent,
@@ -305,6 +313,16 @@ interface AppState {
   search: SearchView;
 
   recentRepos: RecentRepo[];
+  /**
+   * v0.13.8 — MRU file list for the **currently open** repo. Persisted
+   * per-repo to localStorage (key = `gittools.recent-files.v1.<hash>`)
+   * via the `recentFiles` helper module. Reset on `openRepo` /
+   * `switchTab`; bumped by `noteRecentFile`, which the four file-open
+   * actions call on user-initiated entry.
+   */
+  recentFiles: RecentFile[];
+  /** v0.13.8 — Recent Files palette open/closed state. */
+  recentFilesOpen: boolean;
 
   // Multi-tab session model. The active tab's state is mirrored at the top
   // level of this store (so existing selectors keep working); inactive tabs
@@ -319,6 +337,13 @@ interface AppState {
   reset: () => void;
   refresh: () => Promise<void>;
   removeRecentRepo: (path: string) => void;
+  /** v0.13.8 — bump a file in the recent list (called by open* actions). */
+  noteRecentFile: (file: string, action: RecentAction) => void;
+  /** v0.13.8 — open / close the Recent Files palette (`Ctrl+E`). */
+  openRecentFiles: () => void;
+  closeRecentFiles: () => void;
+  /** v0.13.8 — drop a single entry, e.g. via the palette's row-hover X button. */
+  forgetRecentFile: (path: string) => void;
 
   // tabs
   addTab: (path?: string) => Promise<string>;
@@ -776,6 +801,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   recentRepos: loadRecent(),
 
+  // v0.13.8 — Recent Files MRU. Empty until a repo is opened
+  // (openRepo / switchTab will rehydrate from localStorage for the
+  // newly active repo).
+  recentFiles: [],
+  recentFilesOpen: false,
+
   // v0.13.5 — restore the list of open tabs from localStorage at start-up.
   // Sessions are NOT persisted; each restored tab starts in the "lazy" state
   // (its session will be built from scratch the first time the user
@@ -851,6 +882,10 @@ export const useApp = create<AppState>((set, get) => ({
         repo,
         loading: false,
         recentRepos,
+        // v0.13.8 — rehydrate the per-repo MRU now that we know which
+        // repo is active. Empty list is fine when this is a fresh repo.
+        recentFiles: loadRecentFiles(repo.path),
+        recentFilesOpen: false,
         tabs,
         activeTabId,
         view: "history",
@@ -902,6 +937,8 @@ export const useApp = create<AppState>((set, get) => ({
         worktrees: blank.worktrees,
         gitignore: blank.gitignore,
         search: blank.search,
+        recentFiles: [],
+        recentFilesOpen: false,
       });
     }
   },
@@ -953,6 +990,8 @@ export const useApp = create<AppState>((set, get) => ({
       worktrees: blank.worktrees,
       gitignore: blank.gitignore,
       search: blank.search,
+      recentFiles: [],
+      recentFilesOpen: false,
     });
     return newTabIdValue;
   },
@@ -997,6 +1036,11 @@ export const useApp = create<AppState>((set, get) => ({
       worktrees: session.worktrees,
       gitignore: session.gitignore,
       search: session.search,
+      // v0.13.8 — rehydrate the per-repo MRU for the surfacing tab.
+      // For a lazy tab `session.repo` is null and openRepo (kicked off
+      // below) will rehydrate; for a re-surfaced tab we read directly.
+      recentFiles: session.repo ? loadRecentFiles(session.repo.path) : [],
+      recentFilesOpen: false,
     });
 
     if (needsLazyLoad) {
@@ -1044,6 +1088,8 @@ export const useApp = create<AppState>((set, get) => ({
         worktrees: blank.worktrees,
         gitignore: blank.gitignore,
         search: blank.search,
+        recentFiles: [],
+        recentFilesOpen: false,
       });
       return;
     }
@@ -1076,6 +1122,10 @@ export const useApp = create<AppState>((set, get) => ({
       worktrees: session.worktrees,
       gitignore: session.gitignore,
       search: session.search,
+      // v0.13.8 — same per-tab MRU rehydration as in switchTab. Lazy
+      // fallback tabs get their MRU loaded inside openRepo below.
+      recentFiles: session.repo ? loadRecentFiles(session.repo.path) : [],
+      recentFilesOpen: false,
     });
     if (needsLazyLoad) void get().openRepo(fallback.repoPath);
   },
@@ -1156,6 +1206,34 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   removeRecentRepo: (path) => set({ recentRepos: removeRecent(path) }),
+
+  // v0.13.8 — Recent Files (Ctrl+E palette) -----------------------------
+  noteRecentFile: (file, action) => {
+    const repo = get().repo;
+    if (!repo || !file) return;
+    const next = pushRecentFile(get().recentFiles, {
+      path: file,
+      action,
+      openedAt: Date.now(),
+    });
+    saveRecentFiles(repo.path, next);
+    set({ recentFiles: next });
+  },
+
+  openRecentFiles: () => {
+    if (!get().repo) return;
+    set({ recentFilesOpen: true });
+  },
+
+  closeRecentFiles: () => set({ recentFilesOpen: false }),
+
+  forgetRecentFile: (path) => {
+    const repo = get().repo;
+    if (!repo) return;
+    const next = removeRecentFile(get().recentFiles, path);
+    saveRecentFiles(repo.path, next);
+    set({ recentFiles: next });
+  },
 
   // ---------- History ----------
   loadHistory: async () => {
@@ -1297,6 +1375,10 @@ export const useApp = create<AppState>((set, get) => ({
           ? { diff: { ...s.diff, fileDiff: fd, loading: false } }
           : s,
       );
+      // v0.13.8 — bump in the recent-files MRU. We do this on success only
+      // so transient errors (file removed, oid garbage-collected) don't
+      // pollute the list with rows that won't reopen anyway.
+      get().noteRecentFile(file, "diff");
     } catch (e) {
       set((s) => ({ diff: { ...s.diff, loading: false, error: String(e) } }));
     }
@@ -1369,6 +1451,8 @@ export const useApp = create<AppState>((set, get) => ({
             }
           : s,
       );
+      // v0.13.8 — bump in the recent-files MRU.
+      get().noteRecentFile(file, "working");
     } catch (e) {
       set((s) =>
         s.diff.oid === WORKING_OID && s.diff.selectedFile === file
@@ -1635,6 +1719,8 @@ export const useApp = create<AppState>((set, get) => ({
           ? { blame: { ...s.blame, lines, loading: false, prev } }
           : s,
       );
+      // v0.13.8 — bump in the recent-files MRU.
+      get().noteRecentFile(file, "blame");
     } catch (e) {
       set((s) => ({ blame: { ...s.blame, loading: false, error: String(e) } }));
     }
@@ -2560,6 +2646,8 @@ export const useApp = create<AppState>((set, get) => ({
           selectedIdx: 0,
         },
       }));
+      // v0.13.8 — bump in the recent-files MRU.
+      get().noteRecentFile(file, "history");
       if (entries.length > 0) await get().selectFileHistoryEntry(0);
     } catch (e) {
       set((s) => ({

@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { RepoTabs } from "@/components/RepoTabs";
 import { CredentialDialog } from "@/components/CredentialDialog";
 import { CommandPalette } from "@/components/CommandPalette";
+import { RecentFilesPalette } from "@/components/RecentFilesPalette";
 import { ToastContainer } from "@/components/ToastContainer";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { DiffPage } from "@/pages/DiffPage";
@@ -33,6 +34,7 @@ export default function App() {
   const applyResolution = useApp((s) => s.applyResolution);
   const chunks = useApp((s) => s.merge.chunks);
   const openPalette = useApp((s) => s.openPalette);
+  const openRecentFiles = useApp((s) => s.openRecentFiles);
   const openRepo = useApp((s) => s.openRepo);
   const newBlankTab = useApp((s) => s.newBlankTab);
   const closeTab = useApp((s) => s.closeTab);
@@ -78,6 +80,7 @@ export default function App() {
       "ctrl+pageup": () => cycleTab(-1),
       "ctrl+k": () => repo && openPalette(),
       "ctrl+p": () => repo && openPalette(),
+      "ctrl+e": () => repo && openRecentFiles(),
       "ctrl+o": async () => {
         const dir = await open({ directory: true, multiple: false });
         if (typeof dir === "string") await openRepo(dir);
@@ -95,6 +98,7 @@ export default function App() {
       firstPendingIdx,
       applyResolution,
       openPalette,
+      openRecentFiles,
       openRepo,
       newBlankTab,
       closeTab,
@@ -177,6 +181,7 @@ export default function App() {
       </div>
       <CredentialDialog />
       <CommandPalette />
+      <RecentFilesPalette />
       <ToastContainer />
     </div>
   );

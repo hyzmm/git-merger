@@ -126,6 +126,15 @@ export const en = {
   "palette.hint.navigate": "navigate",
   "palette.hint.activate": "open",
 
+  // Recent Files (Ctrl+E)
+  "recent.title": "Recent Files",
+  "recent.empty":
+    "No recent files yet — open one from Changes / History / Blame to populate this list.",
+  "recent.hint.navigate": "navigate",
+  "recent.hint.diff": "diff",
+  "recent.hint.blame": "blame",
+  "recent.hint.history": "file history",
+
   // File History
   "fileHistory.commits": "commits",
   "fileHistory.empty": "No history found for this file (or commit walk didn't reach it).",

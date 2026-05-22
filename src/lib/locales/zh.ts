@@ -122,6 +122,14 @@ export const zh: Dict = {
   "palette.hint.navigate": "上下导航",
   "palette.hint.activate": "打开",
 
+  // 最近文件（Ctrl+E）
+  "recent.title": "最近文件",
+  "recent.empty": "暂无最近文件 —— 在 Changes / History / Blame 中打开任意文件后会自动出现在这里。",
+  "recent.hint.navigate": "上下移动",
+  "recent.hint.diff": "Diff",
+  "recent.hint.blame": "Blame",
+  "recent.hint.history": "文件历史",
+
   // 文件历史
   "fileHistory.commits": "次提交",
   "fileHistory.empty": "未找到该文件的历史（或提交链未触及该路径）。",

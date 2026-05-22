@@ -34,6 +34,7 @@ IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tau
   - [4.3 Multi-repo tabs (v0.12.0 / v0.13.5)](#43-multi-repo-tabs-v0120--v0135)
   - [4.4 Error feedback & Toasts (v0.13.1)](#44-error-feedback--toasts-v0131)
 - [5. Command Palette (Ctrl+K)](#5-command-palette-ctrlk)
+  - [5.1 Recent Files (Ctrl+E, v0.13.8)](#51-recent-files-ctrle-v0138)
 - [6. Settings panel](#6-settings-panel)
 - [7. Auto-update](#7-auto-update)
 - [8. Keyboard shortcuts](#8-keyboard-shortcuts)
@@ -644,6 +645,45 @@ Added in v0.7.0. Press `Ctrl+K` or `Ctrl+P`, or click the **Search** button on t
 
 **Keyboard**: `↑↓` / `Home` / `End` to navigate, `Enter` to open, `Esc` to close.
 
+### 5.1 Recent Files (`Ctrl+E`, v0.13.8)
+
+When you're hot-flipping between 2-3 files, walking through the Command Palette's fuzzy match every time is overkill. `Ctrl+E` opens a **per-repo MRU** overlay:
+
+```
+┌─[🕘 Recent Files]─────────────────────────[Ctrl+E]─┐
+│ ▶ src/foo.ts            src/                       │
+│   src/bar.tsx           src/                       │
+│   README.md                                        │
+│   …                                                │
+├────────────────────────────────────────────────────┤
+│ ↑↓ navigate  ↵ diff  ⇧↵ blame  ⌃↵ file history  12 │
+└────────────────────────────────────────────────────┘
+```
+
+**Core interactions**:
+
+| Action                          | Behavior                                                                                                                                           |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Ctrl+E`                        | open the recent-files overlay (cap 12 entries); the **second** entry is pre-selected so a single Enter "goes back" — matches IntelliJ Recent Files |
+| `↓` / `Tab` / `↑` / `Shift+Tab` | move the selection up / down (wraps)                                                                                                               |
+| `Enter`                         | open in the **Diff** view (most common — uses the bidirectional editor for working-tree files)                                                     |
+| `Shift+Enter`                   | open in the **Blame** view                                                                                                                         |
+| `Ctrl+Enter`                    | open in the **File History** view (follows renames)                                                                                                |
+| Click a row                     | equivalent to Enter (Diff)                                                                                                                         |
+| Mouse hover                     | moves the selection (no double-action surprises)                                                                                                   |
+| `🗑️` at the row tail (on hover) | removes that file from the recent list (does not delete the file itself)                                                                           |
+| `Esc`                           | dismiss without selecting                                                                                                                          |
+
+**Capture rules**: every time the user actively opens a file — via Changes view filename click (→ `working`) / Commit Details file row (→ `diff`) / Diff toolbar's Blame button (→ `blame`) / Diff or Blame toolbar's File History button (→ `history`) — the file is automatically pushed to the per-repo MRU. **Dedup is by path**: re-opening the same file just bumps it to the head and updates the action tag, no duplicate rows.
+
+**Persistence**: each repo gets its own list under `gittools.recent-files.v1.<hash>` in `localStorage` (hash = 8-byte djb2 of the normalized workdir path). The list is rehydrated on `openRepo` / `switchTab` / `closeTab`. `MAX_RECENT_FILES = 12`.
+
+**Implementation notes**:
+
+- The four pure helpers — `pushRecent`, `removeRecent`, `loadFor`, `saveFor` — live in `src/lib/recentFiles.ts` and are covered by 11 `bun:test` cases (dedup / cap / ordering / corrupt-input fallback / immutability).
+- The store change is small: each of `openDiff` / `openWorkingDiff` / `openBlame` / `openFileHistory` gains a single `noteRecentFile` call on the **success** path, so transient errors never leave dead entries behind.
+- `switchTab` / `closeTab` / `openRepo` rehydrate the MRU when surfacing a repo — staying consistent with the v0.13.5 Tabs v2 persistence model.
+
 ---
 
 ## 6. Settings panel
@@ -699,6 +739,7 @@ Backend: GitHub Releases' `latest.json`. CI signs updater bundles with the `TAUR
 | `Ctrl+PageDown`     | switch to next tab, wraps (v0.13.5)              | global |
 | `Ctrl+PageUp`       | switch to previous tab, wraps (v0.13.5)          | global |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                                  | global |
+| `Ctrl+E`            | Recent Files (v0.13.8)                           | global |
 | `Ctrl+O`            | Open repository (v0.9.1)                         | global |
 | `F5` / `Ctrl+R`     | refresh current view                             | global |
 | `n` / `p`           | next / previous hunk                             | Diff   |

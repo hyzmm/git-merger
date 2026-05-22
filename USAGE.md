@@ -34,6 +34,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [4.3 多仓库 tabs（v0.12.0 / v0.13.5）](#43-多仓库-tabsv0120--v0135)
   - [4.4 错误提示与 Toast（v0.13.1）](#44-错误提示与-toastv0131)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
+  - [5.1 最近文件（Ctrl+E，v0.13.8）](#51-最近文件ctrle-v0138)
 - [六、设置面板](#六设置面板)
 - [七、自动更新](#七自动更新)
 - [八、键盘快捷键](#八键盘快捷键)
@@ -643,6 +644,45 @@ v0.7.0 新增。按 `Ctrl+K` 或 `Ctrl+P` 弹出，或点 Topbar 的 **Search** 
 
 **键盘**：`↑↓` / `Home` / `End` 导航，`Enter` 打开，`Esc` 关闭。
 
+### 5.1 最近文件（`Ctrl+E`，v0.13.8）
+
+频繁在 2-3 个 hot file 之间跳跃时，每次走 Command Palette 模糊搜并不舒服。`Ctrl+E` 直接弹出 **per-repo MRU** 浮层：
+
+```
+┌─[🕘 最近文件]──────────────────────────[Ctrl+E]─┐
+│ ▶ src/foo.ts            src/                   │
+│   src/bar.tsx           src/                   │
+│   README.md                                    │
+│   …                                            │
+├────────────────────────────────────────────────┤
+│ ↑↓ 上下移动  ↵ Diff  ⇧↵ Blame  ⌃↵ 文件历史  12 │
+└────────────────────────────────────────────────┘
+```
+
+**核心交互**：
+
+| 操作                            | 行为                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Ctrl+E`                        | 弹出最近文件列表（最多 12 条）；默认选中**第二条**——和 IntelliJ Recent Files 一致，意为"返回上一个文件" |
+| `↓` / `Tab` / `↑` / `Shift+Tab` | 上下移动选中行（循环）                                                                                  |
+| `Enter`                         | 在 **Diff** 视图打开（最常用——若是工作树文件则是双向编辑器）                                            |
+| `Shift+Enter`                   | 在 **Blame** 视图打开                                                                                   |
+| `Ctrl+Enter`                    | 在 **文件历史** 视图打开（跨重命名追溯）                                                                |
+| 鼠标点行                        | 等价于 Enter（Diff）                                                                                    |
+| 鼠标 hover 行                   | 移动选中（避免双重操作）                                                                                |
+| 行尾 `🗑️`（hover 出现）         | 把该条从最近列表删掉（不删除文件本身）                                                                  |
+| `Esc`                           | 关闭浮层                                                                                                |
+
+**采集规则**：每当用户主动打开一个文件——通过 Changes 视图点文件名（→ `working`）/ Commit Details 点变动文件（→ `diff`）/ Diff 工具栏的 Blame 按钮（→ `blame`）/ Diff/Blame 工具栏的 File History 按钮（→ `history`）——都会自动 push 到该 repo 的 MRU。同一文件**按 path 去重**：再次打开同一文件只会把它顶到列表头部并更新 action 标记，不会产生重复行。
+
+**持久化**：每个 repo 一份独立的 MRU，落在 `localStorage` 的 `gittools.recent-files.v1.<hash>`，hash 是 djb2 8 字节算的——重启 / 切 tab 都能立刻恢复。`MAX_RECENT_FILES = 12` 上限。
+
+**实现要点**：
+
+- 纯函数 `pushRecent` / `removeRecent` / `loadFor` / `saveFor` 在 `src/lib/recentFiles.ts`，11 个 `bun:test` 用例覆盖 dedup / cap / ordering / 错误数据 fallback / 不变性
+- store 改动只是给 `openDiff` / `openWorkingDiff` / `openBlame` / `openFileHistory` 4 个 action 各加一行 `noteRecentFile` 调用——失败路径不 push，避免脏数据
+- `switchTab` / `closeTab` / `openRepo` 切换 repo 时自动 rehydrate MRU——和 v0.13.5 Tabs v2 持久化模型对齐
+
 ---
 
 ## 六、设置面板
@@ -698,6 +738,7 @@ v0.4.0 起内置 `tauri-plugin-updater`。当检测到新版本：
 | `Ctrl+PageDown`     | 切到下一个 tab，循环（v0.13.5）       | 全局  |
 | `Ctrl+PageUp`       | 切到上一个 tab，循环（v0.13.5）       | 全局  |
 | `Ctrl+K` / `Ctrl+P` | Command Palette                       | 全局  |
+| `Ctrl+E`            | 最近文件（v0.13.8）                   | 全局  |
 | `Ctrl+O`            | 打开仓库（v0.9.1）                    | 全局  |
 | `F5` / `Ctrl+R`     | 刷新当前视图                          | 全局  |
 | `n` / `p`           | 下一个 / 上一个 hunk                  | Diff  |
