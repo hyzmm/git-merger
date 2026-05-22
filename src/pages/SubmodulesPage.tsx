@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Box, Download, RefreshCw, Plug } from "lucide-react";
+import { Box, Download, RefreshCw, Plug, FolderTree } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import type { SubmoduleInfo } from "@/ipc/git";
@@ -15,6 +15,7 @@ export function SubmodulesPage() {
   const load = useApp((s) => s.loadSubmodules);
   const initSm = useApp((s) => s.initSubmodule);
   const updateSm = useApp((s) => s.updateSubmodule);
+  const updateSmRecursive = useApp((s) => s.updateSubmoduleRecursive);
   const syncSm = useApp((s) => s.syncSubmodule);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export function SubmodulesPage() {
             busy={busy}
             onInit={() => void initSm(sm.name)}
             onUpdate={() => void updateSm(sm.name)}
+            onUpdateRecursive={() => void updateSmRecursive(sm.name)}
             onSync={() => void syncSm(sm.name)}
           />
         ))}
@@ -63,12 +65,14 @@ function Row({
   busy,
   onInit,
   onUpdate,
+  onUpdateRecursive,
   onSync,
 }: {
   sm: SubmoduleInfo;
   busy: boolean;
   onInit: () => void;
   onUpdate: () => void;
+  onUpdateRecursive: () => void;
   onSync: () => void;
 }) {
   const status = describe(sm);
@@ -105,6 +109,18 @@ function Row({
           >
             <Download className="h-3 w-3" />
             Update
+          </button>
+          <button
+            onClick={onUpdateRecursive}
+            disabled={busy}
+            title="Submodule update --recursive — also descend into the submodule's own submodules"
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
+              busy && "cursor-not-allowed opacity-60",
+            )}
+            aria-label="Update recursively"
+          >
+            <FolderTree className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onSync}

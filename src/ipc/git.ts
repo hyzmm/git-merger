@@ -451,6 +451,10 @@ export const git = {
   submoduleInit: (path: string, name: string) => invoke<void>("submodule_init", { path, name }),
   submoduleUpdate: (path: string, name: string, initFirst = true) =>
     invoke<void>("submodule_update", { path, name, initFirst }),
+  /** v0.13.11 — like `submoduleUpdate` but recurses into the just-updated
+   *  submodule's own `.gitmodules`, mirroring `git submodule update --recursive`. */
+  submoduleUpdateRecursive: (path: string, name: string, initFirst = true) =>
+    invoke<void>("submodule_update_recursive", { path, name, initFirst }),
   submoduleSync: (path: string, name: string) => invoke<void>("submodule_sync", { path, name }),
   configGet: (path: string, key: string) => invoke<string | null>("config_get", { path, key }),
   configSet: (path: string, key: string, value: string, scope: "local" | "global" = "local") =>

@@ -385,6 +385,12 @@ pub fn submodule_update(path: String, name: String, init_first: bool) -> R<()> {
 }
 
 #[tauri::command]
+pub fn submodule_update_recursive(path: String, name: String, init_first: bool) -> R<()> {
+    git::submodule::update_recursive(&path, &name, init_first)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn submodule_sync(path: String, name: String) -> R<()> {
     git::submodule::sync(&path, &name)?;
     Ok(())

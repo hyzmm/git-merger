@@ -289,7 +289,12 @@ bun run tauri:build
 
 - `not cloned` / `not initialized` / `needs update` / `dirty` / `clean`
 
-操作按钮：**Init** / **Update**（含 init-first）/ **Sync**（同步 URL）。
+操作按钮：
+
+- **Init**：仅在未初始化时显示——把 `.gitmodules` 中的 entry 写入 `.git/config`
+- **Update**：clone（如需要）+ checkout 父仓库记录的 commit；自动 init-first
+- **Update recursively**（v0.13.11 起的 🌳 图标按钮）：先 update 顶层 submodule，再递归打开它作为 Repository、对**它的**子 submodules 重复执行——等价于 `git submodule update --init --recursive`，对嵌套 submodule 仓库尤其有用
+- **Sync**：把 `.gitmodules` 里的 URL 同步到本地 `.git/config`
 
 ### 3.9 Interactive Rebase
 

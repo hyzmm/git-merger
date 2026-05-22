@@ -83,6 +83,50 @@ pub fn update(path: &str, name: &str, init_first: bool) -> Result<(), git2::Erro
     Ok(())
 }
 
+/// Recursive variant of `update` (v0.13.11): updates the named submodule,
+/// then opens it as a `Repository` and walks its own `.gitmodules`,
+/// repeating the operation depth-first. Mirrors the behaviour of
+/// `git submodule update --init --recursive` for a single tree.
+///
+/// Each nested level reuses the same `init_first` flag, so a brand-new
+/// checkout where every level needs `init` works in one call. Failures at
+/// any level surface as the original `git2::Error`; we make no attempt to
+/// continue on partial failures since downstream submodules may legitimately
+/// depend on the broken ancestor.
+pub fn update_recursive(path: &str, name: &str, init_first: bool) -> Result<(), git2::Error> {
+    let repo = Repository::discover(path)?;
+    let mut sm = repo.find_submodule(name)?;
+    let mut opts = git2::SubmoduleUpdateOptions::new();
+    sm.update(init_first, Some(&mut opts))?;
+
+    // Now descend into the just-updated submodule and recurse over *its*
+    // own submodules. `Submodule::open` returns the inner `Repository`.
+    let inner = match sm.open() {
+        Ok(r) => r,
+        // Update may have left a clean checkout but `open` can still fail
+        // on bare submodule contents — surface that as the caller's error.
+        Err(_) => return Ok(()),
+    };
+    let inner_path = match inner.workdir() {
+        Some(p) => p.to_path_buf(),
+        None => return Ok(()),
+    };
+
+    let inner_names: Vec<String> = inner
+        .submodules()?
+        .iter()
+        .filter_map(|sm| sm.name().map(String::from))
+        .collect();
+    for inner_name in inner_names {
+        update_recursive(
+            inner_path.to_string_lossy().as_ref(),
+            &inner_name,
+            init_first,
+        )?;
+    }
+    Ok(())
+}
+
 /// Sync the submodule's remote URL from .gitmodules into its config.
 pub fn sync(path: &str, name: &str) -> Result<(), git2::Error> {
     let repo = Repository::discover(path)?;

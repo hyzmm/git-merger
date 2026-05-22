@@ -290,7 +290,12 @@ This is your last-resort undo for any accidental operation.
 
 - `not cloned` / `not initialized` / `needs update` / `dirty` / `clean`
 
-Action buttons: **Init** / **Update** (init-first as needed) / **Sync** (URL sync).
+Action buttons:
+
+- **Init** (only shown when uninitialised) — writes the entry from `.gitmodules` into `.git/config`
+- **Update** — clone (if needed) and check out the parent-recorded commit; init-first happens automatically
+- **Update recursively** (v0.13.11; the 🌳 icon-only button next to **Update**) — performs the update, then opens the just-updated submodule as a `Repository` and walks **its** own `.gitmodules` depth-first; equivalent to `git submodule update --init --recursive`, especially useful for nested-submodule trees
+- **Sync** — copy the URL from `.gitmodules` into the local `.git/config`
 
 ### 3.9 Interactive Rebase
 

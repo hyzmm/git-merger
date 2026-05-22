@@ -448,6 +448,8 @@ interface AppState {
   loadSubmodules: () => Promise<void>;
   initSubmodule: (name: string) => Promise<void>;
   updateSubmodule: (name: string) => Promise<void>;
+  /** v0.13.11 — recursively update a submodule and any of its own submodules. */
+  updateSubmoduleRecursive: (name: string) => Promise<void>;
   syncSubmodule: (name: string) => Promise<void>;
 
   // worktrees
@@ -2168,6 +2170,21 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       await git.submoduleUpdate(repo.path, name, true);
       set((s) => ({ submodules: { ...s.submodules, busy: false, status: `Updated ${name}` } }));
+      void get().loadSubmodules();
+    } catch (e) {
+      set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));
+    }
+  },
+
+  updateSubmoduleRecursive: async (name) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
+    try {
+      await git.submoduleUpdateRecursive(repo.path, name, true);
+      set((s) => ({
+        submodules: { ...s.submodules, busy: false, status: `Updated ${name} (recursive)` },
+      }));
       void get().loadSubmodules();
     } catch (e) {
       set((s) => ({ submodules: { ...s.submodules, busy: false, error: String(e) } }));

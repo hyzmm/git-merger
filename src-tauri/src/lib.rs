@@ -63,6 +63,7 @@ pub fn run() {
             commands::submodule_list,
             commands::submodule_init,
             commands::submodule_update,
+            commands::submodule_update_recursive,
             commands::submodule_sync,
             commands::config_get,
             commands::config_set,
