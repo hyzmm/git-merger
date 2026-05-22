@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.0  
+> 适用版本：v0.13.11  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -1088,6 +1088,12 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.3 | 双向 Diff 编辑：Side-by-side 模式下查看工作树文件可点击 Edit 切换右侧为可编辑 textarea，HEAD 参考保持只读，Save 原子写回 + 自动重算 diff，dirty 徽章实时提示；后端 `read/write/head_working_file` 三命令带 path-traversal / binary / 8 MB 上限保护                                                                                                                     |
 | v0.13.4 | Search v2：Group-by 切换（commit / 文件视图）、最近 12 条查询 dropdown（结构化去重）、★ 保存搜索（命名 + 持久化到 localStorage）；纯函数 `searchAggregate` + `searchPersist` 各带 8 / 14 个 bun:test                                                                                                                                                                   |
 | v0.13.5 | Tabs v2：跨会话持久化（`gittools.tabs.v1` localStorage，重启自动恢复 tab 顺序 + pinned）、tab 钉选（`Ctrl+W` 拒绝、批量关闭保留）、HTML5 拖拽重排（拖入/出 pinned 区自动 pin/unpin）、右键菜单（Pin/Close/Close others/Close to right）、`Ctrl+PageDown` / `Ctrl+PageUp` 循环切换；纯函数 `reorderTabs` + `togglePin` + `nextTabId` 共 17 个 bun:test 含穷举 invariant |
+| v0.13.6 | History 视图新增 **Graph 显示模式**（完整 / 紧凑 / 隐藏）：在 fork 数极多（≥ 15 lanes）的仓库里 graph 列默认会挤瘪 commit summary，过滤栏右侧 **Graph** 按钮单击循环 3 档，列宽硬上限 220 / 140 / 0 px，紧凑档 SVG 内部横滚；偏好持久化到 `gittools.settings.v1`                                                                                                                                                                                                                  |
+| v0.13.7 | Push / Pull / Fetch **可视化进度条 + 一键取消**：Topbar 远程操作进行时显示 24 px 宽确定/不确定进度条 + 百分比 + 状态明细 + Cancel 按钮（Esc 快捷键）；后端 `Arc<AtomicBool>` cancel token + `OpHandle` RAII，`ProgressEvent` 增加 `Started{op_id}` / `Cancelled{op_id}` variant，所有事件携带 op_id；libgit2 callbacks 返回 false 终止网络流                                                                                                                                                                       |
+| v0.13.8 | **最近文件**（`Ctrl+E`）：per-repo MRU 持久化（`gittools.recent-files.v1.<repoHash>` localStorage，djb2 哈希），浮层 Tab/Shift+Tab 导航，Enter→Diff、Shift+Enter→Blame、Ctrl+Enter→FileHistory；`switchTab` / `closeTab` / `openRepo` 切换 repo 时自动 rehydrate；纯函数 `recentFiles.ts` + 11 个 bun:test                                                                                                                                                                                                                |
+| v0.13.9 | Diff 视图 **Copy patch / Apply patch from clipboard**：`DiffViewer` 工具栏 Copy patch 按钮（带 "Copied!" 反馈），`ChangesPage` 顶部 **Apply patch…** 对话框（粘贴 unified-patch 文本，dry-run check 失败时保持打开 + 显示 libgit2 原因，避免半应用脏工作树）；新模块 `src-tauri/src/git/patch.rs`（`format_commit_file_patch` / `format_working_file_patch` / `apply_patch_check` / `apply_patch`）+ 3 个集成测试                                                                                                          |
+| v0.13.10 | Settings 面板镜像 **Graph 显示模式**：与 HistoryFilterBar 上的 Graph 按钮共享同一字段（双向同步），Settings 给"长期偏好"统一入口，HistoryFilterBar 快捷按钮给"临时切换"便利；新增 `settings.graphMode.*` 4 条 i18n key                                                                                                                                                                                                                                                                                            |
+| v0.13.11 | Submodules 视图 **递归 update**：FolderTree 🌳 图标按钮深度优先递归——先 update 顶层 submodule，再打开它作为 Repository、对**它的**子 submodules 重复执行，等价于 `git submodule update --init --recursive`，对嵌套 submodule 仓库尤其有用；后端 `git/submodule.rs::update_recursive`                                                                                                                                                                                                                            |
 
 ---
 
