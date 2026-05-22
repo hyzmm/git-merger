@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useApp } from "@/stores/app";
 import { DiffLineCell } from "./DiffPrimitives";
 import { pairLines, type PairedLine } from "@/lib/pairLines";
+import { unifiedWordTokens } from "@/lib/unifiedWordTokens";
 import { useHighlight } from "@/lib/useHighlight";
 import { cn } from "@/lib/utils";
 import type { DiffHunk, FileDiff } from "@/ipc/git";
@@ -136,6 +137,10 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
   const hunks = useMemo(() => fileDiff?.hunks ?? [], [fileDiff]);
   const flatLines = useMemo(() => extractUnifiedSource(hunks), [hunks]);
   const tokens = useHighlight(flatLines, filename);
+  // Pre-compute the per-line word-token overlay for each hunk. Indexed by
+  // the line's position **within its own hunk** so the lookup below is
+  // independent of any global offsetting.
+  const wordTokensByHunk = useMemo(() => hunks.map((h) => unifiedWordTokens(h.lines)), [hunks]);
 
   if (!fileDiff) return null;
   if (fileDiff.is_binary) {
@@ -145,24 +150,28 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
   let cursor = 0;
   return (
     <div data-diff-scroll className="h-full min-h-0 overflow-auto bg-background text-[12px]">
-      {hunks.map((h, hi) => (
-        <div key={hi} data-hunk-index={hi}>
-          <HunkHeader text={h.header} />
-          {h.lines.map((ln, i) => {
-            const tokRow = tokens?.[cursor++];
-            return (
-              <DiffLineCell
-                key={`U${hi}-${i}`}
-                origin={ln.origin}
-                lineno={ln.origin === "-" ? ln.old_lineno : ln.new_lineno}
-                content={ln.content}
-                syntaxTokens={tokRow}
-                showWhitespace={showWhitespace}
-              />
-            );
-          })}
-        </div>
-      ))}
+      {hunks.map((h, hi) => {
+        const wt = wordTokensByHunk[hi];
+        return (
+          <div key={hi} data-hunk-index={hi}>
+            <HunkHeader text={h.header} />
+            {h.lines.map((ln, i) => {
+              const tokRow = tokens?.[cursor++];
+              return (
+                <DiffLineCell
+                  key={`U${hi}-${i}`}
+                  origin={ln.origin}
+                  lineno={ln.origin === "-" ? ln.old_lineno : ln.new_lineno}
+                  content={ln.content}
+                  wordTokens={wt[i]}
+                  syntaxTokens={tokRow}
+                  showWhitespace={showWhitespace}
+                />
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }

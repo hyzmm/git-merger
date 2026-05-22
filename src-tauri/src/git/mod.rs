@@ -1,6 +1,7 @@
 //! Shared types + module exports for the git layer.
 
 pub mod blame;
+pub mod blob;
 pub mod commit_ops;
 pub mod config;
 pub mod diff;
@@ -22,6 +23,7 @@ pub mod workspace;
 pub mod worktree;
 
 pub use blame::{BlameLine, PrevFile};
+pub use blob::BlobPayload;
 pub use file_history::FileHistoryEntry;
 pub use gitignore::{GitignoreTemplate, IgnorePreview};
 pub use log::{CommitMeta, LogPage};

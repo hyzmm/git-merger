@@ -39,6 +39,8 @@ pub fn run() {
             commands::format_working_file_patch,
             commands::apply_patch_check,
             commands::apply_patch,
+            commands::read_blob_at_commit,
+            commands::read_working_blob,
             commands::git_fetch,
             commands::git_pull,
             commands::git_push,

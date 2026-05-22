@@ -173,6 +173,65 @@ fn commit_meta_lists_containing_branches_and_tags() {
 }
 
 // ---------------------------------------------------------------------------
+// blob (image / binary preview)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn read_blob_at_commit_round_trips_bytes() {
+    use base64::Engine as _;
+    let r = TempRepo::init();
+    let payload = b"\x89PNG\r\n\x1a\n fake png bytes \xff\xfe\xfd";
+    // We can't use commit_file (it expects str); write raw bytes then commit_all.
+    std::fs::write(r.dir.path().join("logo.png"), payload).unwrap();
+    let oid = r.commit_all("add logo");
+
+    let got = git::blob::read_blob_at_commit(&r.path_str(), &oid.to_string(), "logo.png").unwrap();
+    assert!(!got.missing);
+    assert!(!got.oversized);
+    assert_eq!(got.size, payload.len());
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&got.data_b64)
+        .unwrap();
+    assert_eq!(decoded, payload);
+}
+
+#[test]
+fn read_blob_at_commit_marks_missing_paths() {
+    let r = TempRepo::init();
+    let oid = r.commit_file("only.txt", "hi\n", "init");
+    let got = git::blob::read_blob_at_commit(&r.path_str(), &oid.to_string(), "does-not-exist.png")
+        .unwrap();
+    assert!(got.missing);
+    assert_eq!(got.size, 0);
+    assert!(got.data_b64.is_empty());
+}
+
+#[test]
+fn read_working_blob_roundtrips_bytes_and_flags_missing() {
+    use base64::Engine as _;
+    let r = TempRepo::init();
+    // Seed an initial commit so the workdir is non-empty.
+    let _c = r.commit_file("a.txt", "1\n", "init");
+
+    // Untracked binary file in the working tree.
+    let payload = b"GIF89a\x00\x01\x02\x03\x04";
+    std::fs::write(r.dir.path().join("preview.gif"), payload).unwrap();
+
+    let got = git::blob::read_working_blob(&r.path_str(), "preview.gif").unwrap();
+    assert!(!got.missing);
+    assert!(!got.oversized);
+    assert_eq!(got.size, payload.len());
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&got.data_b64)
+        .unwrap();
+    assert_eq!(decoded, payload);
+
+    // A path that doesn't exist comes back as missing.
+    let absent = git::blob::read_working_blob(&r.path_str(), "ghost.png").unwrap();
+    assert!(absent.missing);
+}
+
+// ---------------------------------------------------------------------------
 // commit_ops (cherry-pick + reset)
 // ---------------------------------------------------------------------------
 

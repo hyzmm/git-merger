@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.13
+> Target version: v0.13.14
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -174,12 +174,23 @@ Three panes: left **Refs panel**, center **Commit list + DAG**, right **Commit d
 **Left: file tree** (grouped by directory; status letter + filename + line counts). **Right: diff body**
 
 - **Modes**: Side-by-side (old left, new right) / Unified
-- **Line + word-level highlighting**: replacement pairs only color the actually-changed tokens (LCS-based) with `+`/`-`.
+- **Line + word-level highlighting**: replacement pairs only color the actually-changed tokens (LCS-based) with `+`/`-`. **Both Side-by-side and Unified support it** — since v0.13.14 Unified also pairs consecutive `-` and `+` runs by index and computes word-level overlays inside each pair, so renames / formatting tweaks pop visually even in compact mode.
 - **Shiki syntax highlighting**: ~35 languages (TS / Rust / Python / Go / C++ / …)
 - **Whitespace visualization**: ⌫ button toggles space → `·`, tab → `→`.
 - **Ignore Whitespace** (v0.2.0): a separate button that re-runs libgit2 with `ignore_whitespace` (complementary to the visualization toggle).
 - **Hunk navigation** (v0.2.0): toolbar ↑/↓ buttons, or `n` / `p` shortcuts.
 - **Blame button**: jump to Blame for the current file.
+
+#### Image diff (v0.13.14)
+
+When the selected file is an image asset (`.png` / `.jpg` / `.jpeg` / `.gif` / `.webp` / `.svg` / `.avif` / `.bmp` / `.ico`), the Diff body automatically switches to a **two-pane image preview**:
+
+- **Before (left)** / **After (right)** panes; each header shows the file size (KB / MB).
+- Transparent regions render over a checker-board background so they don't disappear on dark themes.
+- Newly added file → "(no previous version)" placeholder on the left; deleted → "(file deleted)" on the right; > 8 MB → "Too large to preview".
+- Renames-with-modify automatically pull `fileDiff.old_path` and `new_path` so each side fetches its own blob.
+
+Backed by two new commands (`read_blob_at_commit` / `read_working_blob`) returning base64-encoded bytes capped at 8 MB (matching the existing `MAX_FILE_BYTES`); image detection is purely extension-based on the frontend, no extra IPC roundtrip to sniff magic numbers.
 
 #### Bidirectional Diff editor (v0.13.3)
 
@@ -1140,6 +1151,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.11 | Submodules view gains **recursive update**: a 🌳 FolderTree icon button performs depth-first recursion — first updates the top-level submodule, then opens it as a Repository and repeats the process for **its** child submodules, equivalent to `git submodule update --init --recursive`; especially useful for nested submodule repositories; backend `git/submodule.rs::update_recursive`                                                                                                  |
 | v0.13.12 | Dedicated **Tags management panel**: Sidebar gains a 🏷️ Tag entry, also reachable via `Ctrl+K` → "Tags"; the table lists every tag newest-first, annotated rows expand to reveal message / tagger / raw oid while lightweight rows are clearly distinguished; per-row **Push** / **Force** / delete-local / delete-remote + toolbar **Push all tags** (`refs/tags/*:refs/tags/*`); remote deletion uses `:refs/tags/<name>` refspec; backend `git/refs.rs::list_tags` peels annotated tag objects, plus three new public `git/remote.rs` functions (push_tag / push_all_tags / delete_remote_tag) sharing the existing OpHandle progress + cancel channel; +1 integration test |
 | v0.13.13 | **Commit details panel enhanced**: header gains a Copy message / Copy full SHA / Copy short SHA trio; Parents and Children render as clickable chips that jump to the target commit (children are derived client-side from the loaded log window via `parents.includes(oid)`, zero extra IPC); when the committer differs from the author (cherry-pick / rebase artifacts) a separate **Committer** row appears with the landing time; new **Contained in** section lists the local + remote branches and tags this commit lives on, colour-coded for at-a-glance scanning. Backend `git::log::commit_meta` uses libgit2 `graph_descendant_of` per ref (annotated tags peeled first); +1 integration test covering containing-branches/tags |
+| v0.13.14 | **Diff viewer dual upgrade**: (1) **Word-level overlay in Unified mode** — matching SBS, consecutive `-`/`+` runs are paired by index and word-diffed; new pure helper `unifiedWordTokens` covered by 7 bun:test cases. (2) **Image diff** — selecting an image asset (png / jpg / gif / webp / svg / avif / bmp / ico) flips the diff body to a two-pane image preview with file-size chips, checker-board transparency, and Before/After placeholders for added / deleted / >8 MB cases. Backend gains `git/blob.rs::read_blob_at_commit` + `read_working_blob` (base64-encoded with the same 8 MB cap as the working-file editor); pulls in `base64 = "0.22"`, +3 integration tests, +5 imageMime frontend tests |
 
 ---
 

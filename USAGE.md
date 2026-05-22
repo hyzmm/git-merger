@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.13  
+> 适用版本：v0.13.14  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -173,12 +173,23 @@ bun run tauri:build
 **左：文件树**（按目录分组，状态字母 + 文件名 + 行数）；**右：Diff 主体**
 
 - **模式切换**：Side-by-side（左旧右新）/ Unified
-- **行级 + 词级高亮**：替换行内只对真正变动的 token 加 `+`/`-` 颜色（基于 LCS）
+- **行级 + 词级高亮**：替换行内只对真正变动的 token 加 `+`/`-` 颜色（基于 LCS）。**Side-by-side 与 Unified 两种模式都支持**——v0.13.14 起 Unified 模式也按"连续 `-` 块 → 连续 `+` 块"配对计算 word-level token，同一行里的格式调整、变量改名一眼能看出来
 - **Shiki 语法高亮**：~35 种语言（TS / Rust / Python / Go / C++ / …）
 - **Whitespace 可视化**：⌫ 按钮启用，空格→`·`，tab→`→`
 - **Ignore Whitespace**（v0.2.0）：另一个按钮，让后端用 libgit2 的 `ignore_whitespace` 重算 diff（与可视化是互补的）
 - **跳转到 hunk**（v0.2.0）：工具栏 ↑/↓ 按钮，或快捷键 `n` / `p`
 - **Blame 按钮**：跳到 Blame 视图查看该文件
+
+#### Image diff（v0.13.14）
+
+当选中的文件是图片资源（`.png` / `.jpg` / `.jpeg` / `.gif` / `.webp` / `.svg` / `.avif` / `.bmp` / `.ico`），Diff 主体区会自动切换为**双栏图片预览**：
+
+- **Before（左）** / **After（右）** 两个 pane，标题栏右侧显示文件大小（KB / MB）
+- 透明区域用棋盘格背景渲染，避免在深色主题下"看不见"
+- 文件被新增 → Before 显示 "(no previous version)"；被删除 → After 显示 "(file deleted)"；超过 8 MB → 显示 "Too large to preview"
+- 重命名+内容变更（rename + modify）会自动用 `fileDiff.old_path` 和 `new_path` 各取各的 blob
+
+后端通过新命令 `read_blob_at_commit` / `read_working_blob` 拉 base64 字节（与现有 `MAX_FILE_BYTES = 8 MB` 限制一致），前端只用扩展名做 image 检测，不嗅探 magic bytes，零额外 IPC 往返。
 
 #### 双向 Diff 编辑（v0.13.3）
 
@@ -1131,6 +1142,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.11 | Submodules 视图 **递归 update**：FolderTree 🌳 图标按钮深度优先递归——先 update 顶层 submodule，再打开它作为 Repository、对**它的**子 submodules 重复执行，等价于 `git submodule update --init --recursive`，对嵌套 submodule 仓库尤其有用；后端 `git/submodule.rs::update_recursive`                                                                                                                                                                                                                            |
 | v0.13.12 | 专用 **Tag 管理面板**：Sidebar 新增 🏷️ Tag 入口 + `Ctrl+K` 命令面板可达；表格按时间倒序展示所有 tag，annotated 行可展开显示 message / tagger / 原始 oid，lightweight 行清晰区分；逐行 **Push** / **Force** / 删本地 / 删远端 + 顶部 **Push all tags**（`refs/tags/*:refs/tags/*`）+ 删除远端走 `:refs/tags/<name>` refspec；后端 `git/refs.rs::list_tags` 解析 annotated tag 对象 + `git/remote.rs` 三个新公开函数（push_tag / push_all_tags / delete_remote_tag）共享既有 OpHandle 进度 + 取消通道，新增 1 个集成测试 |
 | v0.13.13 | **Commit 详情面板增强**：顶部加 Copy message / Copy full SHA / Copy short SHA 三个一键复制按钮；Parents / Children chip 全部可点击直接跳转（children 从已加载历史窗口反查 `parents.includes(oid)` 实时算，零额外 IPC）；committer 与 author 不同（cherry-pick / rebase）时单独显示 **Committer** 行 + commit 进入仓库的时间；新增 **Contained in** 区块——commit 所在的本地 / 远端 branches + tags，按视觉色区分。后端 `git::log::commit_meta` 命令通过 libgit2 `graph_descendant_of` 逐 ref 判断（annotated tag 自动 peel），新增 1 个集成测试覆盖 contained-in 逻辑 |
+| v0.13.14 | **Diff 视图双重升级**：(1) **Unified 模式补 word-level**——和 SBS 对齐，连续 `-`/`+` 块按 index 配对计算 LCS token，新纯函数 `unifiedWordTokens` + 7 个 bun:test；(2) **Image diff**——选中常见图片扩展（png/jpg/gif/webp/svg/avif/bmp/ico）时 Diff 主体自动切换为双栏图片预览，标题栏显示文件大小，棋盘格背景显示透明区，新增/删除/oversized(>8 MB) 三种边界态各有 placeholder。后端新增 `git/blob.rs::read_blob_at_commit` + `read_working_blob`（base64 编码 + 8 MB 上限），加 base64 = "0.22" 依赖 + 3 个集成测试 + 5 个 imageMime 前端测试 |
 
 ---
 

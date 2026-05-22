@@ -5,7 +5,9 @@ import { useShortcuts } from "@/lib/useShortcuts";
 import { git } from "@/ipc/git";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { isImagePath } from "@/lib/imageMime";
 import { SideBySide, Unified } from "./DiffViews";
+import { ImageDiff } from "./ImageDiff";
 import { WorkingDiffEditor } from "./WorkingDiffEditor";
 
 export function DiffViewer() {
@@ -271,6 +273,15 @@ export function DiffViewer() {
       <div className="min-h-0 flex-1">
         {isWorking && editActive && mode === "sbs" ? (
           <WorkingDiffEditor />
+        ) : file && isImagePath(file) ? (
+          // v0.13.14 — image diff: side-by-side OLD vs NEW image preview.
+          // Uses fileDiff.old_path so renames flip-and-resize correctly;
+          // falls back to `file` when the diff isn't loaded yet.
+          <ImageDiff
+            oldPath={fileDiff?.old_path ?? file}
+            newPath={fileDiff?.new_path ?? file}
+            oid={oid}
+          />
         ) : !fileDiff ? (
           <div className="p-4 text-xs text-muted-foreground">
             {loading ? "Loading diff..." : "No diff."}

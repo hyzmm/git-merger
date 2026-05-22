@@ -215,6 +215,18 @@ pub fn apply_patch(path: String, patch_text: String) -> R<()> {
     Ok(())
 }
 
+// ---------- Image / binary blob preview (v0.13.14) ----------
+
+#[tauri::command]
+pub fn read_blob_at_commit(path: String, oid: String, file: String) -> R<git::BlobPayload> {
+    Ok(git::blob::read_blob_at_commit(&path, &oid, &file)?)
+}
+
+#[tauri::command]
+pub fn read_working_blob(path: String, file: String) -> R<git::BlobPayload> {
+    Ok(git::blob::read_working_blob(&path, &file)?)
+}
+
 #[tauri::command]
 pub fn git_fetch(
     app: tauri::AppHandle,

@@ -110,6 +110,21 @@ export interface FileDiff {
   hunks: DiffHunk[];
 }
 
+/**
+ * Raw-bytes payload for binary / image previews (v0.13.14).
+ * Mirrors `git::blob::BlobPayload` on the backend.
+ */
+export interface BlobPayload {
+  /** True when the file doesn't exist on this side (e.g. just-added). */
+  missing: boolean;
+  /** True when size > 8 MB; `data_b64` is empty in that case. */
+  oversized: boolean;
+  /** Total uncompressed byte count (always reported, even when oversized). */
+  size: number;
+  /** Standard base64 (no `data:` prefix). Empty when missing or oversized. */
+  data_b64: string;
+}
+
 export interface ConflictFile {
   path: string;
   ancestor: string | null;
@@ -452,6 +467,12 @@ export const git = {
     invoke<void>("apply_patch_check", { path, patchText }),
   /** v0.13.9 — apply `patch_text` to the workdir (does not touch the index). */
   applyPatch: (path: string, patchText: string) => invoke<void>("apply_patch", { path, patchText }),
+  /** v0.13.14 — raw bytes of a file at a commit, base64-encoded for image previews. */
+  readBlobAtCommit: (path: string, oid: string, file: string) =>
+    invoke<BlobPayload>("read_blob_at_commit", { path, oid, file }),
+  /** v0.13.14 — raw bytes of a file in the working tree, base64-encoded for image previews. */
+  readWorkingBlob: (path: string, file: string) =>
+    invoke<BlobPayload>("read_working_blob", { path, file }),
   fetch: (path: string, remote?: string) =>
     invoke<RemoteOpResult>("git_fetch", { path, remote: remote ?? null }),
   pull: (path: string) => invoke<RemoteOpResult>("git_pull", { path }),

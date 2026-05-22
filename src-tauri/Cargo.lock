@@ -1141,6 +1141,7 @@ name = "git-tools"
 version = "0.13.5"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
  "git2",
