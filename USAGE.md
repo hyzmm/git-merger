@@ -28,6 +28,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [3.11 Worktrees（多工作树）](#311-worktrees多工作树)
   - [3.12 .gitignore 编辑器](#312-gitignore-编辑器)
   - [3.13 历史搜索（跨提交内容查找）](#313-历史搜索跨提交内容查找)
+  - [3.14 Tag 管理（v0.13.12）](#314-tag-管理v01312)
 - [四、Topbar 与远程操作](#四topbar-与远程操作)
   - [4.1 应用菜单（☰）](#41-应用菜单)
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
@@ -43,6 +44,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
 - [十一、构建可分发安装包](#十一构建可分发安装包)
 - [十二、常见问题排查（FAQ）](#十二常见问题排查faq)
 - [十三、卸载与清理](#十三卸载与清理)
+- [十四、版本历史一览](#十四版本历史一览)
 
 ---
 
@@ -976,22 +978,30 @@ G:\GitTools\
 
 ### 主要 Rust 命令清单
 
-| 类别          | 命令                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Repo          | `open_repo`, `tracked_files`                                                                                        |
-| File History  | `file_history`                                                                                                      |
-| History       | `git_log`, `commit_files`, `file_diff`, `working_diff`, `list_refs`                                                 |
-| Working tree  | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`                                |
-| Merge         | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                   |
-| Branches/Tags | `create_branch`, `checkout_branch`, `checkout_commit`, `delete_branch`, `rename_branch`, `create_tag`, `delete_tag` |
-| Commit ops    | `cherry_pick`, `revert_commit`, `reset_to`                                                                          |
-| Stash         | `stash_list`, `stash_save`, `stash_apply`, `stash_pop`, `stash_drop`                                                |
-| Blame         | `blame_file`, `blame_at_revision`, `previous_filename`                                                              |
-| Reflog        | `reflog_list`                                                                                                       |
-| Submodules    | `submodule_list`, `submodule_init`, `submodule_update`, `submodule_sync`                                            |
-| Remote        | `git_fetch`, `git_pull`, `git_push`, `submit_credentials`, `cancel_credentials`                                     |
-| Rebase        | `rebase_plan`, `rebase_start`, `rebase_next`, `rebase_continue`, `rebase_abort`, `rebase_status`                    |
-| Config        | `config_get`, `config_set`                                                                                          |
+> 表格按功能聚类列出当前 `src-tauri/src/commands.rs` 中 `#[tauri::command]` 装饰的所有 invokable，前端绑定见 `src/ipc/git.ts`。
+
+| 类别              | 命令                                                                                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo              | `open_repo`, `tracked_files`                                                                                                                                                                  |
+| File History      | `file_history`                                                                                                                                                                                |
+| History           | `git_log`, `git_log_page`, `commit_files`, `file_diff`, `working_diff`, `list_refs`, `list_tags`, `commit_meta`                                                                                |
+| Working tree      | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`, `read_working_file`, `read_head_file`, `write_working_file`                                              |
+| Patch I/O         | `format_commit_file_patch`, `format_working_file_patch`, `apply_patch_check`, `apply_patch`                                                                                                    |
+| Image / blob      | `read_blob_at_commit`, `read_working_blob`                                                                                                                                                     |
+| Merge             | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                                                                                              |
+| Branches / Tags   | `create_branch`, `checkout_branch`, `checkout_commit`, `delete_branch`, `rename_branch`, `create_tag`, `delete_tag`                                                                            |
+| Tag remote ops    | `git_push_tag`, `git_push_all_tags`, `git_delete_remote_tag`                                                                                                                                   |
+| Commit ops        | `cherry_pick`, `revert_commit`, `reset_to`                                                                                                                                                     |
+| Stash             | `stash_list`, `stash_save`, `stash_apply`, `stash_pop`, `stash_drop`                                                                                                                           |
+| Blame             | `blame_file`, `blame_at_revision`, `previous_filename`                                                                                                                                         |
+| Reflog            | `reflog_list`                                                                                                                                                                                  |
+| Submodules        | `submodule_list`, `submodule_init`, `submodule_update`, `submodule_update_recursive`, `submodule_sync`                                                                                         |
+| Remote            | `git_fetch`, `git_pull`, `git_push`, `submit_credentials`, `cancel_credentials`, `cancel_remote_op`                                                                                            |
+| Rebase            | `rebase_plan`, `rebase_start`, `rebase_next`, `rebase_continue`, `rebase_abort`, `rebase_status`                                                                                               |
+| Worktrees         | `worktree_list`, `worktree_add`, `worktree_remove`, `worktree_prune`                                                                                                                           |
+| .gitignore editor | `gitignore_read`, `gitignore_write`, `gitignore_preview`, `gitignore_templates`                                                                                                                |
+| Search            | `search_commits`                                                                                                                                                                               |
+| Config            | `config_get`, `config_set`                                                                                                                                                                     |
 
 ---
 

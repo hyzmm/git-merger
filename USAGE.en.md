@@ -28,6 +28,7 @@ IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tau
   - [3.11 Worktrees](#311-worktrees)
   - [3.12 .gitignore editor](#312-gitignore-editor)
   - [3.13 History search (cross-commit content search)](#313-history-search-cross-commit-content-search)
+  - [3.14 Tags management (v0.13.12)](#314-tags-management-v01312)
 - [4. Topbar & remote ops](#4-topbar--remote-ops)
   - [4.1 App menu (☰)](#41-app-menu-)
   - [4.2 Undo button (reflog quick actions)](#42-undo-button-reflog-quick-actions)
@@ -982,25 +983,30 @@ G:\GitTools\
 
 ### Main Rust command list
 
-| Category      | Commands                                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Repo          | `open_repo`, `tracked_files`                                                                                        |
-| File History  | `file_history`                                                                                                      |
-| History       | `git_log`, `git_log_page`, `commit_files`, `file_diff`, `working_diff`, `list_refs`                                 |
-| Search        | `search_commits`                                                                                                    |
-| Working tree  | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`                                |
-| Merge         | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                   |
-| Branches/Tags | `create_branch`, `checkout_branch`, `checkout_commit`, `delete_branch`, `rename_branch`, `create_tag`, `delete_tag` |
-| Commit ops    | `cherry_pick`, `revert_commit`, `reset_to`                                                                          |
-| Stash         | `stash_list`, `stash_save`, `stash_apply`, `stash_pop`, `stash_drop`                                                |
-| Blame         | `blame_file`, `blame_at_revision`, `previous_filename`                                                              |
-| Reflog        | `reflog_list`                                                                                                       |
-| Submodules    | `submodule_list`, `submodule_init`, `submodule_update`, `submodule_sync`                                            |
-| Worktrees     | `worktree_list`, `worktree_add`, `worktree_remove`, `worktree_prune`                                                |
-| Gitignore     | `gitignore_read`, `gitignore_write`, `gitignore_preview`, `gitignore_templates`                                     |
-| Remote        | `git_fetch`, `git_pull`, `git_push`, `submit_credentials`, `cancel_credentials`                                     |
-| Rebase        | `rebase_plan`, `rebase_start`, `rebase_next`, `rebase_continue`, `rebase_abort`, `rebase_status`                    |
-| Config        | `config_get`, `config_set`                                                                                          |
+> Grouped by feature. Source of truth: `#[tauri::command]` definitions in `src-tauri/src/commands.rs`; the frontend bindings live in `src/ipc/git.ts`.
+
+| Category          | Commands                                                                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo              | `open_repo`, `tracked_files`                                                                                                                                                                   |
+| File History      | `file_history`                                                                                                                                                                                 |
+| History           | `git_log`, `git_log_page`, `commit_files`, `file_diff`, `working_diff`, `list_refs`, `list_tags`, `commit_meta`                                                                                |
+| Working tree      | `working_changes`, `stage_files`, `unstage_files`, `discard_files`, `commit_changes`, `read_working_file`, `read_head_file`, `write_working_file`                                              |
+| Patch I/O         | `format_commit_file_patch`, `format_working_file_patch`, `apply_patch_check`, `apply_patch`                                                                                                    |
+| Image / blob      | `read_blob_at_commit`, `read_working_blob`                                                                                                                                                     |
+| Merge             | `conflicts`, `merge_state`, `conflict_content`, `resolve_conflict`, `abort_merge`, `commit_merge`                                                                                              |
+| Branches / Tags   | `create_branch`, `checkout_branch`, `checkout_commit`, `delete_branch`, `rename_branch`, `create_tag`, `delete_tag`                                                                            |
+| Tag remote ops    | `git_push_tag`, `git_push_all_tags`, `git_delete_remote_tag`                                                                                                                                   |
+| Commit ops        | `cherry_pick`, `revert_commit`, `reset_to`                                                                                                                                                     |
+| Stash             | `stash_list`, `stash_save`, `stash_apply`, `stash_pop`, `stash_drop`                                                                                                                           |
+| Blame             | `blame_file`, `blame_at_revision`, `previous_filename`                                                                                                                                         |
+| Reflog            | `reflog_list`                                                                                                                                                                                  |
+| Submodules        | `submodule_list`, `submodule_init`, `submodule_update`, `submodule_update_recursive`, `submodule_sync`                                                                                         |
+| Remote            | `git_fetch`, `git_pull`, `git_push`, `submit_credentials`, `cancel_credentials`, `cancel_remote_op`                                                                                            |
+| Rebase            | `rebase_plan`, `rebase_start`, `rebase_next`, `rebase_continue`, `rebase_abort`, `rebase_status`                                                                                               |
+| Worktrees         | `worktree_list`, `worktree_add`, `worktree_remove`, `worktree_prune`                                                                                                                           |
+| .gitignore editor | `gitignore_read`, `gitignore_write`, `gitignore_preview`, `gitignore_templates`                                                                                                                |
+| Search            | `search_commits`                                                                                                                                                                               |
+| Config            | `config_get`, `config_set`                                                                                                                                                                     |
 
 ---
 
