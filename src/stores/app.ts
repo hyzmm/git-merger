@@ -3,6 +3,7 @@ import {
   git,
   type BlameLine,
   type CommitSummary,
+  type CommitMeta,
   type ConflictContent,
   type ConflictFile,
   type FileChange,
@@ -86,6 +87,13 @@ interface HistoryState {
   selectedOid: string | null;
   files: FileChange[];
   filesLoading: boolean;
+  /**
+   * Rich metadata for the selected commit (full message, committer info,
+   * containing branches + tags). Populated lazily after `selectCommit`.
+   * v0.13.13.
+   */
+  meta: CommitMeta | null;
+  metaLoading: boolean;
   filter: string;
   /** Author name filter (exact match against `author_name`). null = all. */
   authorFilter: string | null;
@@ -545,6 +553,8 @@ const emptyHistory: HistoryState = {
   selectedOid: null,
   files: [],
   filesLoading: false,
+  meta: null,
+  metaLoading: false,
   filter: "",
   authorFilter: null,
   sinceFilter: null,
@@ -1343,18 +1353,51 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     if (!repo) return;
     set((s) => ({
-      history: { ...s.history, selectedOid: oid, filesLoading: true, files: [] },
+      history: {
+        ...s.history,
+        selectedOid: oid,
+        filesLoading: true,
+        files: [],
+        // Reset the meta payload so the side panel shows "loading…" rather
+        // than stale data from the previously selected commit.
+        meta: null,
+        metaLoading: true,
+      },
     }));
-    try {
-      const files = await git.commitFiles(repo.path, oid);
-      set((s) =>
-        s.history.selectedOid === oid
-          ? { history: { ...s.history, files, filesLoading: false } }
-          : s,
-      );
-    } catch (e) {
-      set((s) => ({ history: { ...s.history, filesLoading: false, error: String(e) } }));
-    }
+    // Files and meta are independent — fire them in parallel and let each
+    // settle with its own race-check against the latest `selectedOid`.
+    void (async () => {
+      try {
+        const files = await git.commitFiles(repo.path, oid);
+        set((s) =>
+          s.history.selectedOid === oid
+            ? { history: { ...s.history, files, filesLoading: false } }
+            : s,
+        );
+      } catch (e) {
+        set((s) =>
+          s.history.selectedOid === oid
+            ? { history: { ...s.history, filesLoading: false, error: String(e) } }
+            : s,
+        );
+      }
+    })();
+    void (async () => {
+      try {
+        const meta = await git.commitMeta(repo.path, oid);
+        set((s) =>
+          s.history.selectedOid === oid
+            ? { history: { ...s.history, meta, metaLoading: false } }
+            : s,
+        );
+      } catch (e) {
+        set((s) =>
+          s.history.selectedOid === oid
+            ? { history: { ...s.history, metaLoading: false, error: String(e) } }
+            : s,
+        );
+      }
+    })();
   },
 
   setFilter: (q) => set((s) => ({ history: { ...s.history, filter: q } })),

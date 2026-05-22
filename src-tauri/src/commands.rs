@@ -60,6 +60,11 @@ pub fn git_log_page(
 }
 
 #[tauri::command]
+pub fn commit_meta(path: String, oid: String) -> R<git::CommitMeta> {
+    Ok(git::log::commit_meta(&path, &oid)?)
+}
+
+#[tauri::command]
 pub fn commit_files(path: String, oid: String) -> R<Vec<git::FileChange>> {
     Ok(git::diff::commit_files(&path, &oid)?)
 }

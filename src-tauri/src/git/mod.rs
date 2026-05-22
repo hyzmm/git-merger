@@ -24,7 +24,7 @@ pub mod worktree;
 pub use blame::{BlameLine, PrevFile};
 pub use file_history::FileHistoryEntry;
 pub use gitignore::{GitignoreTemplate, IgnorePreview};
-pub use log::LogPage;
+pub use log::{CommitMeta, LogPage};
 pub use merge::{ConflictContent, MergeState};
 pub use rebase::{RebaseStatus, RebaseStep};
 pub use reflog::ReflogEntry;

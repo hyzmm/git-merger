@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.12  
+> 适用版本：v0.13.13  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -157,9 +157,13 @@ bun run tauri:build
 
 **右 — Commit Details**
 
-- 完整 oid / parents 短哈希 / author + email / 本地化时间 / 所有 ref chips
-- **Changed files** 列表（A / M / D / R / C / T 状态 + 行级 +N -N）
-- 点击文件名 → 跳到 Diff 视图
+- 顶部：subject + **复制按钮**三件套（v0.13.13）—— 📋 整条 message（subject+body）、🔗 完整 40 位 SHA、🔗 7 位短 SHA，每个按钮点击后短暂变成 ✓ Copied 反馈
+- **Commit / Parents / Children**（v0.13.13）：parent 与 child 都以可点击 chip 渲染，点击 chip 直接跳到对应 commit；children 是从当前已加载历史窗口反查 `parents.includes(oid)` 实时算的，零额外 IPC
+- **Author** + **Date**；当 committer 与 author 不同（cherry-pick / rebase 留下的痕迹）时单独追加 **Committer** 行 + 该 commit 实际进入仓库的时间（v0.13.13）
+- **Refs** chips（HEAD / branch / tag）
+- **Contained in**（v0.13.13）：commit 所在的本地分支 / 远端分支 / tag。本地分支用主品牌色徽章，远端分支灰色，tag 暖色，一眼区分。后端用 libgit2 `graph_descendant_of` 逐 ref 判断，annotated tag 自动 peel；首次出现要等几十毫秒后台计算（"Computing containing branches & tags…"），算完才显示
+- **Changed files** 列表（A / M / D / R / C / T 状态 + 行级 +N -N）；点击 → 跳到 Diff 视图；右键菜单可 Copy path / Show file history / Blame
+- **Message**：完整多行 message（subject 之外的 body 段落、trailers 等），来自 v0.13.13 后端 `commit_meta` 接口
 
 > **大仓库性能（v0.10.3 起）**：History 视图采用 cursor-based 分页，首屏只加载 1000 条 commit；当虚拟滚动到接近列表尾部（默认距底部 20 行）时自动 fetch 下一页 1000 条并追加。Graph layout（lane 分配 + curve 计算）也升级为增量算法，新加载的 page 只对新增 commit 计算，并完全沿用上一 page 的 lane 状态——所以滚动加载不会"跳色"，性能也不会随着列表增大而退化。  
 > 状态栏的 `· +more` 提示后端还有更多页；`· loading more...` 表示正在追加。
@@ -1126,6 +1130,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.10 | Settings 面板镜像 **Graph 显示模式**：与 HistoryFilterBar 上的 Graph 按钮共享同一字段（双向同步），Settings 给"长期偏好"统一入口，HistoryFilterBar 快捷按钮给"临时切换"便利；新增 `settings.graphMode.*` 4 条 i18n key                                                                                                                                                                                                                                                                                            |
 | v0.13.11 | Submodules 视图 **递归 update**：FolderTree 🌳 图标按钮深度优先递归——先 update 顶层 submodule，再打开它作为 Repository、对**它的**子 submodules 重复执行，等价于 `git submodule update --init --recursive`，对嵌套 submodule 仓库尤其有用；后端 `git/submodule.rs::update_recursive`                                                                                                                                                                                                                            |
 | v0.13.12 | 专用 **Tag 管理面板**：Sidebar 新增 🏷️ Tag 入口 + `Ctrl+K` 命令面板可达；表格按时间倒序展示所有 tag，annotated 行可展开显示 message / tagger / 原始 oid，lightweight 行清晰区分；逐行 **Push** / **Force** / 删本地 / 删远端 + 顶部 **Push all tags**（`refs/tags/*:refs/tags/*`）+ 删除远端走 `:refs/tags/<name>` refspec；后端 `git/refs.rs::list_tags` 解析 annotated tag 对象 + `git/remote.rs` 三个新公开函数（push_tag / push_all_tags / delete_remote_tag）共享既有 OpHandle 进度 + 取消通道，新增 1 个集成测试 |
+| v0.13.13 | **Commit 详情面板增强**：顶部加 Copy message / Copy full SHA / Copy short SHA 三个一键复制按钮；Parents / Children chip 全部可点击直接跳转（children 从已加载历史窗口反查 `parents.includes(oid)` 实时算，零额外 IPC）；committer 与 author 不同（cherry-pick / rebase）时单独显示 **Committer** 行 + commit 进入仓库的时间；新增 **Contained in** 区块——commit 所在的本地 / 远端 branches + tags，按视觉色区分。后端 `git::log::commit_meta` 命令通过 libgit2 `graph_descendant_of` 逐 ref 判断（annotated tag 自动 peel），新增 1 个集成测试覆盖 contained-in 逻辑 |
 
 ---
 

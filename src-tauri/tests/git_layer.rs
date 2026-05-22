@@ -121,6 +121,57 @@ fn list_tags_distinguishes_annotated_from_lightweight() {
     assert_ne!(v11.tag_oid.as_deref().unwrap(), v11.target_oid);
 }
 
+#[test]
+fn commit_meta_lists_containing_branches_and_tags() {
+    let r = TempRepo::init();
+    // Build a tiny graph:  c1 ── c2 (default) ── c3 (release)
+    // and a tag v1.0 on c2 plus an annotated tag v1.1 on c3.
+    let c1 = r.commit_file("a.txt", "1\n", "c1: subject line\n\nWith a body paragraph.");
+    let c2 = r.commit_file("a.txt", "2\n", "c2");
+    git::refs_ops::create_tag(&r.path_str(), "v1.0", &c2.to_string(), None).unwrap();
+
+    // Whatever the default branch is called (`main` on modern git, `master`
+    // on older configs), capture the actual name now so the assertions below
+    // don't hard-code one or the other.
+    let default_branch = r.repo.head().unwrap().shorthand().unwrap().to_string();
+
+    // Branch off `release` from c2, advance one more commit on it.
+    git::refs_ops::create_branch(&r.path_str(), "release", &c2.to_string(), true).unwrap();
+    let c3 = r.commit_file("a.txt", "3\n", "c3");
+    git::refs_ops::create_tag(&r.path_str(), "v1.1", &c3.to_string(), Some("Release 1.1")).unwrap();
+
+    let meta = git::log::commit_meta(&r.path_str(), &c1.to_string()).unwrap();
+    // Full message preserved (subject + body), summary is just the first line.
+    assert!(meta.message.starts_with("c1: subject line"));
+    assert!(meta.message.contains("With a body paragraph."));
+    assert_eq!(meta.summary, "c1: subject line");
+    // Root commit has no parents.
+    assert!(meta.parents.is_empty());
+    // c1 is reachable from BOTH the default branch and `release`,
+    // and from BOTH tags.
+    assert!(
+        meta.containing_branches
+            .iter()
+            .any(|b| b == &default_branch),
+        "expected {} in {:?}",
+        default_branch,
+        meta.containing_branches
+    );
+    assert!(meta.containing_branches.iter().any(|b| b == "release"));
+    assert!(meta.containing_tags.contains(&"v1.0".to_string()));
+    assert!(meta.containing_tags.contains(&"v1.1".to_string()));
+
+    // c3 is only on `release`, and only tagged with v1.1.
+    let meta3 = git::log::commit_meta(&r.path_str(), &c3.to_string()).unwrap();
+    assert_eq!(meta3.parents, vec![c2.to_string()]);
+    assert!(meta3.containing_branches.iter().any(|b| b == "release"));
+    assert!(!meta3
+        .containing_branches
+        .iter()
+        .any(|b| b == &default_branch));
+    assert_eq!(meta3.containing_tags, vec!["v1.1".to_string()]);
+}
+
 // ---------------------------------------------------------------------------
 // commit_ops (cherry-pick + reset)
 // ---------------------------------------------------------------------------

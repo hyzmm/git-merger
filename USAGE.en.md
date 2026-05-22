@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.12
+> Target version: v0.13.13
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -158,9 +158,13 @@ Three panes: left **Refs panel**, center **Commit list + DAG**, right **Commit d
 
 **Right — Commit details**
 
-- Full oid / parent short hashes / author + email / localized timestamp / all ref chips
-- **Changed files** list (A / M / D / R / C / T status + per-file +N -N line stats)
-- Click a filename → jump to Diff view
+- Header: subject + a **trio of copy buttons** (v0.13.13) — 📋 full message (subject + body), 🔗 full 40-char SHA, 🔗 short 7-char SHA. Each briefly turns into a ✓ Copied tick on success.
+- **Commit / Parents / Children** (v0.13.13): parents and children render as clickable chips that jump to the corresponding commit. Children are derived client-side from the loaded history window via `parents.includes(oid)` — zero extra IPC.
+- **Author** + **Date**; when the committer differs from the author (cherry-pick / rebase artifacts) a **Committer** row is added with the actual landing time (v0.13.13).
+- **Refs** chips (HEAD / branch / tag).
+- **Contained in** (v0.13.13): the local branches / remote branches / tags this commit lives in. Local branches use the brand colour, remote branches grey, tags warm — easy to scan. Backend uses libgit2's `graph_descendant_of` per ref tip (annotated tags are peeled first); the first appearance shows "Computing containing branches & tags…" while the worker runs, then swaps in.
+- **Changed files** list (A / M / D / R / C / T status + per-file +N -N line stats); click → jump to Diff view; right-click for Copy path / Show file history / Blame.
+- **Message**: the full multi-line message (body paragraphs, trailers, …) coming from the new v0.13.13 `commit_meta` backend.
 
 > **Large-repo performance (since v0.10.3)**: History uses cursor-based pagination — first page loads only 1000 commits; the next 1000 are fetched lazily when the virtual scroll lands within 20 rows of the tail. The graph layout (lane allocation + curve calculation) is also incremental: each new page only computes deltas while reusing the previous page's lane state, so loading more never causes color flicker, and performance no longer degrades with history size.
 > The status bar shows `· +more` when the backend has another page, and `· loading more...` while a fetch is in flight.
@@ -1135,6 +1139,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.10 | Settings dialog mirrors the **Graph display mode**: shares the same backing field as the HistoryFilterBar Graph button (two-way sync), so Settings becomes the home for the long-term preference while the filter-bar shortcut handles ad-hoc toggles; ships 4 new `settings.graphMode.*` i18n keys                                                                                                                                                                                            |
 | v0.13.11 | Submodules view gains **recursive update**: a 🌳 FolderTree icon button performs depth-first recursion — first updates the top-level submodule, then opens it as a Repository and repeats the process for **its** child submodules, equivalent to `git submodule update --init --recursive`; especially useful for nested submodule repositories; backend `git/submodule.rs::update_recursive`                                                                                                  |
 | v0.13.12 | Dedicated **Tags management panel**: Sidebar gains a 🏷️ Tag entry, also reachable via `Ctrl+K` → "Tags"; the table lists every tag newest-first, annotated rows expand to reveal message / tagger / raw oid while lightweight rows are clearly distinguished; per-row **Push** / **Force** / delete-local / delete-remote + toolbar **Push all tags** (`refs/tags/*:refs/tags/*`); remote deletion uses `:refs/tags/<name>` refspec; backend `git/refs.rs::list_tags` peels annotated tag objects, plus three new public `git/remote.rs` functions (push_tag / push_all_tags / delete_remote_tag) sharing the existing OpHandle progress + cancel channel; +1 integration test |
+| v0.13.13 | **Commit details panel enhanced**: header gains a Copy message / Copy full SHA / Copy short SHA trio; Parents and Children render as clickable chips that jump to the target commit (children are derived client-side from the loaded log window via `parents.includes(oid)`, zero extra IPC); when the committer differs from the author (cherry-pick / rebase artifacts) a separate **Committer** row appears with the landing time; new **Contained in** section lists the local + remote branches and tags this commit lives on, colour-coded for at-a-glance scanning. Backend `git::log::commit_meta` uses libgit2 `graph_descendant_of` per ref (annotated tags peeled first); +1 integration test covering containing-branches/tags |
 
 ---
 

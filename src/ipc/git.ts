@@ -39,6 +39,35 @@ export interface CommitSummary {
   refs: string[];
 }
 
+/**
+ * Rich, on-demand metadata for one commit (loaded lazily by the
+ * CommitDetails pane). Mirrors `git::log::CommitMeta` on the backend.
+ *
+ * `containing_branches` and `containing_tags` answer "what released
+ * this fix?" by walking every ref tip and asking libgit2 whether the
+ * commit is reachable from it (`graph_descendant_of`).
+ */
+export interface CommitMeta {
+  oid: string;
+  /** Full multi-line commit message (subject + body). */
+  message: string;
+  /** First line — handy for headers. */
+  summary: string;
+  author_name: string;
+  author_email: string;
+  /** Unix seconds. */
+  author_time: number;
+  committer_name: string;
+  committer_email: string;
+  /** Unix seconds. Distinct from author_time on cherry-picks / rebases. */
+  committer_time: number;
+  parents: string[];
+  /** Local + remote branches whose tip is this commit or a descendant. */
+  containing_branches: string[];
+  /** Tag short names (no `refs/tags/` prefix), peeled before comparison. */
+  containing_tags: string[];
+}
+
 export interface FileChange {
   path: string;
   old_path: string | null;
@@ -374,6 +403,8 @@ export const git = {
       pathspec: opts?.pathspec ?? null,
     }),
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),
+  /** Rich metadata for one commit: full message, author + committer, parents, containing branches & tags. */
+  commitMeta: (path: string, oid: string) => invoke<CommitMeta>("commit_meta", { path, oid }),
   fileDiff: (path: string, oid: string, file: string, ignoreWhitespace = false) =>
     invoke<FileDiff>("file_diff", { path, oid, file, ignoreWhitespace }),
   workingDiff: (path: string, file: string, ignoreWhitespace = false) =>

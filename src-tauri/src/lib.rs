@@ -86,6 +86,7 @@ pub fn run() {
             commands::gitignore_preview,
             commands::gitignore_templates,
             commands::git_log_page,
+            commands::commit_meta,
             commands::search_commits,
         ])
         .run(tauri::generate_context!())

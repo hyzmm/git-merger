@@ -202,3 +202,124 @@ pub fn log_page(
         next_cursor: last_oid.map(|o| o.to_string()),
     })
 }
+
+/// Rich, on-demand metadata for a single commit. Loaded lazily by the
+/// CommitDetails pane when the user selects a row, in addition to the
+/// summary + parent list already provided by the log page.
+///
+/// `containing_branches` / `containing_tags` answer the classic
+/// "what released this fix?" question by walking every local branch and
+/// every tag, asking libgit2's `graph_descendant_of` whether the tip
+/// is the commit itself or a descendant of it. Remote branches are
+/// included too so users can tell whether the change has already been
+/// shipped upstream.
+#[derive(Debug, Serialize)]
+pub struct CommitMeta {
+    pub oid: String,
+    /// Full multi-line commit message (subject + body), as `git2::Commit::message`
+    /// returns it. Trailing newline is preserved.
+    pub message: String,
+    /// First line — handy for headers when the body is collapsed.
+    pub summary: String,
+    pub author_name: String,
+    pub author_email: String,
+    /// Unix seconds.
+    pub author_time: i64,
+    pub committer_name: String,
+    pub committer_email: String,
+    /// Unix seconds. Distinct from author_time for cherry-picked / rebased commits.
+    pub committer_time: i64,
+    pub parents: Vec<String>,
+    /// Local + remote branches whose tip is this commit or a descendant of it.
+    /// Local branches first (sorted alpha), then remote branches.
+    pub containing_branches: Vec<String>,
+    /// Tags (short name, no `refs/tags/` prefix) whose target is this commit
+    /// or a descendant of it. Annotated tags are peeled before comparison.
+    pub containing_tags: Vec<String>,
+}
+
+pub fn commit_meta(path: &str, oid: &str) -> Result<CommitMeta, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let target_oid = git2::Oid::from_str(oid)?;
+    let commit = repo.find_commit(target_oid)?;
+
+    let author = commit.author();
+    let committer = commit.committer();
+
+    let parents: Vec<String> = commit.parent_ids().map(|p| p.to_string()).collect();
+
+    // Walk local branches first, then remote branches. Sorting inside each
+    // bucket gives a stable display order. Remote-tracking branches keep
+    // the `origin/` prefix so the UI can distinguish them visually.
+    let mut local_branches: Vec<String> = Vec::new();
+    let mut remote_branches: Vec<String> = Vec::new();
+    for kind in [git2::BranchType::Local, git2::BranchType::Remote] {
+        for entry in repo.branches(Some(kind))?.flatten() {
+            let (branch, _) = entry;
+            let Some(name) = branch.name().ok().flatten() else {
+                continue;
+            };
+            if name.ends_with("/HEAD") {
+                continue;
+            }
+            let Some(tip_oid) = branch.get().target() else {
+                continue;
+            };
+            // graph_descendant_of returns false for equal oids; check both.
+            let contains = tip_oid == target_oid
+                || repo
+                    .graph_descendant_of(tip_oid, target_oid)
+                    .unwrap_or(false);
+            if contains {
+                match kind {
+                    git2::BranchType::Local => local_branches.push(name.to_string()),
+                    git2::BranchType::Remote => remote_branches.push(name.to_string()),
+                }
+            }
+        }
+    }
+    local_branches.sort();
+    remote_branches.sort();
+    let mut containing_branches = local_branches;
+    containing_branches.extend(remote_branches);
+
+    // Tags. `tag_foreach` yields the *tag object oid* for annotated tags
+    // (so we must peel) and the commit oid directly for lightweight tags.
+    let mut containing_tags: Vec<String> = Vec::new();
+    repo.tag_foreach(|raw_oid, name_bytes| {
+        let name = String::from_utf8_lossy(name_bytes);
+        let short = name.strip_prefix("refs/tags/").unwrap_or(&name).to_string();
+        // Peel to get the underlying commit regardless of annotated-vs-lightweight.
+        let commit_id = match repo
+            .find_object(raw_oid, None)
+            .and_then(|o| o.peel_to_commit())
+        {
+            Ok(c) => c.id(),
+            Err(_) => return true, // skip broken refs, keep iterating
+        };
+        let contains = commit_id == target_oid
+            || repo
+                .graph_descendant_of(commit_id, target_oid)
+                .unwrap_or(false);
+        if contains {
+            containing_tags.push(short);
+        }
+        true
+    })?;
+    containing_tags.sort();
+
+    Ok(CommitMeta {
+        oid: target_oid.to_string(),
+        message: commit.message().unwrap_or("").to_string(),
+        summary: commit.summary().unwrap_or("").to_string(),
+        author_name: author.name().unwrap_or("").to_string(),
+        author_email: author.email().unwrap_or("").to_string(),
+        author_time: author.when().seconds(),
+        committer_name: committer.name().unwrap_or("").to_string(),
+        committer_email: committer.email().unwrap_or("").to_string(),
+        committer_time: committer.when().seconds(),
+        parents,
+        containing_branches,
+        containing_tags,
+    })
+}
