@@ -11,6 +11,7 @@ export const zh: Dict = {
   "sidebar.worktrees": "工作树",
   "sidebar.gitignore": ".gitignore 编辑器",
   "sidebar.search": "历史搜索",
+  "sidebar.tags": "Tag 管理",
   "sidebar.diff": "Diff",
   "sidebar.merge": "合并",
 

@@ -21,6 +21,7 @@ import { FileHistoryPage } from "@/pages/FileHistoryPage";
 import { WorktreesPage } from "@/pages/WorktreesPage";
 import { GitignorePage } from "@/pages/GitignorePage";
 import { SearchPage } from "@/pages/SearchPage";
+import { TagsPage } from "@/pages/TagsPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { isAppErrorThrown } from "@/ipc/invoke";
@@ -172,6 +173,8 @@ export default function App() {
             <GitignorePage />
           ) : view === "search" ? (
             <SearchPage />
+          ) : view === "tags" ? (
+            <TagsPage />
           ) : view === "fileHistory" ? (
             <FileHistoryPage />
           ) : (

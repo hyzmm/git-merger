@@ -654,6 +654,123 @@ fn push_inner(
     Ok(RemoteOpResult::ok(summary))
 }
 
+/// Push a single tag to a remote. Uses `+refs/tags/<name>:refs/tags/<name>`
+/// when `force` is true so a moved/recreated tag overwrites the remote
+/// copy; otherwise plain non-forced refspec.
+pub fn push_tag(
+    app: AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    tag_name: &str,
+    force: bool,
+) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Push);
+    let result = push_tag_inner(&app, path, remote, tag_name, force, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn push_tag_inner(
+    app: &AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    tag_name: &str,
+    force: bool,
+    handle: &OpHandle,
+) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let remote_name = remote
+        .map(str::to_string)
+        .unwrap_or_else(|| "origin".into());
+    let mut remote = repo.find_remote(&remote_name)?;
+    let lead = if force { "+" } else { "" };
+    let refspec = format!("{lead}refs/tags/{tag_name}:refs/tags/{tag_name}");
+    {
+        let mut opts = push_options(app.clone(), handle.op_id, handle.token.clone());
+        remote.push(&[&refspec], Some(&mut opts))?;
+    }
+    Ok(RemoteOpResult::ok(format!(
+        "pushed tag {tag_name} → {remote_name}"
+    )))
+}
+
+/// Mirror every local tag to a remote (`refs/tags/*:refs/tags/*`,
+/// equivalent to `git push <remote> --tags`).
+pub fn push_all_tags(
+    app: AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    force: bool,
+) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Push);
+    let result = push_all_tags_inner(&app, path, remote, force, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn push_all_tags_inner(
+    app: &AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    force: bool,
+    handle: &OpHandle,
+) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let remote_name = remote
+        .map(str::to_string)
+        .unwrap_or_else(|| "origin".into());
+    let mut remote = repo.find_remote(&remote_name)?;
+    let refspec = if force {
+        "+refs/tags/*:refs/tags/*"
+    } else {
+        "refs/tags/*:refs/tags/*"
+    };
+    {
+        let mut opts = push_options(app.clone(), handle.op_id, handle.token.clone());
+        remote.push(&[refspec], Some(&mut opts))?;
+    }
+    Ok(RemoteOpResult::ok(format!(
+        "pushed all tags → {remote_name}"
+    )))
+}
+
+/// Delete a tag on the remote (`:refs/tags/<name>` refspec, equivalent
+/// to `git push <remote> --delete <tag>`). The local tag is left
+/// untouched; use `delete_tag` in `refs_ops` separately if needed.
+pub fn delete_remote_tag(
+    app: AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    tag_name: &str,
+) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Push);
+    let result = delete_remote_tag_inner(&app, path, remote, tag_name, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn delete_remote_tag_inner(
+    app: &AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    tag_name: &str,
+    handle: &OpHandle,
+) -> Result<RemoteOpResult, git2::Error> {
+    let repo = Repository::discover(path)?;
+    let remote_name = remote
+        .map(str::to_string)
+        .unwrap_or_else(|| "origin".into());
+    let mut remote = repo.find_remote(&remote_name)?;
+    let refspec = format!(":refs/tags/{tag_name}");
+    {
+        let mut opts = push_options(app.clone(), handle.op_id, handle.token.clone());
+        remote.push(&[&refspec], Some(&mut opts))?;
+    }
+    Ok(RemoteOpResult::ok(format!(
+        "deleted remote tag {tag_name} on {remote_name}"
+    )))
+}
+
 /// Emit a `Done` or `Cancelled` event reflecting the inner result. We
 /// distinguish between the two by inspecting the cancel flag and the
 /// shape of the error: cancelled libgit2 transfers usually surface as a

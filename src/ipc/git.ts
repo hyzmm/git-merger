@@ -97,6 +97,26 @@ export interface RefEntry {
   is_head: boolean;
 }
 
+/**
+ * Detailed view of a single tag, surfaced by `list_tags` for the Tags page.
+ * Mirrors `git::refs::TagInfo` on the backend.
+ */
+export interface TagInfo {
+  name: string;
+  /** True when stored as a `git tag -a` annotated object (has its own oid + message + tagger). */
+  is_annotated: boolean;
+  /** Annotated tag's own oid; equals target_oid for lightweight tags. */
+  tag_oid: string | null;
+  target_oid: string;
+  target_short_oid: string;
+  commit_summary: string;
+  message: string | null;
+  tagger_name: string | null;
+  tagger_email: string | null;
+  /** Unix seconds. Annotated time when available, otherwise commit time. */
+  time: number;
+}
+
 export type MergeState =
   | "clean"
   | "merge"
@@ -441,6 +461,30 @@ export const git = {
   createTag: (path: string, name: string, target: string, message?: string) =>
     invoke<void>("create_tag", { path, name, target, message: message ?? null }),
   deleteTag: (path: string, name: string) => invoke<void>("delete_tag", { path, name }),
+  /** Detailed list of every tag (annotated + lightweight) sorted newest-first. */
+  listTags: (path: string) => invoke<TagInfo[]>("list_tags", { path }),
+  /** Push a single tag. `force` uses `+refs/tags/<name>` so an updated/recreated tag overwrites the remote copy. */
+  pushTag: (path: string, tagName: string, opts?: { remote?: string; force?: boolean }) =>
+    invoke<RemoteOpResult>("git_push_tag", {
+      path,
+      remote: opts?.remote ?? null,
+      tagName,
+      force: opts?.force ?? false,
+    }),
+  /** Push every local tag to a remote (`refs/tags/*:refs/tags/*`, equiv. `git push --tags`). */
+  pushAllTags: (path: string, opts?: { remote?: string; force?: boolean }) =>
+    invoke<RemoteOpResult>("git_push_all_tags", {
+      path,
+      remote: opts?.remote ?? null,
+      force: opts?.force ?? false,
+    }),
+  /** Delete a tag on the remote without touching the local one. */
+  deleteRemoteTag: (path: string, tagName: string, opts?: { remote?: string }) =>
+    invoke<RemoteOpResult>("git_delete_remote_tag", {
+      path,
+      remote: opts?.remote ?? null,
+      tagName,
+    }),
   cherryPick: (path: string, oid: string) => invoke<void>("cherry_pick", { path, oid }),
   revertCommit: (path: string, oid: string) => invoke<void>("revert_commit", { path, oid }),
   resetTo: (path: string, oid: string, mode: "soft" | "mixed" | "hard") =>

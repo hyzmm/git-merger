@@ -83,6 +83,7 @@ export function CommandPalette() {
       { key: "reflog", labelKey: "sidebar.reflog", Icon: HistoryIcon },
       { key: "submodules", labelKey: "sidebar.submodules", Icon: Box },
       { key: "rebase", labelKey: "sidebar.rebase", Icon: GitBranch },
+      { key: "tags", labelKey: "sidebar.tags", Icon: TagIcon },
       { key: "diff", labelKey: "sidebar.diff", Icon: FileText },
       { key: "merge", labelKey: "sidebar.merge", Icon: GitBranch },
     ];

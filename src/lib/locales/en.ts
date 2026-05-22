@@ -13,6 +13,7 @@ export const en = {
   "sidebar.worktrees": "Worktrees",
   "sidebar.gitignore": ".gitignore editor",
   "sidebar.search": "Search history",
+  "sidebar.tags": "Tags",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
 

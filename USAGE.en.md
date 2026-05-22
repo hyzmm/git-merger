@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.11
+> Target version: v0.13.12
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -461,6 +461,37 @@ Other toolbar items:
 - **Group by** (toolbar toggle): **Commit** = one row per matching commit (legacy layout); **File** = Find-in-Path style — each file appears once with its touching commits nested underneath. Files are sorted by total `+`/`-` line count (desc), and the first 3 file groups auto-expand. Commits with only message-matches (no diff hits) are intentionally **not** shown in the file rollup — that view is content-driven.
 - **Recent searches** (clock icon on the right of the query input): keeps the 12 most recent searches, deduped on a structural key (mode + kind + case + path + query — any axis change → new entry). Click any row to apply and immediately re-run.
 - **★ Save** (save the current search): name it and the full axes (query / mode / kind / case / path) are persisted under that name. Same name overwrites the existing entry. Both saved searches and recents persist to `localStorage`, so they survive across app sessions.
+
+### 3.14 Tags management (v0.13.12)
+
+The 10th sidebar icon (🏷️ Tag) opens a **dedicated Tags panel**. You can also reach it via `Ctrl+K` → "Tags", or right-click any commit in History → **Create tag here…** — newly created tags appear here automatically.
+
+| Column                   | Meaning                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `annot` / `light` badge  | Annotated (`git tag -a`, has its own message + tagger) vs lightweight (a plain ref).               |
+| `name`                   | Short tag name without the `refs/tags/` prefix.                                                    |
+| Short SHA                | The **commit** the tag ultimately resolves to (annotated tags are peeled through the tag object). |
+| Commit summary           | The summary of that commit, so you remember what version a tag was cut against.                    |
+| Time                     | Annotated tag time when present, else the commit time, so lightweight tags still sort sensibly.    |
+
+Sorted **newest first** so the latest releases stay at the top.
+
+**Per-row actions** (rightmost button group):
+
+| Button         | Action                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Push**       | `git push origin <tag>` — push a single tag to the default remote.                                              |
+| **Force**      | `git push origin +<tag>` — overwrite a moved/recreated tag on the remote; click prompts a confirmation first.    |
+| **Local** 🗑️   | Delete just the local tag (`git tag -d <name>`); the remote copy is left alone.                                  |
+| **Remote** 🗑️  | Delete just the remote tag (`git push origin :refs/tags/<name>`); the local copy stays. Confirmation explains the refspec. |
+
+**Toolbar actions**:
+
+- **Push all tags** (☁️↑) = `git push origin --tags`. Mirrors every local tag to the remote in one shot using `refs/tags/*:refs/tags/*`.
+
+**Expanded row** (click the ▶ at the row start): annotated tags expand to show `tag oid`, `commit oid`, `tagger name <email>`, and the original message (multi-line preserved); lightweight tags expand to a one-liner explaining they have no own message + tagger.
+
+> Every push / force-push / delete-remote shares the **same** progress channel as branch push (v0.13.7): the Topbar shows a progress bar + Cancel button (Esc), and missing credentials surface the same Credential dialog.
 
 ---
 
@@ -1103,6 +1134,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.9 | Diff viewer **Copy patch / Apply patch from clipboard**: `DiffViewer` toolbar gains a Copy patch button (with "Copied!" feedback); `ChangesPage` gains an **Apply patch…** dialog (paste unified-patch text, dry-run check failures keep the dialog open and surface the libgit2 reason, so a half-applied dirty tree is impossible); new `src-tauri/src/git/patch.rs` module (`format_commit_file_patch` / `format_working_file_patch` / `apply_patch_check` / `apply_patch`) + 3 integration tests |
 | v0.13.10 | Settings dialog mirrors the **Graph display mode**: shares the same backing field as the HistoryFilterBar Graph button (two-way sync), so Settings becomes the home for the long-term preference while the filter-bar shortcut handles ad-hoc toggles; ships 4 new `settings.graphMode.*` i18n keys                                                                                                                                                                                            |
 | v0.13.11 | Submodules view gains **recursive update**: a 🌳 FolderTree icon button performs depth-first recursion — first updates the top-level submodule, then opens it as a Repository and repeats the process for **its** child submodules, equivalent to `git submodule update --init --recursive`; especially useful for nested submodule repositories; backend `git/submodule.rs::update_recursive`                                                                                                  |
+| v0.13.12 | Dedicated **Tags management panel**: Sidebar gains a 🏷️ Tag entry, also reachable via `Ctrl+K` → "Tags"; the table lists every tag newest-first, annotated rows expand to reveal message / tagger / raw oid while lightweight rows are clearly distinguished; per-row **Push** / **Force** / delete-local / delete-remote + toolbar **Push all tags** (`refs/tags/*:refs/tags/*`); remote deletion uses `:refs/tags/<name>` refspec; backend `git/refs.rs::list_tags` peels annotated tag objects, plus three new public `git/remote.rs` functions (push_tag / push_all_tags / delete_remote_tag) sharing the existing OpHandle progress + cancel channel; +1 integration test |
 
 ---
 

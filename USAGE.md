@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.11  
+> 适用版本：v0.13.12  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -460,6 +460,37 @@ bun run tauri:build
 - **Group by**（工具栏切换）：**Commit** = 一行一个命中（旧版本布局）；**File** = Find-in-Path 风格，每个文件一次显示，触及它的 commit 嵌套展开。文件按总命中行数降序，前 3 个默认展开。仅 message 命中（无 diff 命中）的 commit 在文件视图里**不出现**——文件视图是内容驱动的。
 - **最近搜索**（输入框右侧时钟图标）：保留最近 12 条结构化去重的搜索（mode + kind + case + path + query 任一不同就视为新条目）。点击即应用并立即重跑。
 - **★ Save**（保存当前搜索）：起个名字保存当前的全套条件（query/mode/kind/case/path），下次一键复用。同名保存直接替换。所有保存项 + 最近搜索都持久化到 localStorage，跨会话保留。
+
+### 3.14 Tag 管理（v0.13.12）
+
+Sidebar 第 10 个图标（🏷️ Tag）= 专用 **Tag 管理面板**。也可 `Ctrl+K` → "Tags" 进入，或 History 视图右键任一 commit → **Create tag here…** 创建后自动出现在面板里。
+
+| 列        | 含义                                                                                |
+| --------- | ----------------------------------------------------------------------------------- |
+| `annot` / `light` 徽标 | annotated（`git tag -a`，自带消息 + 打标人）/ lightweight（仅一个 ref）|
+| `name`    | tag 短名（不含 `refs/tags/` 前缀）                                                  |
+| 短 SHA    | tag 指向的**最终 commit**（annotated tag 会先穿过 tag 对象再到 commit）              |
+| commit summary | 指向 commit 的 summary，方便记起这个 tag 是给什么版本打的                      |
+| 时间      | annotated tag 的打标时间，或 lightweight tag 指向的 commit 时间                      |
+
+按时间**新→旧**排序，最新发布的 tag 始终在顶部。
+
+**逐行操作**（最右侧按钮组）：
+
+| 按钮          | 作用                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| **Push**      | `git push origin <tag>` — 推单个 tag 到默认 remote                                            |
+| **Force**     | `git push origin +<tag>` — 当 tag 被移动/重建时覆盖远端那份；点击会先弹 confirm                |
+| **Local** 🗑️ | 仅删本地 tag（`git tag -d <name>`），远端那份不动                                              |
+| **Remote** 🗑️ | 仅删远端 tag（`git push origin :refs/tags/<name>`），本地那份不动；弹 confirm 提醒"只推删除 refspec" |
+
+**顶部工具栏**：
+
+- **Push all tags**（☁️↑） = `git push origin --tags`，一次把所有本地 tag 镜像到远端，refspec 是 `refs/tags/*:refs/tags/*`
+
+**展开行**（点击行首 ▶ 图标）：annotated tag 会展开显示 `tag oid`、`commit oid`、`tagger name <email>`、原始 message（多行保留）；lightweight tag 只展开提示"无 message + 无 tagger"。
+
+> 所有 push / push --force / delete-remote 都走和 push branch **同一套**进度通道（v0.13.7）：Topbar 出进度条 + 取消按钮（Esc），凭据缺失会弹同样的 Credential 对话框。
 
 ---
 
@@ -1094,6 +1125,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.9 | Diff 视图 **Copy patch / Apply patch from clipboard**：`DiffViewer` 工具栏 Copy patch 按钮（带 "Copied!" 反馈），`ChangesPage` 顶部 **Apply patch…** 对话框（粘贴 unified-patch 文本，dry-run check 失败时保持打开 + 显示 libgit2 原因，避免半应用脏工作树）；新模块 `src-tauri/src/git/patch.rs`（`format_commit_file_patch` / `format_working_file_patch` / `apply_patch_check` / `apply_patch`）+ 3 个集成测试                                                                                                          |
 | v0.13.10 | Settings 面板镜像 **Graph 显示模式**：与 HistoryFilterBar 上的 Graph 按钮共享同一字段（双向同步），Settings 给"长期偏好"统一入口，HistoryFilterBar 快捷按钮给"临时切换"便利；新增 `settings.graphMode.*` 4 条 i18n key                                                                                                                                                                                                                                                                                            |
 | v0.13.11 | Submodules 视图 **递归 update**：FolderTree 🌳 图标按钮深度优先递归——先 update 顶层 submodule，再打开它作为 Repository、对**它的**子 submodules 重复执行，等价于 `git submodule update --init --recursive`，对嵌套 submodule 仓库尤其有用；后端 `git/submodule.rs::update_recursive`                                                                                                                                                                                                                            |
+| v0.13.12 | 专用 **Tag 管理面板**：Sidebar 新增 🏷️ Tag 入口 + `Ctrl+K` 命令面板可达；表格按时间倒序展示所有 tag，annotated 行可展开显示 message / tagger / 原始 oid，lightweight 行清晰区分；逐行 **Push** / **Force** / 删本地 / 删远端 + 顶部 **Push all tags**（`refs/tags/*:refs/tags/*`）+ 删除远端走 `:refs/tags/<name>` refspec；后端 `git/refs.rs::list_tags` 解析 annotated tag 对象 + `git/remote.rs` 三个新公开函数（push_tag / push_all_tags / delete_remote_tag）共享既有 OpHandle 进度 + 取消通道，新增 1 个集成测试 |
 
 ---
 

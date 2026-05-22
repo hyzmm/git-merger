@@ -17,6 +17,7 @@ import {
   type RepoInfo,
   type StashEntry,
   type SubmoduleInfo,
+  type TagInfo,
   type WorkingFile,
   type WorktreeInfo,
   type GitignoreTemplate,
@@ -75,6 +76,7 @@ export type ViewKey =
   | "worktrees"
   | "gitignore"
   | "search"
+  | "tags"
   | "fileHistory";
 export type DiffMode = "sbs" | "unified";
 
@@ -203,6 +205,15 @@ interface SubmodulesView {
   error: string | null;
 }
 
+interface TagsView {
+  entries: TagInfo[];
+  loading: boolean;
+  /** True while a push / delete-remote / delete-local op is running. */
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+}
+
 interface WorktreesView {
   entries: WorktreeInfo[];
   loading: boolean;
@@ -305,6 +316,7 @@ interface AppState {
   stash: StashView;
   reflog: ReflogView;
   submodules: SubmodulesView;
+  tags: TagsView;
   rebase: RebaseView;
   palette: PaletteState;
   fileHistory: FileHistoryView;
@@ -435,6 +447,12 @@ interface AppState {
   renameBranch: (oldName: string, newName: string) => Promise<void>;
   createTag: (name: string, target: string, message?: string) => Promise<void>;
   deleteTag: (name: string) => Promise<void>;
+
+  // tags panel (v0.13.12)
+  loadTags: () => Promise<void>;
+  pushTag: (tagName: string, opts?: { remote?: string; force?: boolean }) => Promise<void>;
+  pushAllTags: (opts?: { remote?: string; force?: boolean }) => Promise<void>;
+  deleteRemoteTag: (tagName: string, opts?: { remote?: string }) => Promise<void>;
 
   // commit ops
   cherryPick: (oid: string) => Promise<void>;
@@ -613,6 +631,14 @@ const emptySubmodules: SubmodulesView = {
   error: null,
 };
 
+const emptyTags: TagsView = {
+  entries: [],
+  loading: false,
+  busy: false,
+  status: null,
+  error: null,
+};
+
 const emptyWorktrees: WorktreesView = {
   entries: [],
   loading: false,
@@ -714,6 +740,7 @@ interface SessionSnapshot {
   stash: StashView;
   reflog: ReflogView;
   submodules: SubmodulesView;
+  tags: TagsView;
   rebase: RebaseView;
   fileHistory: FileHistoryView;
   worktrees: WorktreesView;
@@ -733,6 +760,7 @@ function emptySession(): SessionSnapshot {
     stash: { ...emptyStash },
     reflog: { ...emptyReflog },
     submodules: { ...emptySubmodules },
+    tags: { ...emptyTags },
     rebase: { ...emptyRebase },
     fileHistory: { ...emptyFileHistory },
     worktrees: { ...emptyWorktrees },
@@ -753,6 +781,7 @@ function snapshotSession(s: AppState): SessionSnapshot {
     stash: s.stash,
     reflog: s.reflog,
     submodules: s.submodules,
+    tags: s.tags,
     rebase: s.rebase,
     fileHistory: s.fileHistory,
     worktrees: s.worktrees,
@@ -785,6 +814,7 @@ export const useApp = create<AppState>((set, get) => ({
   stash: { ...emptyStash },
   reflog: { ...emptyReflog },
   submodules: { ...emptySubmodules },
+  tags: { ...emptyTags },
   rebase: { ...emptyRebase },
   palette: { ...emptyPalette },
   fileHistory: { ...emptyFileHistory },
@@ -836,6 +866,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (v === "stash") void get().loadStash();
     if (v === "reflog") void get().loadReflog();
     if (v === "submodules") void get().loadSubmodules();
+    if (v === "tags") void get().loadTags();
     if (v === "rebase") void get().refreshRebaseStatus();
     if (v === "worktrees") void get().loadWorktrees();
     if (v === "gitignore") void get().loadGitignore();
@@ -899,6 +930,7 @@ export const useApp = create<AppState>((set, get) => ({
         stash: { ...emptyStash },
         reflog: { ...emptyReflog },
         submodules: { ...emptySubmodules },
+        tags: { ...emptyTags },
         rebase: { ...emptyRebase },
         palette: { ...emptyPalette },
         fileHistory: { ...emptyFileHistory },
@@ -1200,6 +1232,8 @@ export const useApp = create<AppState>((set, get) => ({
       await get().loadReflog();
     } else if (view === "submodules") {
       await get().loadSubmodules();
+    } else if (view === "tags") {
+      await get().loadTags();
     } else if (view === "worktrees") {
       await get().loadWorktrees();
     } else if (view === "gitignore") {
@@ -2054,6 +2088,9 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       await git.createTag(repo.path, name, target, message);
       void get().loadHistory();
+      // Keep the Tags panel in sync if the user happens to be looking at
+      // it (or visits it next).
+      void get().loadTags();
     } catch (e) {
       set({ error: String(e) });
     }
@@ -2066,8 +2103,79 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       await git.deleteTag(repo.path, name);
       void get().loadHistory();
+      void get().loadTags();
     } catch (e) {
       set({ error: String(e) });
+    }
+  },
+
+  // ---------- Tags panel (v0.13.12) ----------
+  loadTags: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ tags: { ...s.tags, loading: true, error: null } }));
+    try {
+      const entries = await git.listTags(repo.path);
+      set((s) => ({ tags: { ...s.tags, entries, loading: false } }));
+    } catch (e) {
+      set((s) => ({ tags: { ...s.tags, loading: false, error: String(e) } }));
+    }
+  },
+
+  pushTag: async (tagName, opts) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ tags: { ...s.tags, busy: true, error: null, status: null } }));
+    try {
+      const r = await git.pushTag(repo.path, tagName, opts);
+      set((s) => ({
+        tags: {
+          ...s.tags,
+          busy: false,
+          status: r.message ?? `Pushed tag ${tagName}`,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({ tags: { ...s.tags, busy: false, error: String(e) } }));
+    }
+  },
+
+  pushAllTags: async (opts) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({ tags: { ...s.tags, busy: true, error: null, status: null } }));
+    try {
+      const r = await git.pushAllTags(repo.path, opts);
+      set((s) => ({
+        tags: { ...s.tags, busy: false, status: r.message ?? "Pushed all tags" },
+      }));
+    } catch (e) {
+      set((s) => ({ tags: { ...s.tags, busy: false, error: String(e) } }));
+    }
+  },
+
+  deleteRemoteTag: async (tagName, opts) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (
+      !confirm(
+        `Delete the tag '${tagName}' on the remote? The local tag will stay; this only pushes :refs/tags/${tagName}.`,
+      )
+    ) {
+      return;
+    }
+    set((s) => ({ tags: { ...s.tags, busy: true, error: null, status: null } }));
+    try {
+      const r = await git.deleteRemoteTag(repo.path, tagName, opts);
+      set((s) => ({
+        tags: {
+          ...s.tags,
+          busy: false,
+          status: r.message ?? `Deleted remote tag ${tagName}`,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({ tags: { ...s.tags, busy: false, error: String(e) } }));
     }
   },
 

@@ -117,6 +117,11 @@ pub fn list_refs(path: String) -> R<Vec<git::RefEntry>> {
 }
 
 #[tauri::command]
+pub fn list_tags(path: String) -> R<Vec<git::TagInfo>> {
+    Ok(git::refs::list_tags(&path)?)
+}
+
+#[tauri::command]
 pub fn blame_file(path: String, file: String) -> R<Vec<git::BlameLine>> {
     Ok(git::blame::blame_file(&path, &file)?)
 }
@@ -233,6 +238,53 @@ pub fn git_push(
         remote.as_deref(),
         branch.as_deref(),
         set_upstream,
+    )?)
+}
+
+#[tauri::command]
+pub fn git_push_tag(
+    app: tauri::AppHandle,
+    path: String,
+    remote: Option<String>,
+    tag_name: String,
+    force: bool,
+) -> R<git::RemoteOpResult> {
+    Ok(git::remote::push_tag(
+        app,
+        &path,
+        remote.as_deref(),
+        &tag_name,
+        force,
+    )?)
+}
+
+#[tauri::command]
+pub fn git_push_all_tags(
+    app: tauri::AppHandle,
+    path: String,
+    remote: Option<String>,
+    force: bool,
+) -> R<git::RemoteOpResult> {
+    Ok(git::remote::push_all_tags(
+        app,
+        &path,
+        remote.as_deref(),
+        force,
+    )?)
+}
+
+#[tauri::command]
+pub fn git_delete_remote_tag(
+    app: tauri::AppHandle,
+    path: String,
+    remote: Option<String>,
+    tag_name: String,
+) -> R<git::RemoteOpResult> {
+    Ok(git::remote::delete_remote_tag(
+        app,
+        &path,
+        remote.as_deref(),
+        &tag_name,
     )?)
 }
 

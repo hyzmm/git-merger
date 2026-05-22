@@ -28,7 +28,7 @@ pub use log::LogPage;
 pub use merge::{ConflictContent, MergeState};
 pub use rebase::{RebaseStatus, RebaseStep};
 pub use reflog::ReflogEntry;
-pub use refs::RefEntry;
+pub use refs::{RefEntry, TagInfo};
 pub use remote::{CredReply, RemoteOpResult};
 pub use search::{DiffHit, PatternKind, SearchHit, SearchMode, SearchSummary};
 pub use stash::StashEntry;

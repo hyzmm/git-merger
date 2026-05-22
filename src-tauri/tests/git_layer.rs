@@ -84,6 +84,43 @@ fn create_lightweight_and_annotated_tags() {
         .any(|r| r.name == "v2" && matches!(r.kind, git::refs::RefKind::Tag)));
 }
 
+#[test]
+fn list_tags_distinguishes_annotated_from_lightweight() {
+    let r = TempRepo::init();
+    let oid = r.commit_file("a.txt", "1\n", "init commit summary");
+
+    git::refs_ops::create_tag(&r.path_str(), "v1.0", &oid.to_string(), None).unwrap();
+    git::refs_ops::create_tag(
+        &r.path_str(),
+        "v1.1",
+        &oid.to_string(),
+        Some("Release notes go here"),
+    )
+    .unwrap();
+
+    let tags = git::refs::list_tags(&r.path_str()).unwrap();
+    let by_name: std::collections::HashMap<_, _> =
+        tags.iter().map(|t| (t.name.as_str(), t)).collect();
+
+    let v10 = by_name.get("v1.0").expect("lightweight tag listed");
+    assert!(!v10.is_annotated, "v1.0 should be lightweight");
+    assert!(v10.message.is_none());
+    assert!(v10.tagger_name.is_none());
+    assert_eq!(v10.target_oid, oid.to_string());
+    assert_eq!(v10.commit_summary, "init commit summary");
+
+    let v11 = by_name.get("v1.1").expect("annotated tag listed");
+    assert!(v11.is_annotated, "v1.1 should be annotated");
+    assert_eq!(
+        v11.message.as_deref().unwrap().trim(),
+        "Release notes go here"
+    );
+    assert!(v11.tagger_name.is_some());
+    // Annotated tag has its own oid distinct from the commit it points at.
+    assert!(v11.tag_oid.is_some());
+    assert_ne!(v11.tag_oid.as_deref().unwrap(), v11.target_oid);
+}
+
 // ---------------------------------------------------------------------------
 // commit_ops (cherry-pick + reset)
 // ---------------------------------------------------------------------------
