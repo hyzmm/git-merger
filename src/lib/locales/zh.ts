@@ -28,6 +28,10 @@ export const zh: Dict = {
   "topbar.progress.receiving": "接收中",
   "topbar.progress.indexing": "索引中",
   "topbar.progress.pushing": "推送中",
+  "topbar.progress.starting": "正在开始…",
+  "topbar.cancel": "取消",
+  "topbar.cancelling": "正在取消…",
+  "topbar.cancelTitle": "取消此远端操作（Esc）",
 
   // Welcome
   "welcome.title": "Git Tools",

@@ -16,7 +16,7 @@ use git2::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -48,29 +48,61 @@ impl RemoteOpResult {
     }
 }
 
+/// Which high-level remote action a progress stream belongs to.
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+pub enum RemoteOpKind {
+    Fetch,
+    Pull,
+    Push,
+}
+
 /// Progress event payload broadcast to the frontend.
+///
+/// `op_id` lets the frontend disambiguate concurrent (or rapidly successive)
+/// operations and tie a progress / done / cancelled event back to the
+/// original `Started` it issued.
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "phase", rename_all = "kebab-case")]
 pub enum ProgressEvent {
+    /// A new remote op is about to begin. Always emitted exactly once per
+    /// `fetch`/`pull`/`push` call, before any other event in the stream.
+    Started { op_id: u64, op: RemoteOpKind },
     /// Negotiating with the remote / resolving deltas.
-    Sideband { message: String },
+    Sideband { op_id: u64, message: String },
     /// Receiving objects (fetch).
     Receiving {
+        op_id: u64,
         received: usize,
         total: usize,
         bytes: usize,
     },
     /// Indexing local objects (after receive).
-    Indexing { indexed: usize, total: usize },
+    Indexing {
+        op_id: u64,
+        indexed: usize,
+        total: usize,
+    },
     /// Pushing objects.
-    Pushing { pushed: usize, total: usize },
+    Pushing {
+        op_id: u64,
+        pushed: usize,
+        total: usize,
+    },
     /// Per-ref push response. status is None on success, Some(reason) on failure.
     PushStatus {
+        op_id: u64,
         refname: String,
         status: Option<String>,
     },
     /// Operation finished (success or failure).
-    Done { ok: bool, summary: String },
+    Done {
+        op_id: u64,
+        ok: bool,
+        summary: String,
+    },
+    /// User cancelled the operation via `cancel_remote_op`.
+    Cancelled { op_id: u64 },
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +201,71 @@ pub fn cancel_credentials(id: u64) {
 }
 
 // ---------------------------------------------------------------------------
+// Cancel-token registry for in-flight remote ops
+// ---------------------------------------------------------------------------
+//
+// Every `fetch` / `pull` / `push` call allocates a fresh u64 op_id and
+// inserts an `Arc<AtomicBool>` into `CANCEL_TOKENS`. The remote callbacks
+// (transfer / sideband / push) check the token; once it's been set to
+// true via `cancel_remote_op`, they return `false` so libgit2 aborts the
+// operation, which surfaces to the caller as a `git2::Error` we then
+// classify as `UserCancelled`.
+
+static CANCEL_TOKENS: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
+static NEXT_OP_ID: AtomicU64 = AtomicU64::new(1);
+
+fn cancel_tokens() -> &'static Mutex<HashMap<u64, Arc<AtomicBool>>> {
+    CANCEL_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Set up tracking for a new remote op. Returns the op id and a token that
+/// the callbacks should check on every progress tick. The caller should
+/// keep this `OpHandle` until the op finishes; on drop, the token is
+/// removed from the registry so a stale `cancel_remote_op` no-ops.
+pub struct OpHandle {
+    pub op_id: u64,
+    pub token: Arc<AtomicBool>,
+}
+
+impl OpHandle {
+    pub fn is_cancelled(&self) -> bool {
+        self.token.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for OpHandle {
+    fn drop(&mut self) {
+        cancel_tokens().lock().unwrap().remove(&self.op_id);
+    }
+}
+
+fn start_op(app: &AppHandle, op: RemoteOpKind) -> OpHandle {
+    let op_id = NEXT_OP_ID.fetch_add(1, Ordering::SeqCst);
+    let token = Arc::new(AtomicBool::new(false));
+    cancel_tokens().lock().unwrap().insert(op_id, token.clone());
+    let _ = app.emit("git://progress", ProgressEvent::Started { op_id, op });
+    OpHandle { op_id, token }
+}
+
+/// Frontend → backend: flip an op's cancel flag. The libgit2 callbacks
+/// pick it up on their next tick (sub-second granularity in practice).
+/// Idempotent — cancelling an unknown / already-finished op is a no-op.
+pub fn cancel_remote_op(op_id: u64) {
+    if let Some(token) = cancel_tokens().lock().unwrap().get(&op_id) {
+        token.store(true, Ordering::Relaxed);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Callback construction
 // ---------------------------------------------------------------------------
 
-fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks<'a> {
+fn make_callbacks<'a>(
+    app: AppHandle,
+    op_id: u64,
+    cancel: Arc<AtomicBool>,
+    total_pack_bytes: bool,
+) -> RemoteCallbacks<'a> {
     let mut cb = RemoteCallbacks::new();
 
     // -------- credentials --------
@@ -237,13 +330,20 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
 
     // -------- progress: receive (fetch) --------
     let app_progress = app.clone();
+    let cancel_recv = cancel.clone();
     cb.transfer_progress(move |stats| {
+        // Returning `false` from this callback signals libgit2 to abort the
+        // transfer. We use it to honour the user-cancel flag.
+        if cancel_recv.load(Ordering::Relaxed) {
+            return false;
+        }
         let received = stats.received_objects();
         let total = stats.total_objects();
         let bytes = stats.received_bytes();
         let _ = app_progress.emit(
             "git://progress",
             ProgressEvent::Receiving {
+                op_id,
                 received,
                 total,
                 bytes,
@@ -253,6 +353,7 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
             let _ = app_progress.emit(
                 "git://progress",
                 ProgressEvent::Indexing {
+                    op_id,
                     indexed: stats.indexed_objects(),
                     total,
                 },
@@ -268,6 +369,7 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
             let _ = app_sb.emit(
                 "git://progress",
                 ProgressEvent::Sideband {
+                    op_id,
                     message: s.trim().to_string(),
                 },
             );
@@ -277,10 +379,19 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
 
     // -------- progress: push --------
     let app_push = app.clone();
+    let cancel_push = cancel.clone();
     cb.push_transfer_progress(move |current, total, _bytes| {
+        // push_transfer_progress's callback signature can't return a value
+        // to abort, so we only fire the event if not cancelled — the next
+        // pack-builder tick (or the credentials callback re-fire) will
+        // surface the cancel through the transfer hook.
+        if cancel_push.load(Ordering::Relaxed) {
+            return;
+        }
         let _ = app_push.emit(
             "git://progress",
             ProgressEvent::Pushing {
+                op_id,
                 pushed: current,
                 total,
             },
@@ -293,6 +404,7 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
         let _ = app_ref.emit(
             "git://progress",
             ProgressEvent::PushStatus {
+                op_id,
                 refname: refname.to_string(),
                 status: status.map(|s| s.to_string()),
             },
@@ -305,17 +417,17 @@ fn make_callbacks<'a>(app: AppHandle, total_pack_bytes: bool) -> RemoteCallbacks
     cb
 }
 
-fn fetch_options<'a>(app: AppHandle) -> FetchOptions<'a> {
+fn fetch_options<'a>(app: AppHandle, op_id: u64, cancel: Arc<AtomicBool>) -> FetchOptions<'a> {
     let mut opts = FetchOptions::new();
-    opts.remote_callbacks(make_callbacks(app, false));
+    opts.remote_callbacks(make_callbacks(app, op_id, cancel, false));
     opts.download_tags(AutotagOption::Auto);
     opts.prune(git2::FetchPrune::On);
     opts
 }
 
-fn push_options<'a>(app: AppHandle) -> PushOptions<'a> {
+fn push_options<'a>(app: AppHandle, op_id: u64, cancel: Arc<AtomicBool>) -> PushOptions<'a> {
     let mut opts = PushOptions::new();
-    opts.remote_callbacks(make_callbacks(app, true));
+    opts.remote_callbacks(make_callbacks(app, op_id, cancel, true));
     opts
 }
 
@@ -328,6 +440,18 @@ pub fn fetch(
     app: AppHandle,
     path: &str,
     remote: Option<&str>,
+) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Fetch);
+    let result = fetch_inner(&app, path, remote, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn fetch_inner(
+    app: &AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    handle: &OpHandle,
 ) -> Result<RemoteOpResult, git2::Error> {
     let repo = Repository::discover(path)?;
     let remotes: Vec<String> = match remote {
@@ -345,7 +469,7 @@ pub fn fetch(
     let mut details = Vec::new();
     for name in &remotes {
         let mut r = repo.find_remote(name)?;
-        let mut opts = fetch_options(app.clone());
+        let mut opts = fetch_options(app.clone(), handle.op_id, handle.token.clone());
         // Use the remote's configured refspecs (None = default).
         let refspecs: [&str; 0] = [];
         r.fetch(&refspecs, Some(&mut opts), None)?;
@@ -363,19 +487,23 @@ pub fn fetch(
     } else {
         format!("fetched {} remotes", remotes.len())
     };
-    let _ = app.emit(
-        "git://progress",
-        ProgressEvent::Done {
-            ok: true,
-            summary: summary.clone(),
-        },
-    );
     Ok(RemoteOpResult::ok_with(summary, details))
 }
 
 /// Pull = fetch + fast-forward (only). Returns an error on a non-FF situation;
 /// the user can resolve via merge UI separately.
 pub fn pull(app: AppHandle, path: &str) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Pull);
+    let result = pull_inner(&app, path, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn pull_inner(
+    app: &AppHandle,
+    path: &str,
+    handle: &OpHandle,
+) -> Result<RemoteOpResult, git2::Error> {
     let repo = Repository::discover(path)?;
 
     // Determine the upstream of the current branch.
@@ -411,7 +539,7 @@ pub fn pull(app: AppHandle, path: &str) -> Result<RemoteOpResult, git2::Error> {
     // Fetch the upstream's remote.
     let mut remote = repo.find_remote(remote_name)?;
     {
-        let mut opts = fetch_options(app.clone());
+        let mut opts = fetch_options(app.clone(), handle.op_id, handle.token.clone());
         let refspecs: [&str; 0] = [];
         remote.fetch(&refspecs, Some(&mut opts), None)?;
     }
@@ -444,13 +572,6 @@ pub fn pull(app: AppHandle, path: &str) -> Result<RemoteOpResult, git2::Error> {
         return Err(git2::Error::from_str("nothing to merge"));
     };
 
-    let _ = app.emit(
-        "git://progress",
-        ProgressEvent::Done {
-            ok: true,
-            summary: result.message.clone(),
-        },
-    );
     Ok(result)
 }
 
@@ -461,6 +582,20 @@ pub fn push(
     remote: Option<&str>,
     branch: Option<&str>,
     set_upstream: bool,
+) -> Result<RemoteOpResult, git2::Error> {
+    let handle = start_op(&app, RemoteOpKind::Push);
+    let result = push_inner(&app, path, remote, branch, set_upstream, &handle);
+    finish_op(&app, &handle, &result);
+    result
+}
+
+fn push_inner(
+    app: &AppHandle,
+    path: &str,
+    remote: Option<&str>,
+    branch: Option<&str>,
+    set_upstream: bool,
+    handle: &OpHandle,
 ) -> Result<RemoteOpResult, git2::Error> {
     let repo = Repository::discover(path)?;
 
@@ -505,7 +640,7 @@ pub fn push(
         name = local_branch_name
     );
     {
-        let mut opts = push_options(app.clone());
+        let mut opts = push_options(app.clone(), handle.op_id, handle.token.clone());
         remote.push(&[&refspec], Some(&mut opts))?;
     }
 
@@ -516,12 +651,33 @@ pub fn push(
     }
 
     let summary = format!("pushed {} → {}", local_branch_name, remote_name);
-    let _ = app.emit(
-        "git://progress",
-        ProgressEvent::Done {
-            ok: true,
-            summary: summary.clone(),
-        },
-    );
     Ok(RemoteOpResult::ok(summary))
+}
+
+/// Emit a `Done` or `Cancelled` event reflecting the inner result. We
+/// distinguish between the two by inspecting the cancel flag and the
+/// shape of the error: cancelled libgit2 transfers usually surface as a
+/// `User` error code (because our callback returned `false`).
+fn finish_op(
+    app: &AppHandle,
+    handle: &OpHandle,
+    result: &Result<RemoteOpResult, git2::Error>,
+) {
+    let cancelled = handle.is_cancelled();
+    let event = match result {
+        Ok(r) => ProgressEvent::Done {
+            op_id: handle.op_id,
+            ok: true,
+            summary: r.message.clone(),
+        },
+        Err(_) if cancelled => ProgressEvent::Cancelled {
+            op_id: handle.op_id,
+        },
+        Err(e) => ProgressEvent::Done {
+            op_id: handle.op_id,
+            ok: false,
+            summary: e.message().to_string(),
+        },
+    };
+    let _ = app.emit("git://progress", event);
 }

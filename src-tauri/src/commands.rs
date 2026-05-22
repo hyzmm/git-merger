@@ -224,6 +224,12 @@ pub fn cancel_credentials(id: u64) -> R<()> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn cancel_remote_op(op_id: u64) -> R<()> {
+    git::remote::cancel_remote_op(op_id);
+    Ok(())
+}
+
 // ---------- Stash ----------
 
 #[tauri::command]

@@ -461,7 +461,23 @@ bun run tauri:build
 | **Pull**  | **仅 fast-forward**；非 FF 会报错并引导你用 Merge 视图            |
 | **Push**  | 自动从 branch upstream 推断 remote；无 upstream 时回落到 `origin` |
 
-**实时进度**（v0.5.0）：右上角显示 "Receiving 1234/5678" / "Indexing" / "Pushing" 等。
+**实时进度 + 取消**（v0.5.0 起进度事件；v0.13.7 加进度条 + 一键取消）：远程操作进行时，Topbar 右侧出现一个 24px 宽的进度条 + 百分比 + 状态明细 + **取消按钮**：
+
+| 元素                   | 含义                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| 进度条（确定态）       | 蓝色填充条 + 百分比，表示当前 phase 的 `received/total` 或 `pushed/total`                    |
+| 进度条（不确定态）     | 浅蓝脉冲动画——sideband 文本阶段或 push-status 等没有 ratio 的阶段不撒谎给 0%                 |
+| 文本明细               | "Receiving 1234/5678 · 4.2 MB" / "Indexing 9001/12345" / 服务端 sideband 一行原文 / 推送状态 |
+| **Cancel 按钮**        | 点击 / 按 **Esc** 触发；后端立即翻转 cancel-token，下一次 callback tick 让 libgit2 终止操作  |
+| Cancel → "Cancelling…" | 点击后按钮变灰禁用，等后端真正中断（一般 < 1 秒）；中断后 banner 显示"Cancelled."            |
+
+**取消机制实现要点**（后端 `git/remote.rs`）：
+
+- 每次 `fetch / pull / push` 进来分配一个 `op_id` + `Arc<AtomicBool>` cancel-token，注册到全局 `CANCEL_TOKENS` map
+- 立即向前端 emit `started { op_id, op }`，后续所有 progress / done / cancelled 事件都带同一 `op_id`，前端用它把进度绑定到当前 op（防止旧 op 的迟到事件污染新 op）
+- libgit2 callbacks（transfer / push / sideband）每个 tick 检查 token，true 时返回 `false` → libgit2 中止 → 抛出 `git2::Error`
+- `error.rs` 的启发式：err message 含 "cancel" / "user dismissed" / "user aborted" → 自动归类为 `UserCancelled` kind → toast / banner 文案变成"Cancelled."
+- `OpHandle::Drop` 在 op 结束时自动从 map 移除 token——所以重复的 cancel 调用幂等（finished op 的 cancel 是 no-op）
 
 **凭据解析顺序**：
 

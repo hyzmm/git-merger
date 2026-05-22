@@ -462,7 +462,23 @@ Other toolbar items:
 | **Pull**  | **fast-forward only**; non-FF errors out and points you to the Merge view |
 | **Push**  | auto-resolves remote from branch upstream config; falls back to `origin`  |
 
-**Live progress** (v0.5.0): top-right shows "Receiving 1234/5678" / "Indexing" / "Pushing".
+**Live progress + cancel** (v0.5.0 added progress events; v0.13.7 added the visual bar + cancel): while a remote op is running, the top-right shows a 24px progress bar + percentage + status detail + **Cancel button**:
+
+| Element                      | Meaning                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Progress bar (determinate)   | Blue fill + percentage — `received/total` or `pushed/total` for the current phase                         |
+| Progress bar (indeterminate) | Pulsing light-blue stripe — used for sideband text / push-status phases that have no real ratio           |
+| Status text                  | "Receiving 1234/5678 · 4.2 MB" / "Indexing 9001/12345" / sideband line from the server / per-ref response |
+| **Cancel button**            | Click or press **Esc** — backend flips the cancel-token; libgit2 aborts on its next callback tick         |
+| Cancel → "Cancelling…"       | Button greys out while waiting for the abort to surface (usually < 1 s); banner then reads "Cancelled."   |
+
+**Cancellation mechanics** (backend `git/remote.rs`):
+
+- Every `fetch / pull / push` call allocates a fresh `op_id` + `Arc<AtomicBool>` cancel-token, registered in a global `CANCEL_TOKENS` map.
+- A `started { op_id, op }` event is emitted before any progress; every subsequent progress / done / cancelled event carries the same `op_id`, so the frontend can ignore stale events from an earlier op.
+- libgit2 callbacks (transfer / push / sideband) check the token on each tick. `true` → return `false` → libgit2 aborts → bubbles up as a `git2::Error`.
+- `error.rs` heuristic: messages containing "cancel" / "user dismissed" / "user aborted" classify as `UserCancelled`, so the toast / banner reads **"Cancelled."** instead of a raw libgit2 message.
+- `OpHandle::Drop` cleans the token out of the map when the op finishes — repeated cancels are idempotent (cancelling a finished op is a no-op).
 
 **Credential resolution order**:
 

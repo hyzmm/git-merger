@@ -180,14 +180,27 @@ export interface CredRequest {
   username_hint: string | null;
 }
 
-/** Backend → frontend progress events on `git://progress`. */
+/**
+ * Backend → frontend progress events on `git://progress`.
+ *
+ * Every `fetch` / `pull` / `push` call begins with exactly one `started`
+ * event carrying a fresh `op_id`, then streams a sequence of
+ * `sideband` / `receiving` / `indexing` / `pushing` / `push-status`
+ * events tagged with the same `op_id`, and ends with either `done` or
+ * `cancelled`. The frontend uses `op_id` to associate progress with
+ * the originating call (and to scope the Cancel button).
+ */
+export type RemoteOpKind = "fetch" | "pull" | "push";
+
 export type ProgressEvent =
-  | { phase: "sideband"; message: string }
-  | { phase: "receiving"; received: number; total: number; bytes: number }
-  | { phase: "indexing"; indexed: number; total: number }
-  | { phase: "pushing"; pushed: number; total: number }
-  | { phase: "push-status"; refname: string; status: string | null }
-  | { phase: "done"; ok: boolean; summary: string };
+  | { phase: "started"; op_id: number; op: RemoteOpKind }
+  | { phase: "sideband"; op_id: number; message: string }
+  | { phase: "receiving"; op_id: number; received: number; total: number; bytes: number }
+  | { phase: "indexing"; op_id: number; indexed: number; total: number }
+  | { phase: "pushing"; op_id: number; pushed: number; total: number }
+  | { phase: "push-status"; op_id: number; refname: string; status: string | null }
+  | { phase: "done"; op_id: number; ok: boolean; summary: string }
+  | { phase: "cancelled"; op_id: number };
 
 export interface StashEntry {
   /** Stack index (0 = most recent). */
@@ -388,6 +401,9 @@ export const git = {
   submitCredentials: (id: number, username: string, password: string) =>
     invoke<void>("submit_credentials", { id, reply: { username, password } }),
   cancelCredentials: (id: number) => invoke<void>("cancel_credentials", { id }),
+  /** v0.13.7 — request a graceful cancel of an in-flight fetch/pull/push.
+   *  Idempotent; cancelling a finished op silently no-ops. */
+  cancelRemoteOp: (opId: number) => invoke<void>("cancel_remote_op", { opId }),
   stashList: (path: string) => invoke<StashEntry[]>("stash_list", { path }),
   stashSave: (
     path: string,

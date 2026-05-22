@@ -30,6 +30,10 @@ export const en = {
   "topbar.progress.receiving": "Receiving",
   "topbar.progress.indexing": "Indexing",
   "topbar.progress.pushing": "Pushing",
+  "topbar.progress.starting": "Starting…",
+  "topbar.cancel": "Cancel",
+  "topbar.cancelling": "Cancelling…",
+  "topbar.cancelTitle": "Cancel this remote operation (Esc)",
 
   // Welcome
   "welcome.title": "Git Tools",

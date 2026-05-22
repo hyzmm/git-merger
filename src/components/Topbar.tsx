@@ -8,11 +8,12 @@ import {
   RefreshCw,
   Search,
   Settings,
+  X,
 } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
 import { isAppErrorThrown } from "@/ipc/invoke";
-import { useT } from "@/lib/i18n";
+import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AppMenu } from "@/components/AppMenu";
 import { UndoButton } from "@/components/UndoButton";
@@ -20,6 +21,32 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
 
 type RemoteOp = "fetch" | "pull" | "push";
+
+/**
+ * Structured progress snapshot for an in-flight fetch / pull / push.
+ *
+ * The backend emits a stream of phase events on `git://progress` (started →
+ * sideband / receiving / indexing / pushing → done | cancelled), each tagged
+ * with an `op_id`. We collapse the most recent of each phase into a single
+ * snapshot so the UI can render a single progress bar + status line per op.
+ */
+interface OpProgress {
+  opId: number;
+  op: RemoteOp;
+  /** Current phase shown to the user (last non-`started` phase wins). */
+  phase: "starting" | "sideband" | "receiving" | "indexing" | "pushing" | "push-status";
+  /** 0..1 ratio for the active phase, or null if the phase has no total. */
+  ratio: number | null;
+  /** Inline status detail — sideband line, "received N/M", etc. */
+  detail: string;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
 
 export function Topbar() {
   const repo = useApp((s) => s.repo);
@@ -38,56 +65,131 @@ export function Topbar() {
     message: string;
     details: string[];
   } | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
+  const [progress, setProgress] = useState<OpProgress | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Subscribe to backend progress events.
+  // Subscribe to backend progress events. We always update our local
+  // snapshot when the event's op_id matches the current one (or when a
+  // fresh `started` event opens a new op).
   useEffect(() => {
     const un = listen<ProgressEvent>("git://progress", (ev) => {
       const p = ev.payload;
-      switch (p.phase) {
-        case "sideband":
-          if (p.message) setProgress(p.message);
-          break;
-        case "receiving":
-          setProgress(
-            p.total > 0
-              ? `${t("topbar.progress.receiving")} ${p.received}/${p.total}`
-              : t("topbar.progress.receiving"),
-          );
-          break;
-        case "indexing":
-          setProgress(
-            p.total > 0
-              ? `${t("topbar.progress.indexing")} ${p.indexed}/${p.total}`
-              : t("topbar.progress.indexing"),
-          );
-          break;
-        case "pushing":
-          setProgress(
-            p.total > 0
-              ? `${t("topbar.progress.pushing")} ${p.pushed}/${p.total}`
-              : t("topbar.progress.pushing"),
-          );
-          break;
-        case "push-status":
-          if (p.status) setProgress(`${p.refname}: ${p.status}`);
-          break;
-        case "done":
-          setProgress(null);
-          break;
-      }
+      setProgress((cur) => {
+        // Lifecycle events
+        if (p.phase === "started") {
+          return {
+            opId: p.op_id,
+            op: p.op,
+            phase: "starting",
+            ratio: null,
+            detail: t("topbar.progress.starting"),
+          };
+        }
+        if (p.phase === "done" || p.phase === "cancelled") {
+          // Clear our snapshot only if it belongs to this op — never
+          // clobber a newer op's state with a stale event.
+          if (cur && cur.opId !== p.op_id) return cur;
+          return null;
+        }
+        // Stream events: ignore mismatched op_id (defensive — should be
+        // impossible since we serialise remote ops, but events from a
+        // previous op can still arrive late after `done`).
+        if (cur && cur.opId !== p.op_id) return cur;
+        const opId = p.op_id;
+        const op = cur?.op ?? "fetch";
+        switch (p.phase) {
+          case "sideband":
+            if (!p.message) return cur;
+            return { opId, op, phase: "sideband", ratio: null, detail: p.message };
+          case "receiving":
+            return {
+              opId,
+              op,
+              phase: "receiving",
+              ratio: p.total > 0 ? p.received / p.total : null,
+              detail:
+                p.total > 0
+                  ? `${t("topbar.progress.receiving")} ${p.received}/${p.total} · ${formatBytes(p.bytes)}`
+                  : `${t("topbar.progress.receiving")} · ${formatBytes(p.bytes)}`,
+            };
+          case "indexing":
+            return {
+              opId,
+              op,
+              phase: "indexing",
+              ratio: p.total > 0 ? p.indexed / p.total : null,
+              detail:
+                p.total > 0
+                  ? `${t("topbar.progress.indexing")} ${p.indexed}/${p.total}`
+                  : t("topbar.progress.indexing"),
+            };
+          case "pushing":
+            return {
+              opId,
+              op,
+              phase: "pushing",
+              ratio: p.total > 0 ? p.pushed / p.total : null,
+              detail:
+                p.total > 0
+                  ? `${t("topbar.progress.pushing")} ${p.pushed}/${p.total}`
+                  : t("topbar.progress.pushing"),
+            };
+          case "push-status":
+            // Per-ref response; only surface failures (success refs are
+            // implicit from the eventual Done summary).
+            if (!p.status) return cur;
+            return {
+              opId,
+              op,
+              phase: "push-status",
+              ratio: cur?.ratio ?? null,
+              detail: `${p.refname}: ${p.status}`,
+            };
+          default:
+            return cur;
+        }
+      });
     });
     return () => {
       void un.then((f) => f());
     };
   }, [t]);
 
+  // Esc cancels an in-flight op. We attach this directly to the window
+  // (not via useShortcuts) so it fires even when the focus is on a
+  // form input — cancelling is exactly the kind of thing you want to
+  // be possible mid-typing.
+  useEffect(() => {
+    if (!running || !progress) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !cancelling) {
+        e.preventDefault();
+        void requestCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, progress, cancelling]);
+
+  async function requestCancel() {
+    if (!progress || cancelling) return;
+    setCancelling(true);
+    try {
+      await git.cancelRemoteOp(progress.opId);
+    } catch {
+      // The backend op likely finished between our event and our call.
+      // Either way, the next `done`/`cancelled` event will clear state.
+    }
+  }
+
   async function runRemote(op: RemoteOp) {
     if (!repo || running) return;
     setRunning(op);
     setOpResult(null);
     setProgress(null);
+    setCancelling(false);
     try {
       let result: RemoteOpResult;
       if (op === "fetch") result = await git.fetch(repo.path);
@@ -124,7 +226,11 @@ export function Topbar() {
       });
     } finally {
       setRunning(null);
-      setProgress(null);
+      setCancelling(false);
+      // Don't force-clear `progress` here — the backend's `done` /
+      // `cancelled` event will already have cleared it via the listener.
+      // If for some reason we missed it, leave the last frame visible
+      // for one more render rather than blink it away.
     }
   }
 
@@ -198,9 +304,12 @@ export function Topbar() {
             </button>
           )}
           {progress && (
-            <span className="max-w-[260px] truncate font-mono text-[11px] text-foreground/80">
-              {progress}
-            </span>
+            <ProgressIndicator
+              progress={progress}
+              cancelling={cancelling}
+              onCancel={requestCancel}
+              t={t}
+            />
           )}
           {loading && !progress && <span>{t("topbar.loading")}</span>}
           {error && <span className="text-destructive">{error}</span>}
@@ -251,6 +360,74 @@ function RemoteBtn({
       <Icon className={cn("h-3.5 w-3.5", isRunning && "animate-pulse")} />
       <span className="capitalize">{op}</span>
     </button>
+  );
+}
+
+function ProgressIndicator({
+  progress,
+  cancelling,
+  onCancel,
+  t,
+}: {
+  progress: OpProgress;
+  cancelling: boolean;
+  onCancel: () => void;
+  t: (key: TKey) => string;
+}) {
+  // Indeterminate phases (sideband / push-status without a ratio) get a
+  // pulsing bar instead of a fill so the user still sees "something is
+  // happening" without a misleading 0 %.
+  const determinate = progress.ratio !== null;
+  const pct = determinate ? Math.round((progress.ratio ?? 0) * 100) : null;
+
+  return (
+    <div
+      className="flex items-center gap-2 text-[11px]"
+      title={progress.detail}
+      aria-label={`${progress.op} progress: ${progress.detail}`}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+          {progress.op}
+        </span>
+        <div
+          className="relative h-1.5 w-24 overflow-hidden rounded-full bg-secondary"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={determinate ? 100 : undefined}
+          aria-valuenow={pct ?? undefined}
+        >
+          {determinate ? (
+            <div
+              className="h-full rounded-full bg-[hsl(var(--branch-1))] transition-[width] duration-150"
+              style={{ width: `${pct}%` }}
+            />
+          ) : (
+            // Indeterminate: subtle shimmer using a CSS animation that's
+            // already part of Tailwind's preflight (`animate-pulse`).
+            <div className="h-full w-full animate-pulse bg-[hsl(var(--branch-1)/.45)]" />
+          )}
+        </div>
+        {determinate && <span className="w-9 text-right font-mono text-foreground/80">{pct}%</span>}
+      </div>
+      <span className="hidden max-w-[180px] truncate font-mono text-[11px] text-foreground/70 lg:inline">
+        {progress.detail}
+      </span>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={cancelling}
+        title={t("topbar.cancelTitle")}
+        className={cn(
+          "flex h-5 items-center gap-0.5 rounded border border-border px-1.5 text-[10.5px]",
+          "text-muted-foreground hover:bg-destructive/15 hover:text-destructive",
+          cancelling && "cursor-wait opacity-60",
+        )}
+      >
+        <X className="h-3 w-3" />
+        {cancelling ? t("topbar.cancelling") : t("topbar.cancel")}
+      </button>
+    </div>
   );
 }
 
