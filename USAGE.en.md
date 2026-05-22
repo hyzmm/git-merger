@@ -237,6 +237,20 @@ Three panes: LEFT (ours) / RESULT (working, editable) / RIGHT (theirs). Each con
 | Commit                | type message → **Commit M files**                                                                                                         |
 | Stash current edits   | top-bar **Stash…** (optionally include-untracked, v0.2.0)                                                                                 |
 | View / edit in Diff   | click any filename → jumps to the Diff view; toolbar gains an **Edit** toggle that turns the right pane into an editable buffer (v0.13.3) |
+| Apply a patch         | top-bar **Apply patch…** opens a textarea — paste unified-patch text and hit Apply (v0.13.9)                                              |
+
+**Patch I/O (v0.13.9)**:
+
+- **Copy patch** (Diff toolbar): serialise the current file's diff as a standard unified-patch string and write it to the clipboard. Works for both commit-vs-parent diffs and working-tree diffs. Useful for pasting into PR comments, emails, or IM chats so a colleague can review or re-apply the change.
+- **Apply patch…** (Changes toolbar): paste a patch text → backend runs a **dry-run check** (`git2::Repository::apply` with `ApplyOptions::check(true)`); if it would apply cleanly, it commits with the real apply (writes to the working tree, **does NOT touch the index** — you retain full control over what to stage).
+- On failure the dialog **stays open** with libgit2's specific reason inlined at the bottom (e.g. "context line N does not match"), so you don't end up with a half-applied workdir.
+
+Backend implementation notes (`src-tauri/src/git/patch.rs`):
+
+- `format_commit_file_patch` / `format_working_file_patch` use `Diff::print(DiffFormat::Patch, …)` to emit the standard unified-diff text recognised by both GNU `patch` and `git apply`.
+- `apply_patch_check` runs `ApplyOptions::check(true)` so we surface "would-not-apply" before clobbering anything.
+- `apply_patch` uses `ApplyLocation::WorkDir` and intentionally leaves the index alone, so the user keeps fine-grained staging control.
+- Three integration tests cover round-trip (working diff → text → apply), garbage-input rejection, and the rename / commit case.
 
 ### 3.5 Blame (line history + cross-rename follow)
 

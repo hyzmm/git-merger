@@ -658,11 +658,7 @@ fn push_inner(
 /// distinguish between the two by inspecting the cancel flag and the
 /// shape of the error: cancelled libgit2 transfers usually surface as a
 /// `User` error code (because our callback returned `false`).
-fn finish_op(
-    app: &AppHandle,
-    handle: &OpHandle,
-    result: &Result<RemoteOpResult, git2::Error>,
-) {
+fn finish_op(app: &AppHandle, handle: &OpHandle, result: &Result<RemoteOpResult, git2::Error>) {
     let cancelled = handle.is_cancelled();
     let event = match result {
         Ok(r) => ProgressEvent::Done {

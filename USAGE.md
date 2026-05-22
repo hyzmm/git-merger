@@ -236,6 +236,20 @@ bun run tauri:build
 | 提交                | 输入 commit message → **Commit M files**                                       |
 | 暂存当前改动到栈    | 顶部 **Stash…** 按钮（可选 include-untracked）（v0.2.0）                       |
 | 在 Diff 中查看/编辑 | 直接点击文件名 → 跳到 Diff 视图，工具栏多出 **Edit** 切换可编辑右侧（v0.13.3） |
+| 应用 patch          | 顶部 **Apply patch…** 按钮，弹出 textarea 粘贴 unified-patch 文本（v0.13.9）   |
+
+**Patch I/O（v0.13.9）**：
+
+- **Copy patch**（Diff 工具栏）：把当前文件的 diff 序列化成标准 unified-patch 字符串复制到剪贴板。无论是 commit-vs-parent diff 还是工作树 diff，都能直接复制；适合贴到 PR 评论 / 邮件 / IM 给同事看
+- **Apply patch…**（Changes 工具栏）：弹出对话框粘贴一段 patch 文本 → 后端先用 `git2::Repository::apply` 的 **dry-run check** 模式探一下能否干净 apply，能就执行真正的 apply（写到工作树，**不动 index** —— 你可以再决定要不要 stage）
+- 失败时对话框**保持打开**并把 libgit2 的具体原因（如 "context line N does not match"）显示在底部红条里——避免半完成的 apply 让工作树脏掉
+
+后端实现要点（`src-tauri/src/git/patch.rs`）：
+
+- `format_commit_file_patch` / `format_working_file_patch` 用 `Diff::print(DiffFormat::Patch, …)` 拼出 GNU `patch` / `git apply` 都识别的标准 unified diff
+- `apply_patch_check` 用 `ApplyOptions::check(true)` 做 dry-run，只校验不实际写盘
+- `apply_patch` 用 `ApplyLocation::WorkDir`，**不**改 index（让用户保留对暂存粒度的控制）
+- 后端带 3 个集成测试覆盖 round-trip / 拒绝乱码输入 / 重命名场景
 
 ### 3.5 Blame（行级历史 + 跨重命名追溯）
 

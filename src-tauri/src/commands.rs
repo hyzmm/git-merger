@@ -181,6 +181,30 @@ pub fn write_working_file(path: String, file: String, content: String) -> R<()> 
     Ok(())
 }
 
+// ---------- Patch I/O (v0.13.9) ----------
+
+#[tauri::command]
+pub fn format_commit_file_patch(path: String, oid: String, file: String) -> R<String> {
+    Ok(git::patch::format_commit_file_patch(&path, &oid, &file)?)
+}
+
+#[tauri::command]
+pub fn format_working_file_patch(path: String, file: String) -> R<String> {
+    Ok(git::patch::format_working_file_patch(&path, &file)?)
+}
+
+#[tauri::command]
+pub fn apply_patch_check(path: String, patch_text: String) -> R<()> {
+    git::patch::apply_patch_check(&path, &patch_text)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn apply_patch(path: String, patch_text: String) -> R<()> {
+    git::patch::apply_patch(&path, &patch_text)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn git_fetch(
     app: tauri::AppHandle,

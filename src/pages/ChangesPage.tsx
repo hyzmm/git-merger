@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useApp } from "@/stores/app";
+import { git } from "@/ipc/git";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { WorkingFile } from "@/ipc/git";
 
@@ -42,6 +45,42 @@ export function ChangesPage() {
   const setView = useApp((s) => s.setView);
   const saveStash = useApp((s) => s.saveStash);
   const openWorkingDiff = useApp((s) => s.openWorkingDiff);
+  const repo = useApp((s) => s.repo);
+  const loadChanges = useApp((s) => s.loadChanges);
+
+  // v0.13.9 — Apply patch dialog state. The flow is: open dialog → user
+  // pastes a unified-patch text → we run a server-side dry-run check
+  // (`apply_patch_check`); if that succeeds, we commit with `apply_patch`
+  // (which does NOT touch the index, leaving the user free to stage).
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [patchDraft, setPatchDraft] = useState("");
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const submitApplyPatch = async () => {
+    if (!repo) return;
+    const text = patchDraft;
+    if (!text.trim()) {
+      setApplyError("Paste a patch first.");
+      return;
+    }
+    setApplyBusy(true);
+    setApplyError(null);
+    try {
+      // Dry-run first so the failure mode is "modal still open with the
+      // backend's reason inline" rather than "half-applied workdir".
+      await git.applyPatchCheck(repo.path, text);
+      await git.applyPatch(repo.path, text);
+      toast.success("Patch applied to working tree.");
+      setApplyOpen(false);
+      setPatchDraft("");
+      void loadChanges();
+    } catch (e) {
+      setApplyError(String(e));
+    } finally {
+      setApplyBusy(false);
+    }
+  };
 
   const staged = files.filter((f) => f.flag === "staged" || f.flag === "both");
   const unstaged = files.filter(
@@ -80,6 +119,16 @@ export function ChangesPage() {
           )}
           {loading && <span className="text-muted-foreground">· loading...</span>}
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => {
+                setApplyError(null);
+                setApplyOpen(true);
+              }}
+              className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+              title="Apply a unified-patch text from the clipboard onto the working tree"
+            >
+              Apply patch…
+            </button>
             <button
               onClick={selectAll}
               className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
@@ -209,6 +258,66 @@ export function ChangesPage() {
           {error && <div className="mt-2 text-[11px] text-destructive">{error}</div>}
         </div>
       </aside>
+
+      {applyOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[10vh]"
+          onClick={() => !applyBusy && setApplyOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex w-full max-w-2xl flex-col rounded-lg border border-border bg-card text-card-foreground shadow-2xl"
+            role="dialog"
+            aria-label="Apply patch"
+          >
+            <div className="border-b border-border px-4 py-2.5">
+              <h2 className="text-sm font-semibold">Apply patch</h2>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Paste unified-patch text (the format produced by{" "}
+                <code className="font-mono">git diff</code> /{" "}
+                <code className="font-mono">git format-patch</code>) below, then Apply. The patch
+                will be applied to your working tree only — the index is left untouched.
+              </p>
+            </div>
+            <textarea
+              value={patchDraft}
+              onChange={(e) => setPatchDraft(e.target.value)}
+              autoFocus
+              spellCheck={false}
+              placeholder={
+                "diff --git a/foo.ts b/foo.ts\nindex abc1234..def5678 100644\n--- a/foo.ts\n+++ b/foo.ts\n@@ -1,3 +1,4 @@\n …"
+              }
+              className="m-0 h-72 resize-none border-0 bg-background px-4 py-2 font-mono text-[12px] outline-none"
+            />
+            {applyError && (
+              <div className="border-t border-border bg-[hsl(var(--destructive)/.10)] px-4 py-2 font-mono text-[11px] text-[hsl(var(--destructive))]">
+                {applyError}
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
+              <button
+                onClick={() => setApplyOpen(false)}
+                disabled={applyBusy}
+                className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void submitApplyPatch()}
+                disabled={applyBusy || !patchDraft.trim()}
+                className={cn(
+                  "h-7 rounded-md px-3 text-xs font-medium",
+                  applyBusy || !patchDraft.trim()
+                    ? "cursor-not-allowed bg-secondary text-muted-foreground opacity-60"
+                    : "bg-primary text-primary-foreground hover:opacity-90",
+                )}
+              >
+                {applyBusy ? "Applying…" : "Apply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

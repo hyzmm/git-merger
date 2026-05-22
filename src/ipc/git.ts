@@ -388,6 +388,19 @@ export const git = {
   /** Atomically overwrite a working-tree file. */
   writeWorkingFile: (path: string, file: string, content: string) =>
     invoke<void>("write_working_file", { path, file, content }),
+  /** v0.13.9 — format a single file in a historical commit as a unified-patch
+   *  string (the `git format-patch` / `*.patch` text format). */
+  formatCommitFilePatch: (path: string, oid: string, file: string) =>
+    invoke<string>("format_commit_file_patch", { path, oid, file }),
+  /** v0.13.9 — format a single working-tree file (HEAD → workdir) as a
+   *  unified-patch string. */
+  formatWorkingFilePatch: (path: string, file: string) =>
+    invoke<string>("format_working_file_patch", { path, file }),
+  /** v0.13.9 — dry-run: would `patch_text` apply cleanly to the workdir? */
+  applyPatchCheck: (path: string, patchText: string) =>
+    invoke<void>("apply_patch_check", { path, patchText }),
+  /** v0.13.9 — apply `patch_text` to the workdir (does not touch the index). */
+  applyPatch: (path: string, patchText: string) => invoke<void>("apply_patch", { path, patchText }),
   fetch: (path: string, remote?: string) =>
     invoke<RemoteOpResult>("git_fetch", { path, remote: remote ?? null }),
   pull: (path: string) => invoke<RemoteOpResult>("git_pull", { path }),

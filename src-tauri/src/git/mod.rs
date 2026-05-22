@@ -8,6 +8,7 @@ pub mod file_history;
 pub mod gitignore;
 pub mod log;
 pub mod merge;
+pub mod patch;
 pub mod rebase;
 pub mod reflog;
 pub mod refs;

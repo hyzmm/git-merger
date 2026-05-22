@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useRef } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, ClipboardCopy } from "lucide-react";
 import { useApp, WORKING_OID } from "@/stores/app";
 import { useShortcuts } from "@/lib/useShortcuts";
+import { git } from "@/ipc/git";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { SideBySide, Unified } from "./DiffViews";
 import { WorkingDiffEditor } from "./WorkingDiffEditor";
@@ -21,6 +23,7 @@ export function DiffViewer() {
   const openBlame = useApp((s) => s.openBlame);
   const openFileHistory = useApp((s) => s.openFileHistory);
   const view = useApp((s) => s.view);
+  const repo = useApp((s) => s.repo);
   const editActive = useApp((s) => s.diff.edit.active);
   const editBusy = useApp((s) => s.diff.edit.busy);
   const editBuffer = useApp((s) => s.diff.edit.buffer);
@@ -31,6 +34,30 @@ export function DiffViewer() {
 
   const isWorking = oid === WORKING_OID;
   const dirty = isWorking && editBuffer !== null && editSaved !== null && editBuffer !== editSaved;
+
+  // v0.13.9 — "Copy patch" feedback (the button briefly shows "Copied!"
+  // so the user knows the clipboard write succeeded; reverts after ~1.5s).
+  const [copied, setCopied] = useState(false);
+  const copyPatch = useCallback(async () => {
+    if (!repo || !file) return;
+    try {
+      const patch =
+        oid === WORKING_OID
+          ? await git.formatWorkingFilePatch(repo.path, file)
+          : oid
+            ? await git.formatCommitFilePatch(repo.path, oid, file)
+            : "";
+      if (!patch.trim()) {
+        toast.warning("No diff content to copy.");
+        return;
+      }
+      await navigator.clipboard.writeText(patch);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      toast.error(`Failed to copy patch: ${String(e)}`);
+    }
+  }, [repo, file, oid]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -176,6 +203,19 @@ export function DiffViewer() {
               )}
             </>
           )}
+          <button
+            onClick={() => void copyPatch()}
+            disabled={!file || loading}
+            className={cn(
+              "flex h-7 items-center gap-1 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+              (!file || loading) && "cursor-not-allowed opacity-50",
+              copied && "text-[hsl(var(--branch-4))]",
+            )}
+            title="Copy this file's diff as a unified-patch string (the format git apply / git am consume)"
+          >
+            <ClipboardCopy className="h-3 w-3" />
+            {copied ? "Copied!" : "Copy patch"}
+          </button>
           <button
             onClick={() => file && void openFileHistory(file)}
             disabled={!file}
