@@ -1,13 +1,29 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, GitBranch } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { useHighlight } from "@/lib/useHighlight";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { BlameLine } from "@/ipc/git";
 
 const ROW_HEIGHT = 20;
+
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+}
 
 export function BlamePage() {
   const file = useApp((s) => s.blame.file);
@@ -21,6 +37,7 @@ export function BlamePage() {
   const selectCommit = useApp((s) => s.selectCommit);
   const followRename = useApp((s) => s.blameFollowRename);
   const blameBack = useApp((s) => s.blameBack);
+  const blameBeforeCommit = useApp((s) => s.blameBeforeCommit);
   const openFileHistory = useApp((s) => s.openFileHistory);
 
   // Group consecutive lines from the same commit so we only render blame
@@ -37,6 +54,43 @@ export function BlamePage() {
     estimateSize: () => ROW_HEIGHT,
     overscan: 30,
   });
+
+  const [menu, setMenu] = useState<{ pos: ContextMenuPos; items: MenuItem[] } | null>(null);
+
+  // Right-click on any blame row pops a per-line context menu (v0.13.17).
+  // We keep the items intentionally focused on commit-level navigation —
+  // diff / blame / clipboard — to mirror IntelliJ's annotate gutter menu.
+  function onContextMenu(e: React.MouseEvent, ln: BlameLine) {
+    e.preventDefault();
+    const items: MenuItem[] = [
+      { label: `${ln.short_oid} — ${ln.summary.slice(0, 60)}`, heading: true },
+      {
+        label: "Show this commit in History",
+        onClick: () => {
+          void selectCommit(ln.oid);
+          setView("history");
+        },
+      },
+      {
+        label: "Annotate revision before this change",
+        onClick: () => void blameBeforeCommit(ln.oid),
+      },
+      { separator: true, label: "" },
+      {
+        label: `Copy SHA (${ln.short_oid})`,
+        onClick: () => void copyText(ln.oid),
+      },
+      {
+        label: "Copy commit summary",
+        onClick: () => void copyText(ln.summary),
+      },
+      {
+        label: "Copy line content",
+        onClick: () => void copyText(ln.content),
+      },
+    ];
+    setMenu({ pos: { x: e.clientX, y: e.clientY }, items });
+  }
 
   if (!file) {
     return (
@@ -119,8 +173,9 @@ export function BlamePage() {
             return (
               <div
                 key={i}
+                onContextMenu={(e) => onContextMenu(e, ln)}
                 className={cn(
-                  "absolute left-0 top-0 grid w-full font-mono text-[12px] leading-[20px]",
+                  "absolute left-0 top-0 grid w-full font-mono text-[12px] leading-[20px] hover:bg-accent/20",
                   groupHead && "border-t border-border/40",
                 )}
                 style={{
@@ -129,6 +184,7 @@ export function BlamePage() {
                   gridTemplateColumns: "120px 110px 70px 50px 1fr",
                   columnGap: 8,
                 }}
+                title="Right-click for actions"
               >
                 {/* Author */}
                 <div
@@ -161,7 +217,7 @@ export function BlamePage() {
                     "truncate text-left text-[11px] text-[hsl(var(--branch-1))] hover:underline",
                     !groupHead && "opacity-0",
                   )}
-                  title={`${ln.oid}\n${ln.summary}`}
+                  title={`${ln.oid}\n${ln.summary}\n\nClick: open in History · Right-click: more`}
                 >
                   {ln.short_oid}
                 </button>
@@ -195,6 +251,12 @@ export function BlamePage() {
           })}
         </div>
       </div>
+
+      <ContextMenu
+        pos={menu?.pos ?? null}
+        items={menu?.items ?? []}
+        onClose={() => setMenu(null)}
+      />
     </section>
   );
 }

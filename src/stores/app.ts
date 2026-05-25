@@ -473,6 +473,10 @@ interface AppState {
   openBlame: (file: string) => Promise<void>;
   blameAt: (file: string, revision: string) => Promise<void>;
   blameFollowRename: () => Promise<void>;
+  /** v0.13.17 — Re-blame the current file at the parent of `oid` (i.e. one
+   *  commit *before* the change that introduced the line). Mirrors IntelliJ's
+   *  "Annotate Revision Before This Change" action. */
+  blameBeforeCommit: (oid: string) => Promise<void>;
   blameBack: () => Promise<void>;
 
   // changes (working tree)
@@ -2003,6 +2007,22 @@ export const useApp = create<AppState>((set, get) => ({
     const { blame } = get();
     if (!blame.prev) return;
     await get().blameAt(blame.prev.file, blame.prev.revision);
+  },
+
+  blameBeforeCommit: async (oid: string) => {
+    // Re-blame the current file at <oid>^. libgit2's `revparse_single`
+    // accepts the caret syntax natively, so we just hand the suffix
+    // through to the existing `blameAt` action — which also takes care
+    // of pushing the current view onto the back-stack.
+    const { blame } = get();
+    if (!blame.file) return;
+    try {
+      await get().blameAt(blame.file, `${oid}^`);
+    } catch (e) {
+      // The most common failure is "commit has no parent" (root commit).
+      // Surface that into the blame error slot rather than throwing.
+      set((s) => ({ blame: { ...s.blame, error: String(e), loading: false } }));
+    }
   },
 
   blameBack: async () => {

@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.16
+> Target version: v0.13.17
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -293,6 +293,10 @@ Entry: **Blame** button in the Diff toolbar.
 - Short oids are clickable → jump-to-and-select in History.
 - Whole column virtualized + Shiki-highlighted.
 - **Annotate previous (v0.3.0)**: a toolbar link "Annotate previous: <oldpath>@<oid>" appears (driven by `Diff::find_similar` rename detection). Click to jump to the file's previous identity (possibly a different path); a back stack is maintained (**Back** button retraces). This is the IDE-friendly cross-rename follow.
+- **Per-line context menu (v0.13.17)**: right-click any blame row to get:
+  - **Show this commit in History** — jumps to the History view and selects that commit (same as clicking the short oid).
+  - **Annotate revision before this change** — re-blames the current file at the parent of the line's commit (`<oid>^`). Mirrors IntelliJ's "Annotate Revision Before This Change" — answers "what did this line look like _before_ it became what it is now?". Pushed onto the back stack so **Back** brings you back.
+  - **Copy SHA / Copy commit summary / Copy line content** — three clipboard actions.
 
 ### 3.6 Stash
 
@@ -1199,6 +1203,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.14 | **Diff viewer dual upgrade**: (1) **Word-level overlay in Unified mode** — matching SBS, consecutive `-`/`+` runs are paired by index and word-diffed; new pure helper `unifiedWordTokens` covered by 7 bun:test cases. (2) **Image diff** — selecting an image asset (png / jpg / gif / webp / svg / avif / bmp / ico) flips the diff body to a two-pane image preview with file-size chips, checker-board transparency, and Before/After placeholders for added / deleted / >8 MB cases. Backend gains `git/blob.rs::read_blob_at_commit` + `read_working_blob` (base64-encoded with the same 8 MB cap as the working-file editor); pulls in `base64 = "0.22"`, +3 integration tests, +5 imageMime frontend tests                                                                                                                                                         |
 | v0.13.15 | **Unified destructive-op confirmation dialog**: every `window.confirm()` call site (14 of them across stores/components) replaced by a custom `ConfirmDialog` — danger / warning severity colouring, optional `<pre>` detail block to surface the actual git command, Esc=cancel / Enter=confirm / backdrop=cancel, focus auto-jumps to Confirm to prevent stray-Enter mishaps. Covers: discard, drop stash, delete branch, delete tag (local + remote), hard reset, abort merge, abort rebase, detached-HEAD checkout, cherry-pick, revert, soft+mixed reset, submodule update, submodule update recursive, push --tags, force-push tag, force remove worktree. Store gains a Promise-based `confirm()` API so call sites read identically to the old `await confirm(...)` shape                                                                                           |
 | v0.13.16 | **Graph reachability highlight (ancestors / descendants)**: History row context menu gains a **Highlight reachability** group — pick any commit, then dim every row that's not an ancestor (via `parent_ids()` BFS) or descendant (build a child map by scanning all `refs/heads/*` + `refs/remotes/*` + `refs/tags/*` tips then BFS forward). Inactive rows drop to 25 % opacity, the originating commit gains a brand-coloured ring + tinted background, the toolbar shows `Highlighting ancestors of abc1234 · 42 commits · clear`. Auto-cleared on filter change / repo switch / history reload so stale oid sets never linger. Backend adds `git/commit_relations.rs` with two Tauri commands (`commit_ancestors` / `commit_descendants`), capped at 50 000 results and a 200 000-commit scan window so even gigantic monorepos resolve sub-second. +3 Rust unit tests |
+| v0.13.17 | **Per-line Blame context menu**: any row in BlamePage now exposes a right-click menu with four actions — Show this commit in History (matches the short-oid click) / **Annotate revision before this change** (re-blame the current file at the parent of the line's commit, mirroring IntelliJ's gutter action that answers "what did this line look like _before_ it became what it is now?") / Copy SHA / Copy commit summary / Copy line content. New store action `blameBeforeCommit(oid)` reuses the existing `blameAt` plumbing so the back stack lights up automatically — **Back** retraces in a single click. Rows now also pick up a hover highlight + tooltip hinting at the menu.                                                                                                                                                                              |
 
 ---
 
