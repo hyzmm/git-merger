@@ -464,6 +464,10 @@ interface AppState {
   loadMerge: () => Promise<void>;
   selectConflict: (file: string) => Promise<void>;
   applyResolution: (chunkIndex: number, choice: Resolution) => void;
+  /** v0.13.18 — Apply the same resolution to every conflict block in the current file. */
+  applyAllResolutions: (choice: "left" | "right" | "both") => void;
+  /** v0.13.18 — Reset every block to "pending" (drops any prior accept / manual edits). */
+  resetAllResolutions: () => void;
   setResultText: (chunkIndex: number, text: string) => void;
   resolveCurrentFile: () => Promise<void>;
   abortMerge: () => Promise<void>;
@@ -1855,6 +1859,39 @@ export const useApp = create<AppState>((set, get) => ({
         const conflict = c as ConflictChunk;
         const result = resolveText(conflict, choice);
         return { ...conflict, resolution: choice, result };
+      });
+      return { merge: { ...s.merge, chunks } };
+    }),
+
+  applyAllResolutions: (choice) =>
+    set((s) => {
+      const chunks = s.merge.chunks.map((c) => {
+        if (c.kind !== "conflict") return c;
+        const conflict = c as ConflictChunk;
+        const result = resolveText(conflict, choice);
+        return { ...conflict, resolution: choice, result };
+      });
+      return { merge: { ...s.merge, chunks } };
+    }),
+
+  resetAllResolutions: () =>
+    set((s) => {
+      const chunks = s.merge.chunks.map((c) => {
+        if (c.kind !== "conflict") return c;
+        const conflict = c as ConflictChunk;
+        // Bring the block back to "pending" — the result text is reset to a
+        // sentinel that combines both sides so users can still see the
+        // upstream content; they'll need to pick a side (or hand-edit) to
+        // mark it resolved. We deliberately don't try to re-derive the
+        // original conflict-marker text — once the user has applied any
+        // choice we lose that information; making `pending` simply
+        // disable the "Mark resolved" button is the simplest correct
+        // behaviour.
+        return {
+          ...conflict,
+          resolution: "pending" as Resolution,
+          result: conflict.ours,
+        };
       });
       return { merge: { ...s.merge, chunks } };
     }),

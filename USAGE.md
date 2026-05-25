@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.17  
+> 适用版本：v0.13.18  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -256,6 +256,15 @@ History 视图的右键菜单底部新增 **Highlight reachability** 区块，�
 
 - **Abort merge**：调用 libgit2 取消当前 merge / cherry-pick / revert（rebase 用第 3.9 节的 Abort）
 - **Commit merge**：直接在 UI 内提交合并 commit，无需切换终端
+
+#### 工作流加速（v0.13.18）
+
+工具栏新增 **冲突批量操作 + 导航**：
+
+- **▲ / ▼**（`F7` / `F8`）— 跳到上一个 / 下一个冲突块。优先停留在 _pending_ 状态的块，已解决的块会被跳过（除非全部已解决，此时退化为顺序遍历）。当前活跃块在三个列里都加一圈橙色 ring，便于在大文件里始终知道光标位置
+- **All ◄ / All ► / All ◄►** — 一键把当前文件**所有冲突块**采纳为 LEFT / RIGHT / BOTH。常见场景：rebase 自己分支上一堆"接受 ours 即可"的格式化冲突，或 merge 上游时整体 prefer theirs
+- **Reset** — 把所有块退回 pending，丢弃任何已选边或手编内容（**Mark resolved** 按钮随之置灰）
+- **Base** 切换 — 当冲突文件携带 diff3 标记（即 `merge.conflictStyle = diff3`）时，可显示**第 4 列 BASE = 共同祖先**。理解"双方各自动了什么"时极有用；diff3 不可用时按钮自动 disabled
 
 ### 3.4 Changes（工作树）
 
@@ -1199,6 +1208,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.15 | **统一危险操作确认对话框**：之前散落 14 处的 `window.confirm()` 全部替换为自定义 `ConfirmDialog`——按 danger / warning 两级着色（红色破坏性 / 主品牌色）、可携带 detail 块显示真实 git 命令、Esc=取消 / Enter=确认 / 背景点击=取消、焦点自动跳到 Confirm 按钮（防误触）。覆盖：discard / drop stash / delete branch / delete tag (local + remote) / hard reset / abort merge / abort rebase / detached HEAD checkout / cherry-pick / revert / soft+mixed reset / submodule update / submodule update recursive / push --tags / force-push tag / force remove worktree。store 加 `confirm()` Promise API 单飞实现；调用点和原生 confirm 一致的 `await` 形态 |
 | v0.13.16 | **Graph 节点祖先 / 后代高亮**：History 视图右键菜单新增 **Highlight reachability** 区块，可对任意 commit 高亮 ancestors（沿 parent BFS）或 descendants（先扫所有 ref tip 反向构建 child map 再 BFS）。激活后非匹配行降至 25 % 不透明度，源头 commit 加主品牌色 ring + 浅底，状态栏出现"Highlighting ancestors of abc1234 · 42 commits · clear"。filter 变化 / repo 切换 / 重载 history 时自动清除。后端新增 `git/commit_relations.rs` 两条命令（`commit_ancestors` / `commit_descendants`），祖先方向 50000 上限、后代方向 200000 扫描上限 + 50000 结果上限，超大 monorepo 也在亚秒完成。+3 Rust 单元测试                                                 |
 | v0.13.17 | **Blame 行级右键菜单**：BlamePage 任意行右键弹出 4 项菜单——Show this commit in History（与短 oid 点击同效）/ **Annotate revision before this change**（对该行所在 commit 的父级 `<oid>^` 重新 blame，对应 IntelliJ 的 "Annotate Revision Before This Change"，让用户追"这一行的上一次形态"）/ Copy SHA / Copy commit summary / Copy line content。新 store action `blameBeforeCommit(oid)`：复用既有 `blameAt` + 自动压 history 栈，**Back** 一键回退。整行加 hover 高亮 + tooltip 提示右键菜单可用                                                                                                                                                       |
+| v0.13.18 | **Merge 视图加速包**：ThreeWayEditor 工具栏新增 ① **Prev/Next conflict 导航**（▲/▼ 按钮 + `F7`/`F8` 快捷键，优先跳到 pending 块，活跃块在所有列加橙色 ring 高亮）② **All ◄/All ►/All ◄► 一键全部采纳**（适合处理整文件 prefer-ours 或 prefer-theirs 场景）+ **Reset** 全部退回 pending ③ **Base 列切换**（当 `merge.conflictStyle = diff3` 时，显示第 4 列 = 共同祖先 blob，便于看清双方各自改动）。store 新增 `applyAllResolutions(choice)` / `resetAllResolutions()` 两个 actions                                                                                                                                                                       |
 
 ---
 

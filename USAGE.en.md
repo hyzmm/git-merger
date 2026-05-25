@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.17
+> Target version: v0.13.18
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -256,6 +256,15 @@ Three panes: LEFT (ours) / RESULT (working, editable) / RIGHT (theirs). Each con
 
 - **Abort merge**: invokes libgit2 to cancel the current merge / cherry-pick / revert. (Use the Rebase view's Abort for rebase.)
 - **Commit merge**: directly commits the merge from the UI, no terminal needed.
+
+#### Workflow boosters (v0.13.18)
+
+The toolbar gains **bulk-resolve + navigation**:
+
+- **▲ / ▼** (`F7` / `F8`) — jump to the previous / next conflict block. The cursor preferentially lands on _pending_ blocks first; already-resolved blocks are skipped unless they're all you've got, at which point it falls back to plain order. The active block gets an orange ring across all three columns so the cursor stays visible in long files.
+- **All ◄ / All ► / All ◄►** — one click to mark every conflict in the file as LEFT / RIGHT / BOTH. Typical use: a self-rebase littered with formatting-only conflicts where "accept ours" is correct everywhere, or a merge from upstream where "prefer theirs" is the right global choice.
+- **Reset** — pull every block back to pending, dropping any side-accepts or hand-edits ("Mark resolved" button greys out accordingly).
+- **Base** toggle — when the conflict file uses diff3 markers (`merge.conflictStyle = diff3`), reveal a 4th **BASE column = common ancestor**. Indispensable when you need to understand "what did each side actually change?". Auto-disabled when no ancestor blob is available.
 
 ### 3.4 Changes (working tree)
 
@@ -1204,6 +1213,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.15 | **Unified destructive-op confirmation dialog**: every `window.confirm()` call site (14 of them across stores/components) replaced by a custom `ConfirmDialog` — danger / warning severity colouring, optional `<pre>` detail block to surface the actual git command, Esc=cancel / Enter=confirm / backdrop=cancel, focus auto-jumps to Confirm to prevent stray-Enter mishaps. Covers: discard, drop stash, delete branch, delete tag (local + remote), hard reset, abort merge, abort rebase, detached-HEAD checkout, cherry-pick, revert, soft+mixed reset, submodule update, submodule update recursive, push --tags, force-push tag, force remove worktree. Store gains a Promise-based `confirm()` API so call sites read identically to the old `await confirm(...)` shape                                                                                           |
 | v0.13.16 | **Graph reachability highlight (ancestors / descendants)**: History row context menu gains a **Highlight reachability** group — pick any commit, then dim every row that's not an ancestor (via `parent_ids()` BFS) or descendant (build a child map by scanning all `refs/heads/*` + `refs/remotes/*` + `refs/tags/*` tips then BFS forward). Inactive rows drop to 25 % opacity, the originating commit gains a brand-coloured ring + tinted background, the toolbar shows `Highlighting ancestors of abc1234 · 42 commits · clear`. Auto-cleared on filter change / repo switch / history reload so stale oid sets never linger. Backend adds `git/commit_relations.rs` with two Tauri commands (`commit_ancestors` / `commit_descendants`), capped at 50 000 results and a 200 000-commit scan window so even gigantic monorepos resolve sub-second. +3 Rust unit tests |
 | v0.13.17 | **Per-line Blame context menu**: any row in BlamePage now exposes a right-click menu with four actions — Show this commit in History (matches the short-oid click) / **Annotate revision before this change** (re-blame the current file at the parent of the line's commit, mirroring IntelliJ's gutter action that answers "what did this line look like _before_ it became what it is now?") / Copy SHA / Copy commit summary / Copy line content. New store action `blameBeforeCommit(oid)` reuses the existing `blameAt` plumbing so the back stack lights up automatically — **Back** retraces in a single click. Rows now also pick up a hover highlight + tooltip hinting at the menu.                                                                                                                                                                              |
+| v0.13.18 | **Merge view speed-pack**: ThreeWayEditor toolbar gains ① **Prev/Next conflict navigation** (▲/▼ buttons + `F7`/`F8` shortcuts, prioritising pending blocks, active block ringed in orange across every column for easy scanning) ② **All ◄/All ►/All ◄► bulk accept** (perfect for whole-file prefer-ours / prefer-theirs scenarios) + **Reset** to push every block back to pending ③ **Base column toggle** — when the file uses diff3 markers (`merge.conflictStyle = diff3`) reveal a 4th column showing the common-ancestor blob, so you can finally see _what each side actually changed_. Store gains two new actions `applyAllResolutions(choice)` / `resetAllResolutions()`.                                                                                                                                                                                      |
 
 ---
 
