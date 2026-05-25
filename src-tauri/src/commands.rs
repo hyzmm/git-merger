@@ -64,6 +64,36 @@ pub fn commit_meta(path: String, oid: String) -> R<git::CommitMeta> {
     Ok(git::log::commit_meta(&path, &oid)?)
 }
 
+// ---------- Reachability queries (v0.13.16) ----------
+//
+// Used by the History view's "Highlight ancestors / descendants" feature.
+// Each returns a flat list of OID strings that the frontend drops into a
+// `Set<string>` to dim every other row.
+
+#[tauri::command]
+pub fn commit_ancestors(path: String, oid: String, limit: Option<usize>) -> R<Vec<String>> {
+    Ok(git::commit_relations::ancestors(
+        &path,
+        &oid,
+        limit.unwrap_or(50_000),
+    )?)
+}
+
+#[tauri::command]
+pub fn commit_descendants(
+    path: String,
+    oid: String,
+    limit: Option<usize>,
+    scan_limit: Option<usize>,
+) -> R<Vec<String>> {
+    Ok(git::commit_relations::descendants(
+        &path,
+        &oid,
+        limit.unwrap_or(50_000),
+        scan_limit.unwrap_or(200_000),
+    )?)
+}
+
 #[tauri::command]
 pub fn commit_files(path: String, oid: String) -> R<Vec<git::FileChange>> {
     Ok(git::diff::commit_files(&path, &oid)?)

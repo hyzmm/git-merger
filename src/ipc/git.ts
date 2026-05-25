@@ -420,6 +420,17 @@ export const git = {
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),
   /** Rich metadata for one commit: full message, author + committer, parents, containing branches & tags. */
   commitMeta: (path: string, oid: string) => invoke<CommitMeta>("commit_meta", { path, oid }),
+  /** v0.13.16 — flat list of OIDs reachable from `oid` walking *backwards* through parents (inclusive). */
+  commitAncestors: (path: string, oid: string, limit?: number) =>
+    invoke<string[]>("commit_ancestors", { path, oid, limit: limit ?? null }),
+  /** v0.13.16 — flat list of OIDs reachable from `oid` walking *forwards* through children (inclusive). */
+  commitDescendants: (path: string, oid: string, limit?: number, scanLimit?: number) =>
+    invoke<string[]>("commit_descendants", {
+      path,
+      oid,
+      limit: limit ?? null,
+      scanLimit: scanLimit ?? null,
+    }),
   fileDiff: (path: string, oid: string, file: string, ignoreWhitespace = false) =>
     invoke<FileDiff>("file_diff", { path, oid, file, ignoreWhitespace }),
   workingDiff: (path: string, file: string, ignoreWhitespace = false) =>

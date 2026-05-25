@@ -63,6 +63,14 @@ export function CommitList() {
   const createBranch = useApp((s) => s.createBranch);
   const createTag = useApp((s) => s.createTag);
   const confirm = useApp((s) => s.confirm);
+  // v0.13.16 — graph reachability highlight.
+  const highlightOid = useApp((s) => s.history.highlightOid);
+  const highlightMode = useApp((s) => s.history.highlightMode);
+  const highlightSet = useApp((s) => s.history.highlightSet);
+  const highlightLoading = useApp((s) => s.history.highlightLoading);
+  const highlightAncestors = useApp((s) => s.highlightAncestors);
+  const highlightDescendants = useApp((s) => s.highlightDescendants);
+  const clearHighlight = useApp((s) => s.clearHighlight);
 
   // v0.13.6 — graph display mode (normal / compact / hidden). Persisted in
   // the settings store so the user's choice survives restarts.
@@ -265,6 +273,24 @@ export function CommitList() {
         },
       },
       { separator: true, label: "" },
+      { label: "Highlight reachability", heading: true },
+      {
+        label: "Ancestors (this commit + parents)",
+        onClick: () => void highlightAncestors(c.oid),
+      },
+      {
+        label: "Descendants (this commit + children)",
+        onClick: () => void highlightDescendants(c.oid),
+      },
+      ...(highlightOid
+        ? [
+            {
+              label: "Clear highlight",
+              onClick: () => clearHighlight(),
+            },
+          ]
+        : []),
+      { separator: true, label: "" },
       {
         label: `Copy SHA (${c.short_oid})`,
         onClick: () => void copyText(c.oid),
@@ -301,6 +327,25 @@ export function CommitList() {
           <span className="text-muted-foreground">· loading more...</span>
         )}
         {error && <span className="text-destructive">· {error}</span>}
+        {highlightOid && (
+          <span className="ml-auto flex items-center gap-1.5 rounded bg-[hsl(var(--branch-3)/.15)] px-2 py-0.5 text-[10.5px] text-[hsl(var(--branch-3))]">
+            <span>
+              {highlightLoading
+                ? "computing..."
+                : `Highlighting ${highlightMode} of ${highlightOid.slice(0, 7)}`}
+            </span>
+            {!highlightLoading && (
+              <span className="text-muted-foreground">· {highlightSet.size} commits</span>
+            )}
+            <button
+              onClick={clearHighlight}
+              className="ml-1 rounded border border-border bg-background/40 px-1.5 text-[10px] text-foreground hover:bg-accent"
+              title="Clear highlight (Esc)"
+            >
+              clear
+            </button>
+          </span>
+        )}
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
@@ -321,6 +366,12 @@ export function CommitList() {
               if (!c) return null;
               const row = rowsByOid.get(c.oid);
               const selected = c.oid === selectedOid;
+              // v0.13.16 — when a highlight set is active, dim every row
+              // outside it. The selected row is never dimmed (so the
+              // commit details panel still has obvious context).
+              const dimmed =
+                !!highlightOid && !highlightSet.has(c.oid) && !selected && !highlightLoading;
+              const isHighlightRoot = c.oid === highlightOid;
               return (
                 <div
                   key={c.oid}
@@ -330,6 +381,9 @@ export function CommitList() {
                     "absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-border/40 px-3 text-[12.5px]",
                     "hover:bg-accent/40",
                     selected && "bg-accent",
+                    dimmed && "opacity-25",
+                    isHighlightRoot &&
+                      "ring-1 ring-inset ring-[hsl(var(--branch-3)/.6)] bg-[hsl(var(--branch-3)/.07)]",
                   )}
                   style={{
                     height: ROW_HEIGHT,

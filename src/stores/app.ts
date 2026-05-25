@@ -110,6 +110,16 @@ interface HistoryState {
   hasMore: boolean;
   /** OID cursor for the next `git_log_page` call (oid of the current last commit). */
   nextCursor: string | null;
+  /**
+   * v0.13.16 — graph reachability highlight. When set, every row whose
+   * oid is NOT in `highlightSet` is dimmed in the UI. The set is the
+   * source of truth; `highlightOid` / `highlightMode` are kept around
+   * for the toolbar banner ("Highlighting ancestors of abc1234").
+   */
+  highlightOid: string | null;
+  highlightMode: "ancestors" | "descendants" | null;
+  highlightSet: Set<string>;
+  highlightLoading: boolean;
   error: string | null;
 }
 
@@ -426,6 +436,12 @@ interface AppState {
   setDateRange: (since: number | null, until: number | null) => void;
   setPathspec: (p: string) => void;
   resetHistoryFilters: () => void;
+  /** v0.13.16 — Highlight every commit reachable from `oid` walking backwards through parents. */
+  highlightAncestors: (oid: string) => Promise<void>;
+  /** v0.13.16 — Highlight every commit reachable from `oid` walking forwards through children. */
+  highlightDescendants: (oid: string) => Promise<void>;
+  /** v0.13.16 — Drop the highlight set so every row is rendered at full opacity again. */
+  clearHighlight: () => void;
 
   // diff
   openDiff: (oid: string, file: string, files?: FileChange[]) => Promise<void>;
@@ -604,6 +620,10 @@ const emptyHistory: HistoryState = {
   loadingMore: false,
   hasMore: false,
   nextCursor: null,
+  highlightOid: null,
+  highlightMode: null,
+  highlightSet: new Set<string>(),
+  highlightLoading: false,
   error: null,
 };
 
@@ -1335,6 +1355,11 @@ export const useApp = create<AppState>((set, get) => ({
         commits: [],
         hasMore: false,
         nextCursor: null,
+        // v0.13.16 — a fresh walk invalidates any active highlight set.
+        highlightOid: null,
+        highlightMode: null,
+        highlightSet: new Set<string>(),
+        highlightLoading: false,
       },
     }));
     try {
@@ -1458,10 +1483,90 @@ export const useApp = create<AppState>((set, get) => ({
         sinceFilter: null,
         untilFilter: null,
         pathspec: "",
+        highlightOid: null,
+        highlightMode: null,
+        highlightSet: new Set<string>(),
+        highlightLoading: false,
       },
     }));
     void get().loadHistory();
   },
+
+  // ---------- History highlight (v0.13.16) ----------
+  highlightAncestors: async (oid) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({
+      history: {
+        ...s.history,
+        highlightOid: oid,
+        highlightMode: "ancestors",
+        highlightLoading: true,
+        // Keep the previous set visible while we recompute, otherwise
+        // every row flashes to full opacity for a frame.
+      },
+    }));
+    try {
+      const oids = await git.commitAncestors(repo.path, oid);
+      // The user may have switched the highlight or cleared it while we
+      // were computing — only commit the result if we're still the latest.
+      if (get().history.highlightOid !== oid || get().history.highlightMode !== "ancestors") {
+        return;
+      }
+      set((s) => ({
+        history: {
+          ...s.history,
+          highlightSet: new Set(oids),
+          highlightLoading: false,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({
+        history: { ...s.history, highlightLoading: false, error: String(e) },
+      }));
+    }
+  },
+
+  highlightDescendants: async (oid) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({
+      history: {
+        ...s.history,
+        highlightOid: oid,
+        highlightMode: "descendants",
+        highlightLoading: true,
+      },
+    }));
+    try {
+      const oids = await git.commitDescendants(repo.path, oid);
+      if (get().history.highlightOid !== oid || get().history.highlightMode !== "descendants") {
+        return;
+      }
+      set((s) => ({
+        history: {
+          ...s.history,
+          highlightSet: new Set(oids),
+          highlightLoading: false,
+        },
+      }));
+    } catch (e) {
+      set((s) => ({
+        history: { ...s.history, highlightLoading: false, error: String(e) },
+      }));
+    }
+  },
+
+  clearHighlight: () =>
+    set((s) => ({
+      history: {
+        ...s.history,
+        highlightOid: null,
+        highlightMode: null,
+        highlightSet: new Set<string>(),
+        highlightLoading: false,
+      },
+    })),
 
   // ---------- Diff ----------
   openDiff: async (oid, file, files) => {

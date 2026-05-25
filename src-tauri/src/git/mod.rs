@@ -3,6 +3,7 @@
 pub mod blame;
 pub mod blob;
 pub mod commit_ops;
+pub mod commit_relations;
 pub mod config;
 pub mod diff;
 pub mod file_history;
