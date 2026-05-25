@@ -147,11 +147,7 @@ function Row({
               {t("worktrees.remove")}
             </button>
             <button
-              onClick={() => {
-                if (confirm(t("worktrees.forceRemoveConfirm").replace("{name}", wt.name))) {
-                  onRemove(true);
-                }
-              }}
+              onClick={() => onRemove(true)}
               disabled={busy}
               title={t("worktrees.forceRemoveTitle")}
               className={cn(

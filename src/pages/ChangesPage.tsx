@@ -46,6 +46,7 @@ export function ChangesPage() {
   const saveStash = useApp((s) => s.saveStash);
   const openWorkingDiff = useApp((s) => s.openWorkingDiff);
   const repo = useApp((s) => s.repo);
+  const confirm = useApp((s) => s.confirm);
   const loadChanges = useApp((s) => s.loadChanges);
 
   // v0.13.9 — Apply patch dialog state. The flow is: open dialog → user
@@ -97,9 +98,14 @@ export function ChangesPage() {
       "",
     );
     if (m === null) return;
-    const includeUntracked = window.confirm(
-      "Include untracked files? (OK = include, Cancel = skip)",
-    );
+    const includeUntracked = await confirm({
+      level: "warning",
+      title: "Include untracked files?",
+      message:
+        "OK = stash both tracked changes and brand-new files (`git stash -u`). Cancel = stash only tracked-but-modified files.",
+      confirmLabel: "Include untracked",
+      cancelLabel: "Skip untracked",
+    });
     await saveStash({
       message: m.trim() || undefined,
       includeUntracked,

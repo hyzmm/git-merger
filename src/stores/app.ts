@@ -297,6 +297,38 @@ interface PaletteState {
   filesLoadedFor: string | null;
 }
 
+/**
+ * v0.13.15 — Generic confirmation prompt routed through the central
+ * ConfirmDialog component. Created via `confirm({ ... })`, which
+ * returns a `Promise<boolean>` resolved by the dialog's OK / Cancel
+ * (or ESC / Enter) handlers.
+ */
+export interface ConfirmRequest {
+  /** Severity tone: red destructive vs neutral primary button. */
+  level: "danger" | "warning";
+  /** Short headline ("Discard 5 file(s)?"). */
+  title: string;
+  /** One-line subtitle / consequence summary. May be ReactNode in callers; we only need string here. */
+  message: string;
+  /**
+   * Optional verbatim block (refspecs, oid, file list…) shown in a
+   * monospace card under the message. Useful for "is this really the
+   * thing you mean?" reassurance.
+   */
+  detail?: string;
+  /** Confirm-button label; defaults to "OK" / "Delete" by level. */
+  confirmLabel?: string;
+  /** Cancel-button label; defaults to "Cancel". */
+  cancelLabel?: string;
+}
+
+interface ConfirmState extends ConfirmRequest {
+  /** Frame-id to disambiguate stale requests after fast-fire dismissals. */
+  id: number;
+  /** Resolver injected by `confirm()`; ConfirmDialog calls one of them. */
+  resolve: (ok: boolean) => void;
+}
+
 interface FileHistoryView {
   /** Path the user originally asked for; UI shows this in the toolbar. */
   startPath: string | null;
@@ -327,6 +359,8 @@ interface AppState {
   tags: TagsView;
   rebase: RebaseView;
   palette: PaletteState;
+  /** Pending confirm prompt; null when no dialog is up. (v0.13.15) */
+  confirmRequest: ConfirmState | null;
   fileHistory: FileHistoryView;
   worktrees: WorktreesView;
   gitignore: GitignoreView;
@@ -527,6 +561,12 @@ interface AppState {
   openPalette: () => void;
   closePalette: () => void;
   ensureTrackedFiles: () => Promise<void>;
+
+  // confirm prompts (v0.13.15)
+  /** Pop a confirmation dialog and await OK/Cancel. Resolves to `true` on confirm, `false` on dismiss/ESC/Cancel. */
+  confirm: (req: ConfirmRequest) => Promise<boolean>;
+  /** Programmatic close (used by the ConfirmDialog component itself; not normally called from app code). */
+  closeConfirm: (ok: boolean) => void;
 
   // file history
   openFileHistory: (file: string) => Promise<void>;
@@ -827,6 +867,7 @@ export const useApp = create<AppState>((set, get) => ({
   tags: { ...emptyTags },
   rebase: { ...emptyRebase },
   palette: { ...emptyPalette },
+  confirmRequest: null,
   fileHistory: { ...emptyFileHistory },
   worktrees: { ...emptyWorktrees },
   gitignore: { ...emptyGitignore },
@@ -1738,6 +1779,14 @@ export const useApp = create<AppState>((set, get) => ({
   abortMerge: async () => {
     const repo = get().repo;
     if (!repo) return;
+    const ok = await get().confirm({
+      level: "danger",
+      title: "Abort merge?",
+      message:
+        "The merge in progress will be cancelled and the working tree restored to its pre-merge state. Any conflict resolutions you've already made will be lost.",
+      confirmLabel: "Abort merge",
+    });
+    if (!ok) return;
     set((s) => ({ merge: { ...s.merge, loading: true, error: null } }));
     try {
       await git.abortMerge(repo.path);
@@ -1953,9 +2002,19 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     const { changes } = get();
     if (!repo || changes.selected.size === 0) return;
-    if (!confirm(`Discard ${changes.selected.size} file(s)? This cannot be undone.`)) return;
+    const list = Array.from(changes.selected);
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Discard ${list.length} file${list.length === 1 ? "" : "s"}?`,
+      message:
+        "Working-tree changes for the selected files will be reverted to HEAD. This cannot be undone.",
+      detail:
+        list.slice(0, 20).join("\n") + (list.length > 20 ? `\n…and ${list.length - 20} more` : ""),
+      confirmLabel: "Discard",
+    });
+    if (!ok) return;
     try {
-      await git.discardFiles(repo.path, Array.from(changes.selected));
+      await git.discardFiles(repo.path, list);
       void get().loadChanges();
     } catch (e) {
       set((s) => ({ changes: { ...s.changes, error: String(e) } }));
@@ -2049,7 +2108,13 @@ export const useApp = create<AppState>((set, get) => ({
   dropStash: async (index) => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm(`Drop stash@{${index}}? This cannot be undone.`)) return;
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Drop stash@{${index}}?`,
+      message: "The stashed changes will be deleted permanently. This cannot be undone.",
+      confirmLabel: "Drop",
+    });
+    if (!ok) return;
     set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
     try {
       await git.stashDrop(repo.path, index);
@@ -2087,12 +2152,14 @@ export const useApp = create<AppState>((set, get) => ({
   checkoutCommit: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    if (
-      !confirm(
-        `Checkout ${oid.slice(0, 7)} in detached HEAD state?\n\nYou will not be on any branch after this.`,
-      )
-    )
-      return;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Checkout ${oid.slice(0, 7)} (detached HEAD)?`,
+      message:
+        "You will not be on any branch after this. New commits made on a detached HEAD can only be recovered via reflog. Create a branch first if you want to keep working from here.",
+      confirmLabel: "Checkout",
+    });
+    if (!ok) return;
     try {
       await git.checkoutCommit(repo.path, oid);
       void get().loadHistory();
@@ -2105,7 +2172,14 @@ export const useApp = create<AppState>((set, get) => ({
   deleteBranch: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm(`Delete branch '${name}'?`)) return;
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Delete branch '${name}'?`,
+      message:
+        "The local branch ref will be removed. Unmerged commits not reachable from another ref may become unreachable (still recoverable via reflog for ~90 days).",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     try {
       await git.deleteBranch(repo.path, name);
       void get().loadHistory();
@@ -2142,7 +2216,14 @@ export const useApp = create<AppState>((set, get) => ({
   deleteTag: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm(`Delete tag '${name}'?`)) return;
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Delete tag '${name}'?`,
+      message:
+        "The local tag ref will be removed. The remote copy is left untouched — use the Tags panel's 'Remote' button to delete the remote tag too.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     try {
       await git.deleteTag(repo.path, name);
       void get().loadHistory();
@@ -2186,6 +2267,16 @@ export const useApp = create<AppState>((set, get) => ({
   pushAllTags: async (opts) => {
     const repo = get().repo;
     if (!repo) return;
+    const tagCount = get().tags.entries.length;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Push all ${tagCount} tag${tagCount === 1 ? "" : "s"}?`,
+      message:
+        "Mirrors every local tag to the remote in one shot. Use this for release pushes; for an individual tag prefer the per-row Push button.",
+      detail: `git push ${opts?.remote ?? "origin"} ${opts?.force ? "+" : ""}refs/tags/*:refs/tags/*`,
+      confirmLabel: "Push all tags",
+    });
+    if (!ok) return;
     set((s) => ({ tags: { ...s.tags, busy: true, error: null, status: null } }));
     try {
       const r = await git.pushAllTags(repo.path, opts);
@@ -2200,13 +2291,15 @@ export const useApp = create<AppState>((set, get) => ({
   deleteRemoteTag: async (tagName, opts) => {
     const repo = get().repo;
     if (!repo) return;
-    if (
-      !confirm(
-        `Delete the tag '${tagName}' on the remote? The local tag will stay; this only pushes :refs/tags/${tagName}.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Delete remote tag '${tagName}'?`,
+      message:
+        "The local tag stays put; only the remote copy is removed. Anyone who already fetched the tag still has it locally.",
+      detail: `git push ${opts?.remote ?? "origin"} :refs/tags/${tagName}`,
+      confirmLabel: "Delete on remote",
+    });
+    if (!ok) return;
     set((s) => ({ tags: { ...s.tags, busy: true, error: null, status: null } }));
     try {
       const r = await git.deleteRemoteTag(repo.path, tagName, opts);
@@ -2226,7 +2319,14 @@ export const useApp = create<AppState>((set, get) => ({
   cherryPick: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm(`Cherry-pick ${oid.slice(0, 7)} onto current HEAD?`)) return;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Cherry-pick ${oid.slice(0, 7)} onto HEAD?`,
+      message:
+        "A new commit replaying these changes will be created on top of the current branch. Conflicts will route you to the Merge view.",
+      confirmLabel: "Cherry-pick",
+    });
+    if (!ok) return;
     try {
       await git.cherryPick(repo.path, oid);
       void get().loadHistory();
@@ -2243,7 +2343,14 @@ export const useApp = create<AppState>((set, get) => ({
   revertCommit: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm(`Revert ${oid.slice(0, 7)}? An inverse commit will be staged on HEAD.`)) return;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Revert ${oid.slice(0, 7)}?`,
+      message:
+        "An inverse commit undoing this change will be staged on the current branch. Conflicts (e.g. the change has already been edited again) route you to the Merge view.",
+      confirmLabel: "Revert",
+    });
+    if (!ok) return;
     try {
       await git.revertCommit(repo.path, oid);
       void get().loadHistory();
@@ -2264,7 +2371,13 @@ export const useApp = create<AppState>((set, get) => ({
       mixed: "Mixed reset: HEAD and index move; working tree is kept.",
       hard: "HARD reset: HEAD, index AND working tree all reset. Uncommitted changes will be LOST.",
     };
-    if (!confirm(`Reset to ${oid.slice(0, 7)}?\n\n${warnings[mode]}`)) return;
+    const ok = await get().confirm({
+      level: mode === "hard" ? "danger" : "warning",
+      title: `Reset to ${oid.slice(0, 7)} (${mode})?`,
+      message: warnings[mode],
+      confirmLabel: mode === "hard" ? "Hard reset" : "Reset",
+    });
+    if (!ok) return;
     try {
       await git.resetTo(repo.path, oid, mode);
       void get().loadHistory();
@@ -2317,6 +2430,14 @@ export const useApp = create<AppState>((set, get) => ({
   updateSubmodule: async (name) => {
     const repo = get().repo;
     if (!repo) return;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Update submodule '${name}'?`,
+      message:
+        "Checks out the SHA pinned by the parent repo. Uncommitted changes inside the submodule's working tree may be overwritten.",
+      confirmLabel: "Update",
+    });
+    if (!ok) return;
     set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
     try {
       await git.submoduleUpdate(repo.path, name, true);
@@ -2330,6 +2451,14 @@ export const useApp = create<AppState>((set, get) => ({
   updateSubmoduleRecursive: async (name) => {
     const repo = get().repo;
     if (!repo) return;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Recursively update '${name}'?`,
+      message:
+        "Equivalent to `git submodule update --init --recursive`. Checks out the pinned SHA in this submodule and every nested submodule beneath it. Uncommitted changes anywhere along the chain may be overwritten.",
+      confirmLabel: "Update recursively",
+    });
+    if (!ok) return;
     set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
     try {
       await git.submoduleUpdateRecursive(repo.path, name, true);
@@ -2388,6 +2517,15 @@ export const useApp = create<AppState>((set, get) => ({
   removeWorktree: async (name, force = false) => {
     const repo = get().repo;
     if (!repo) return;
+    const ok = await get().confirm({
+      level: force ? "danger" : "warning",
+      title: force ? `Force-remove worktree '${name}'?` : `Remove worktree '${name}'?`,
+      message: force
+        ? "Drops the worktree even if it has locally-modified files. Any uncommitted changes inside that worktree directory will be unrecoverable."
+        : "Detaches the worktree from this repository. Refuses if the worktree is dirty — switch to Force in that case.",
+      confirmLabel: force ? "Force remove" : "Remove",
+    });
+    if (!ok) return;
     set((s) => ({ worktrees: { ...s.worktrees, busy: true, status: null, error: null } }));
     try {
       await git.worktreeRemove(repo.path, name, force);
@@ -2736,7 +2874,14 @@ export const useApp = create<AppState>((set, get) => ({
   rebaseAbort: async () => {
     const repo = get().repo;
     if (!repo) return;
-    if (!confirm("Abort the rebase and restore the original branch tip?")) return;
+    const ok = await get().confirm({
+      level: "danger",
+      title: "Abort rebase?",
+      message:
+        "The branch tip will be restored to where the rebase started. Any conflict resolutions you've already finished will be discarded.",
+      confirmLabel: "Abort rebase",
+    });
+    if (!ok) return;
     set((s) => ({ rebase: { ...s.rebase, busy: true, error: null } }));
     try {
       await git.rebaseAbort(repo.path);
@@ -2776,6 +2921,24 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   closePalette: () => set((s) => ({ palette: { ...s.palette, open: false } })),
+
+  // ---------- Confirm prompts (v0.13.15) ----------
+  confirm: (req) =>
+    new Promise<boolean>((resolve) => {
+      // If a previous prompt is still up (rapid double-trigger), settle it
+      // as a cancel before we replace it — never strand the awaiting caller.
+      const prev = get().confirmRequest;
+      if (prev) prev.resolve(false);
+      const id = (get().confirmRequest?.id ?? 0) + 1;
+      set({ confirmRequest: { ...req, id, resolve } });
+    }),
+
+  closeConfirm: (ok) => {
+    const cur = get().confirmRequest;
+    if (!cur) return;
+    cur.resolve(ok);
+    set({ confirmRequest: null });
+  },
 
   ensureTrackedFiles: async () => {
     const repo = get().repo;

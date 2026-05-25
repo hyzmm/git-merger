@@ -125,6 +125,7 @@ function TagRow({
   onDeleteRemote: () => void;
 }) {
   const annotated = tag.is_annotated;
+  const confirm = useApp((s) => s.confirm);
   return (
     <div className="border-b border-border/40">
       <div className="flex items-center gap-3 px-3 py-2 hover:bg-accent/30">
@@ -178,12 +179,17 @@ function TagRow({
           </button>
           <button
             onClick={() => {
-              if (
-                window.confirm(
-                  `Force-push ${tag.name}? This overwrites a moved/recreated tag on the remote (+refs/tags/${tag.name}).`,
-                )
-              )
-                onPush(true);
+              void (async () => {
+                const ok = await confirm({
+                  level: "danger",
+                  title: `Force-push tag '${tag.name}'?`,
+                  message:
+                    "Overwrites a moved or recreated tag on the remote. Anyone who already fetched the previous tag will keep their stale copy until they manually re-fetch.",
+                  detail: `git push origin +refs/tags/${tag.name}:refs/tags/${tag.name}`,
+                  confirmLabel: "Force push",
+                });
+                if (ok) onPush(true);
+              })();
             }}
             disabled={busy}
             title="Force push (overwrites a moved/recreated tag on the remote)"

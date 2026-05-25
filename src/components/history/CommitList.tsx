@@ -62,6 +62,7 @@ export function CommitList() {
   const openRebasePlan = useApp((s) => s.openRebasePlan);
   const createBranch = useApp((s) => s.createBranch);
   const createTag = useApp((s) => s.createTag);
+  const confirm = useApp((s) => s.confirm);
 
   // v0.13.6 — graph display mode (normal / compact / hidden). Persisted in
   // the settings store so the user's choice survives restarts.
@@ -204,8 +205,16 @@ export function CommitList() {
         onClick: () => {
           const name = window.prompt(`New branch from ${c.short_oid}:`, "")?.trim();
           if (!name) return;
-          const ck = window.confirm(`Checkout new branch '${name}' immediately?`);
-          void createBranch(name, c.oid, ck);
+          void (async () => {
+            const ck = await confirm({
+              level: "warning",
+              title: `Checkout '${name}' after creating?`,
+              message: `OK = create + checkout. Cancel = just create the ref, stay on the current branch.`,
+              confirmLabel: "Create + checkout",
+              cancelLabel: "Create only",
+            });
+            void createBranch(name, c.oid, ck);
+          })();
         },
       },
       {

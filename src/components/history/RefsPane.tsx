@@ -39,6 +39,7 @@ export function RefsPane() {
   const renameBranch = useApp((s) => s.renameBranch);
   const createBranchAct = useApp((s) => s.createBranch);
   const deleteTagAct = useApp((s) => s.deleteTag);
+  const confirm = useApp((s) => s.confirm);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 
@@ -64,14 +65,18 @@ export function RefsPane() {
     return g;
   }, [refs]);
 
-  const onNewBranch = () => {
+  const onNewBranch = async () => {
     const head = refs.find((r) => r.is_head);
     const start = head?.name ?? "HEAD";
     const name = window.prompt(`New branch name (from ${start}):`, "")?.trim();
     if (!name) return;
-    const checkout = window.confirm(
-      `Checkout new branch '${name}' immediately? (Cancel = create only)`,
-    );
+    const checkout = await confirm({
+      level: "warning",
+      title: `Checkout '${name}' after creating?`,
+      message: `OK = create + checkout (working tree switches). Cancel = just create the ref, stay on '${start}'.`,
+      confirmLabel: "Create + checkout",
+      cancelLabel: "Create only",
+    });
     void createBranchAct(name, start, checkout);
   };
 
@@ -90,8 +95,16 @@ export function RefsPane() {
           onClick: () => {
             const name = window.prompt(`New branch name (from ${ref.name}):`, "")?.trim();
             if (!name) return;
-            const ck = window.confirm(`Checkout new branch '${name}' immediately?`);
-            void createBranchAct(name, ref.name, ck);
+            void (async () => {
+              const ck = await confirm({
+                level: "warning",
+                title: `Checkout '${name}' after creating?`,
+                message: `OK = create + checkout. Cancel = just create the ref, stay on the current branch.`,
+                confirmLabel: "Create + checkout",
+                cancelLabel: "Create only",
+              });
+              void createBranchAct(name, ref.name, ck);
+            })();
           },
         },
         {
@@ -134,8 +147,16 @@ export function RefsPane() {
           onClick: () => {
             const name = window.prompt(`New branch name (from tag ${ref.name}):`, "")?.trim();
             if (!name) return;
-            const ck = window.confirm(`Checkout new branch '${name}' immediately?`);
-            void createBranchAct(name, ref.name, ck);
+            void (async () => {
+              const ck = await confirm({
+                level: "warning",
+                title: `Checkout '${name}' after creating?`,
+                message: `OK = create + checkout. Cancel = just create the ref, stay on the current branch.`,
+                confirmLabel: "Create + checkout",
+                cancelLabel: "Create only",
+              });
+              void createBranchAct(name, ref.name, ck);
+            })();
           },
         },
         { separator: true, label: "" },

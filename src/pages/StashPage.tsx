@@ -22,21 +22,27 @@ export function StashPage() {
   const applyStash = useApp((s) => s.applyStash);
   const popStash = useApp((s) => s.popStash);
   const dropStash = useApp((s) => s.dropStash);
+  const confirm = useApp((s) => s.confirm);
 
   useEffect(() => {
     if (repo) void loadStash();
   }, [repo, loadStash]);
 
-  const onNewStash = () => {
+  const onNewStash = async () => {
     const message = window.prompt(
       "Stash message (optional):\n\nLeave blank to use 'WIP on <branch>'.",
       "",
     );
     // Cancel = null. Empty string = use default message.
     if (message === null) return;
-    const includeUntracked = window.confirm(
-      "Include untracked files? (OK = include, Cancel = skip)",
-    );
+    const includeUntracked = await confirm({
+      level: "warning",
+      title: "Include untracked files?",
+      message:
+        "OK = stash both tracked changes and brand-new files (`git stash -u`). Cancel = stash only tracked-but-modified files.",
+      confirmLabel: "Include untracked",
+      cancelLabel: "Skip untracked",
+    });
     void saveStash({
       message: message.trim() || undefined,
       includeUntracked,

@@ -4,7 +4,7 @@
 
 IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tauri 2 + React 19 + git2-rs (vendored libgit2). Runs on Windows / macOS / Linux.
 
-> Target version: v0.13.14
+> Target version: v0.13.15
 > Repo location: `G:\GitTools\`
 > Installers: `G:\GitTools\src-tauri\target\release\bundle\` (local build) or [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -34,6 +34,7 @@ IDEA-style **History / Diff / Merge / Blame / Rebase** desktop app, built on Tau
   - [4.2 Undo button (reflog quick actions)](#42-undo-button-reflog-quick-actions)
   - [4.3 Multi-repo tabs (v0.12.0 / v0.13.5)](#43-multi-repo-tabs-v0120--v0135)
   - [4.4 Error feedback & Toasts (v0.13.1)](#44-error-feedback--toasts-v0131)
+  - [4.5 Confirmation dialog for destructive ops (v0.13.15)](#45-confirmation-dialog-for-destructive-ops-v01315)
 - [5. Command Palette (Ctrl+K)](#5-command-palette-ctrlk)
   - [5.1 Recent Files (Ctrl+E, v0.13.8)](#51-recent-files-ctrle-v0138)
 - [6. Settings panel](#6-settings-panel)
@@ -678,6 +679,28 @@ Starting in v0.13.1, every backend error funnels through a unified **Toast** que
 
 > Pre-v0.13.1 errors were just `String(e)`'d into a component's local error state with no global safety net. If a constructor folded the error into an effect's callback, it could be lost. v0.13.1 closes that gap.
 
+### 4.5 Confirmation dialog for destructive ops (v0.13.15)
+
+The 14 scattered `window.confirm()` call sites have been replaced by a single styled **ConfirmDialog** — a centred modal that picks an icon + button colour from the consequence's severity:
+
+| Level      | Visual                                                                | When                                                                                                       |
+| ---------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 🛡 Danger  | Red Confirm button + ShieldAlert icon                                  | Irreversible / data-losing actions: discard, drop stash, delete branch, delete tag (local + remote), hard reset, abort merge, abort rebase, force-push tag, force remove worktree |
+| ⚠️ Warning | Primary-blue Confirm button + AlertTriangle icon                       | Recoverable but with side-effects: cherry-pick, revert, soft + mixed reset, detached-HEAD checkout, submodule update, push --tags, "checkout after creating?" branch creation     |
+
+**Keyboard**: `Esc` cancels, `Enter` confirms; clicking outside the dialog (the backdrop) also cancels — Confirm is never triggered by stray clicks. **Focus** jumps to the Confirm button on open, so the user must deliberately press Enter — no chance of an "errant Enter from the previous prompt" auto-confirm.
+
+**Detail block**: dangerous actions usually attach a monospaced `<pre>` showing the **exact git command / refspec / file list** so the user can sanity-check what's about to happen:
+
+- Delete remote tag → `git push origin :refs/tags/v1.2.3`
+- Force-push tag → `git push origin +refs/tags/v1.2.3:refs/tags/v1.2.3`
+- Discard N files → first 20 paths + remaining count
+- Push all tags → `git push origin refs/tags/*:refs/tags/*`
+
+**Single-flight implementation**: the dialog is backed by a single zustand-store slot (`store.confirmRequest`); call sites read as `await get().confirm({...})` returning a boolean — same shape as the old `confirm(...)` API but no longer blocks the JS thread or steals system focus.
+
+> Design tradeoff: **high-frequency operations are NOT prompted** (push a single tag, checkout branch, stash apply / pop) to avoid prompt fatigue; only operations that **discard working-tree changes, mutate the remote, or delete refs** get a confirmation. Apply patch already routes through its own dry-run dialog, so no extra confirm there either.
+
 ---
 
 ## 5. Command Palette (`Ctrl+K`)
@@ -1158,6 +1181,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.12 | Dedicated **Tags management panel**: Sidebar gains a 🏷️ Tag entry, also reachable via `Ctrl+K` → "Tags"; the table lists every tag newest-first, annotated rows expand to reveal message / tagger / raw oid while lightweight rows are clearly distinguished; per-row **Push** / **Force** / delete-local / delete-remote + toolbar **Push all tags** (`refs/tags/*:refs/tags/*`); remote deletion uses `:refs/tags/<name>` refspec; backend `git/refs.rs::list_tags` peels annotated tag objects, plus three new public `git/remote.rs` functions (push_tag / push_all_tags / delete_remote_tag) sharing the existing OpHandle progress + cancel channel; +1 integration test |
 | v0.13.13 | **Commit details panel enhanced**: header gains a Copy message / Copy full SHA / Copy short SHA trio; Parents and Children render as clickable chips that jump to the target commit (children are derived client-side from the loaded log window via `parents.includes(oid)`, zero extra IPC); when the committer differs from the author (cherry-pick / rebase artifacts) a separate **Committer** row appears with the landing time; new **Contained in** section lists the local + remote branches and tags this commit lives on, colour-coded for at-a-glance scanning. Backend `git::log::commit_meta` uses libgit2 `graph_descendant_of` per ref (annotated tags peeled first); +1 integration test covering containing-branches/tags |
 | v0.13.14 | **Diff viewer dual upgrade**: (1) **Word-level overlay in Unified mode** — matching SBS, consecutive `-`/`+` runs are paired by index and word-diffed; new pure helper `unifiedWordTokens` covered by 7 bun:test cases. (2) **Image diff** — selecting an image asset (png / jpg / gif / webp / svg / avif / bmp / ico) flips the diff body to a two-pane image preview with file-size chips, checker-board transparency, and Before/After placeholders for added / deleted / >8 MB cases. Backend gains `git/blob.rs::read_blob_at_commit` + `read_working_blob` (base64-encoded with the same 8 MB cap as the working-file editor); pulls in `base64 = "0.22"`, +3 integration tests, +5 imageMime frontend tests |
+| v0.13.15 | **Unified destructive-op confirmation dialog**: every `window.confirm()` call site (14 of them across stores/components) replaced by a custom `ConfirmDialog` — danger / warning severity colouring, optional `<pre>` detail block to surface the actual git command, Esc=cancel / Enter=confirm / backdrop=cancel, focus auto-jumps to Confirm to prevent stray-Enter mishaps. Covers: discard, drop stash, delete branch, delete tag (local + remote), hard reset, abort merge, abort rebase, detached-HEAD checkout, cherry-pick, revert, soft+mixed reset, submodule update, submodule update recursive, push --tags, force-push tag, force remove worktree. Store gains a Promise-based `confirm()` API so call sites read identically to the old `await confirm(...)` shape |
 
 ---
 

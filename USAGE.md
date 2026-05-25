@@ -4,7 +4,7 @@
 
 IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于 Tauri 2 + React 19 + git2-rs (vendored libgit2)，可在 Windows / macOS / Linux 运行。
 
-> 适用版本：v0.13.14  
+> 适用版本：v0.13.15  
 > 仓库位置：`G:\GitTools\`  
 > 安装包位置：`G:\GitTools\src-tauri\target\release\bundle\`（本地构建）或 [GitHub Releases](https://github.com/hyzmm/git-merger/releases)
 
@@ -34,6 +34,7 @@ IDEA 风格的 **History / Diff / Merge / Blame / Rebase** 桌面应用，基于
   - [4.2 Undo 按钮（reflog quick actions）](#42-undo-按钮reflog-quick-actions)
   - [4.3 多仓库 tabs（v0.12.0 / v0.13.5）](#43-多仓库-tabsv0120--v0135)
   - [4.4 错误提示与 Toast（v0.13.1）](#44-错误提示与-toastv0131)
+  - [4.5 危险操作确认（v0.13.15）](#45-危险操作确认v01315)
 - [五、Command Palette（Ctrl+K）](#五command-palettectrlk)
   - [5.1 最近文件（Ctrl+E，v0.13.8）](#51-最近文件ctrle-v0138)
 - [六、设置面板](#六设置面板)
@@ -678,6 +679,28 @@ v0.13.1 起所有后端报错走统一的 **Toast** 队列（屏幕右下角浮�
 
 > 旧版本（< v0.13.1）的错误处理是把 `git2::Error` 直接 `String(e)` 出来扔到组件 local error 里，没全局兜底。如果某个 ctor 把 error 揉进了 effect 的回调里，可能就丢了。v0.13.1 起这个口子被堵上。
 
+### 4.5 危险操作确认（v0.13.15）
+
+之前散落在十几处的 `window.confirm()` 已全部替换为统一的 **ConfirmDialog**——居中浮层、主题色协调、按危险等级着色：
+
+| 等级       | 视觉                                                                                       | 适用场景                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| 🛡 Danger  | 红色 confirm 按钮 + 盾牌图标 (ShieldAlert)                                                 | 不可逆 / 可能丢失工作的操作：discard / drop stash / delete branch / delete tag (local + remote) / hard reset / abort merge / abort rebase / force-push tag / force remove worktree |
+| ⚠️ Warning | 主品牌色 confirm 按钮 + 三角警告图标 (AlertTriangle)                                       | 可恢复但有副作用：cherry-pick / revert / soft+mixed reset / detached HEAD checkout / submodule update / push --tags / 创建分支后是否立即 checkout |
+
+**键盘**：`Esc` = 取消，`Enter` = 确认；点击对话框外的遮罩 = 取消（避免误点 Confirm）。**焦点**：弹窗打开时焦点跳到 Confirm 按钮，所以用户必须**主动**按 Enter 才会触发——不会"误回车确认上一个操作"。
+
+**详细信息块**：危险操作通常配一个 `<pre>` monospace 块显示**真实的 git 命令 / refspec / 文件清单**，让用户在按下 Confirm 前能再核对一次。例：
+
+- 删远端 tag → `git push origin :refs/tags/v1.2.3`
+- Force-push tag → `git push origin +refs/tags/v1.2.3:refs/tags/v1.2.3`
+- Discard N 个文件 → 列出前 20 个文件名 + 剩余计数
+- Push all tags → `git push origin refs/tags/*:refs/tags/*`
+
+**单飞实现**：弹窗以 zustand store 单例承载（`store.confirmRequest`），调用方 `await get().confirm({...})` 拿到 boolean——使整个调用点的代码形态和原 `confirm(...)` 完全一致，但不再阻塞 JS 线程也不抢系统焦点。
+
+> 设计取舍：**高频操作不加确认**（push 单个 tag、checkout branch、stash apply / pop），避免用户疲劳；只对**会丢工作树修改 / 改动远端 / 删除引用**的真实危险操作加确认。Apply patch 走自己的 dry-run dialog，已经是二次确认链，故不重复。
+
 ---
 
 ## 五、Command Palette（`Ctrl+K`）
@@ -1153,6 +1176,7 @@ Remove-Item -Force .tauri-dev.log*, .tauri-build.log* -ErrorAction SilentlyConti
 | v0.13.12 | 专用 **Tag 管理面板**：Sidebar 新增 🏷️ Tag 入口 + `Ctrl+K` 命令面板可达；表格按时间倒序展示所有 tag，annotated 行可展开显示 message / tagger / 原始 oid，lightweight 行清晰区分；逐行 **Push** / **Force** / 删本地 / 删远端 + 顶部 **Push all tags**（`refs/tags/*:refs/tags/*`）+ 删除远端走 `:refs/tags/<name>` refspec；后端 `git/refs.rs::list_tags` 解析 annotated tag 对象 + `git/remote.rs` 三个新公开函数（push_tag / push_all_tags / delete_remote_tag）共享既有 OpHandle 进度 + 取消通道，新增 1 个集成测试 |
 | v0.13.13 | **Commit 详情面板增强**：顶部加 Copy message / Copy full SHA / Copy short SHA 三个一键复制按钮；Parents / Children chip 全部可点击直接跳转（children 从已加载历史窗口反查 `parents.includes(oid)` 实时算，零额外 IPC）；committer 与 author 不同（cherry-pick / rebase）时单独显示 **Committer** 行 + commit 进入仓库的时间；新增 **Contained in** 区块——commit 所在的本地 / 远端 branches + tags，按视觉色区分。后端 `git::log::commit_meta` 命令通过 libgit2 `graph_descendant_of` 逐 ref 判断（annotated tag 自动 peel），新增 1 个集成测试覆盖 contained-in 逻辑 |
 | v0.13.14 | **Diff 视图双重升级**：(1) **Unified 模式补 word-level**——和 SBS 对齐，连续 `-`/`+` 块按 index 配对计算 LCS token，新纯函数 `unifiedWordTokens` + 7 个 bun:test；(2) **Image diff**——选中常见图片扩展（png/jpg/gif/webp/svg/avif/bmp/ico）时 Diff 主体自动切换为双栏图片预览，标题栏显示文件大小，棋盘格背景显示透明区，新增/删除/oversized(>8 MB) 三种边界态各有 placeholder。后端新增 `git/blob.rs::read_blob_at_commit` + `read_working_blob`（base64 编码 + 8 MB 上限），加 base64 = "0.22" 依赖 + 3 个集成测试 + 5 个 imageMime 前端测试 |
+| v0.13.15 | **统一危险操作确认对话框**：之前散落 14 处的 `window.confirm()` 全部替换为自定义 `ConfirmDialog`——按 danger / warning 两级着色（红色破坏性 / 主品牌色）、可携带 detail 块显示真实 git 命令、Esc=取消 / Enter=确认 / 背景点击=取消、焦点自动跳到 Confirm 按钮（防误触）。覆盖：discard / drop stash / delete branch / delete tag (local + remote) / hard reset / abort merge / abort rebase / detached HEAD checkout / cherry-pick / revert / soft+mixed reset / submodule update / submodule update recursive / push --tags / force-push tag / force remove worktree。store 加 `confirm()` Promise API 单飞实现；调用点和原生 confirm 一致的 `await` 形态 |
 
 ---
 
