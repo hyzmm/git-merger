@@ -2,10 +2,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { useSettings } from "@/stores/settings";
-import { createLayoutState, extendLayout, type LayoutState, type RowLayout } from "@/lib/graph";
+import {
+  applyColMapping,
+  buildColMapping,
+  createLayoutState,
+  extendLayout,
+  type LayoutState,
+  type RowLayout,
+} from "@/lib/graph";
+import { computeTrunkOids } from "@/lib/trunkOids";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { GraphRow, GRAPH_LANE_WIDTH } from "./GraphRow";
+import { GraphSkeleton } from "./GraphSkeleton";
 import { HistoryFilterBar } from "./HistoryFilterBar";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { CommitSummary } from "@/ipc/git";
@@ -43,20 +52,36 @@ async function copyText(text: string): Promise<void> {
 
 export function CommitList() {
   const commits = useApp((s) => s.history.commits);
+  // v0.13.29 B-4 — feed the lane allocator a trunk hint derived from
+  // refs (HEAD + main/master/develop/dev/trunk if present). The hint
+  // is best-effort: see `lib/graph.ts` "Trunk lane anchoring" — it
+  // never evicts a lane to honour a hint, so the visual outcome on
+  // typical histories is identical to baseline. The hookup exists so
+  // a future B-5 (lane permutation / rebalance) has the data channel
+  // ready.
+  const refs = useApp((s) => s.history.refs);
   const filter = useApp((s) => s.history.filter);
   const authorFilter = useApp((s) => s.history.authorFilter);
   const sinceFilter = useApp((s) => s.history.sinceFilter);
   const untilFilter = useApp((s) => s.history.untilFilter);
   const pathspec = useApp((s) => s.history.pathspec);
   const selectedOid = useApp((s) => s.history.selectedOid);
+  // v0.13.26 — multi-selection set used for batch cherry-pick. The
+  // `selected` flag below highlights every member; the focused row
+  // (selectedOid) gets the same accent so the boundary visually folds
+  // into "the click is the focus".
+  const selectedOids = useApp((s) => s.history.selectedOids);
   const loading = useApp((s) => s.history.loading);
   const loadingMore = useApp((s) => s.history.loadingMore);
   const hasMore = useApp((s) => s.history.hasMore);
   const error = useApp((s) => s.history.error);
   const selectCommit = useApp((s) => s.selectCommit);
+  const selectCommitMulti = useApp((s) => s.selectCommitMulti);
+  const clearCommitMultiSelect = useApp((s) => s.clearCommitMultiSelect);
   const loadMoreHistory = useApp((s) => s.loadMoreHistory);
   const checkoutCommit = useApp((s) => s.checkoutCommit);
   const cherryPick = useApp((s) => s.cherryPick);
+  const cherryPickMany = useApp((s) => s.cherryPickMany);
   const revertCommit = useApp((s) => s.revertCommit);
   const resetTo = useApp((s) => s.resetTo);
   const openRebasePlan = useApp((s) => s.openRebasePlan);
@@ -103,15 +128,44 @@ export function CommitList() {
   // commits when the array grows by appending. If `commits` is reset
   // (loadHistory after a filter change or repo switch), we rebuild from
   // scratch. We key by `commits` array identity + length to detect both.
+  // v0.13.30 B-5 — the cache stores `rawRowsByOid` in the allocator's
+  // *logical* column space (stable across paginated calls). The
+  // displayed `rowsByOid` is derived from `rawRowsByOid` by applying
+  // the trunk-anchored column permutation built from `state` at
+  // memoisation time, which lets newly-discovered trunks pull
+  // themselves to the leftmost display column without rewriting any
+  // raw row.
+  // v0.13.31 — cache the mapped output too, keyed by
+  // `(trunkLogicalCols, maxRawWidth)`. When the key is unchanged
+  // across renders (the common case: a `commits` append that doesn't
+  // surface a new trunk), we only `applyColMapping` to the *new* raw
+  // rows and leave existing mapped rows at their original references
+  // — that's what lets memoised `<GraphRow>` skip re-renders during
+  // history scrolling. When the key changes (a newly-known trunk
+  // pulled itself to a leftmost col), we rebuild every mapped row
+  // because the permutation actually shifted columns under us.
   const layoutCache = useRef<{
     arr: CommitSummary[] | null;
     state: LayoutState;
-    rowsByOid: Map<string, RowLayout>;
+    rawRowsByOid: Map<string, RowLayout>;
+    maxRawWidth: number;
+    mappedRowsByOid: Map<string, RowLayout>;
+    mappingKey: string;
   }>({
     arr: null,
     state: createLayoutState(),
-    rowsByOid: new Map(),
+    rawRowsByOid: new Map(),
+    maxRawWidth: 0,
+    mappedRowsByOid: new Map(),
+    mappingKey: "__init__",
   });
+
+  // v0.13.29 B-4 — derive the trunk hint from the current refs once
+  // per refs change, then thread it through the lane allocator on
+  // every subsequent extend. New entries (e.g. main becomes visible
+  // after a paginated load) accumulate into the layout state without
+  // disturbing already-emitted rows.
+  const trunkOids = useMemo(() => computeTrunkOids(refs), [refs]);
 
   const { rowsByOid, totalGraphCols } = useMemo(() => {
     const cache = layoutCache.current;
@@ -120,24 +174,70 @@ export function CommitList() {
       (cache.arr !== null &&
         commits.length >= cache.arr.length &&
         cache.arr.every((c, i) => commits[i]?.oid === c.oid));
+    // Track which raw rows are *new* this turn so we can avoid
+    // re-mapping the unchanged ones when the mapping key is stable.
+    let newRawOids: string[] | null = null;
     if (!isExtension) {
       cache.state = createLayoutState();
-      cache.rowsByOid = new Map();
-      const rows = extendLayout(cache.state, commits);
-      for (const r of rows) cache.rowsByOid.set(r.oid, r);
+      cache.rawRowsByOid = new Map();
+      cache.maxRawWidth = 0;
+      cache.mappedRowsByOid = new Map();
+      cache.mappingKey = "__init__";
+      const rows = extendLayout(cache.state, commits, { trunkOids });
+      for (const r of rows) {
+        cache.rawRowsByOid.set(r.oid, r);
+        if (r.width > cache.maxRawWidth) cache.maxRawWidth = r.width;
+      }
       cache.arr = commits;
+      newRawOids = rows.map((r) => r.oid); // every row is new on a full rebuild
     } else if (commits.length > (cache.arr?.length ?? 0)) {
       const start = cache.arr?.length ?? 0;
-      const newRows = extendLayout(cache.state, commits.slice(start));
-      for (const r of newRows) cache.rowsByOid.set(r.oid, r);
+      const newRows = extendLayout(cache.state, commits.slice(start), { trunkOids });
+      for (const r of newRows) {
+        cache.rawRowsByOid.set(r.oid, r);
+        if (r.width > cache.maxRawWidth) cache.maxRawWidth = r.width;
+      }
       cache.arr = commits;
+      newRawOids = newRows.map((r) => r.oid);
+    }
+    // v0.13.33 — mapping cache key based on the *actual mapping
+    // output*, not on `trunkLogicalCols` directly. This catches the
+    // case where `trunkLogicalCols` mutates in cosmetically-different
+    // but semantically-equivalent ways: a freshly-known phantom
+    // trunk (`[0]` → `[0, -1]`) changes the array shape but produces
+    // the same `mapping` because `buildColMapping` skips `-1`. Keying
+    // on the mapping itself avoids spurious full rebuilds during
+    // refs reload.
+    const haveLanes = cache.maxRawWidth > 0;
+    const mapping = haveLanes ? buildColMapping(cache.state, cache.maxRawWidth) : undefined;
+    const mappingKey = mapping ? mapping.join(",") : "";
+    const trunkAllocationsChanged = mappingKey !== cache.mappingKey;
+    if (trunkAllocationsChanged && mapping) {
+      // Trunk permutation actually shifted — every existing mapped
+      // row may now sit on a different display column, so re-derive
+      // all of them. This surfaces a newly-discovered trunk on its
+      // anchored display column across already-rendered rows.
+      cache.mappedRowsByOid = new Map();
+      for (const [oid, raw] of cache.rawRowsByOid) {
+        cache.mappedRowsByOid.set(oid, applyColMapping(raw, mapping));
+      }
+      cache.mappingKey = mappingKey;
+    } else if (newRawOids && newRawOids.length > 0 && mapping) {
+      // Mapping unchanged — only translate the new rows. Existing
+      // mapped row references stay the same so memoised GraphRows
+      // can bail out of re-rendering during pure-append pagination
+      // (the common case).
+      for (const oid of newRawOids) {
+        const raw = cache.rawRowsByOid.get(oid);
+        if (raw) cache.mappedRowsByOid.set(oid, applyColMapping(raw, mapping));
+      }
     }
     let maxCols = 2;
-    for (const r of cache.rowsByOid.values()) {
+    for (const r of cache.mappedRowsByOid.values()) {
       if (r.width > maxCols) maxCols = r.width;
     }
-    return { rowsByOid: cache.rowsByOid, totalGraphCols: maxCols };
-  }, [commits]);
+    return { rowsByOid: cache.mappedRowsByOid, totalGraphCols: maxCols };
+  }, [commits, trunkOids]);
 
   const graphCols = totalGraphCols;
 
@@ -205,7 +305,13 @@ export function CommitList() {
 
   const onContextMenu = (e: React.MouseEvent, c: CommitSummary) => {
     e.preventDefault();
-    selectCommit(c.oid);
+    // v0.13.26 — only collapse the multi-selection if the right-click
+    // landed on a commit *outside* the current set. Right-clicking a
+    // member preserves the set so "Cherry-pick N onto HEAD" can act on
+    // the whole batch.
+    const inMulti = selectedOids.has(c.oid);
+    if (!inMulti) selectCommit(c.oid);
+    const multiSize = inMulti ? selectedOids.size : 1;
     const items: MenuItem[] = [
       { label: `${c.short_oid} — ${c.summary.slice(0, 60)}`, heading: true },
       {
@@ -239,10 +345,20 @@ export function CommitList() {
         onClick: () => void checkoutCommit(c.oid),
       },
       { separator: true, label: "" },
-      {
-        label: "Cherry-pick onto HEAD",
-        onClick: () => void cherryPick(c.oid),
-      },
+      // v0.13.26 — when right-clicking inside an N-element multi-select,
+      // cherry-pick acts on the whole set (oldest-first inside the
+      // store). When the click is outside the set, we fall back to the
+      // single-shot cherry-pick on this one row, matching the previous
+      // behaviour.
+      multiSize >= 2
+        ? {
+            label: `Cherry-pick ${multiSize} commits onto HEAD`,
+            onClick: () => void cherryPickMany([...selectedOids]),
+          }
+        : {
+            label: "Cherry-pick onto HEAD",
+            onClick: () => void cherryPick(c.oid),
+          },
       {
         label: "Revert this commit",
         onClick: () => void revertCommit(c.oid),
@@ -312,6 +428,29 @@ export function CommitList() {
           <span className="text-muted-foreground">· filtered from {commits.length}</span>
         )}
         {hasMore && !loading && <span className="text-muted-foreground">· +more</span>}
+        {/* v0.13.26 — multi-select indicator with a one-click batch
+            cherry-pick. We surface the action both here and in the
+            right-click menu so casual ctrl-click users have a discoverable
+            entry point that doesn't require finding the contextual menu. */}
+        {selectedOids.size > 1 && (
+          <span className="flex items-center gap-1.5 rounded bg-[hsl(var(--branch-1)/.18)] px-2 py-0.5 text-[10.5px] text-[hsl(var(--branch-1))]">
+            <span>{selectedOids.size} selected</span>
+            <button
+              onClick={() => void cherryPickMany([...selectedOids])}
+              title="Cherry-pick the selected commits onto HEAD (oldest first)"
+              className="rounded border border-[hsl(var(--branch-1)/.5)] bg-background/40 px-1.5 text-[10px] hover:bg-accent"
+            >
+              Cherry-pick…
+            </button>
+            <button
+              onClick={clearCommitMultiSelect}
+              title="Clear multi-selection (Esc)"
+              className="rounded border border-border bg-background/40 px-1.5 text-[10px] text-foreground hover:bg-accent"
+            >
+              clear
+            </button>
+          </span>
+        )}
         {pathspec && (
           <span className="rounded bg-secondary px-1.5 font-mono text-[10.5px] text-foreground">
             path: {pathspec}
@@ -349,7 +488,18 @@ export function CommitList() {
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-        {!loading && filtered.length === 0 ? (
+        {loading && commits.length === 0 ? (
+          // v0.13.32 — first-load skeleton. We render this only when
+          // the commits array is *actually empty* (not just filtered
+          // empty), so a slow filter on a populated history doesn't
+          // wipe the existing rows out from under the user.
+          <GraphSkeleton
+            gridCols={gridCols}
+            trackGraphW={trackGraphW}
+            compact={compact}
+            hidden={hidden}
+          />
+        ) : !loading && filtered.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             {commits.length === 0 ? "No commits in this repository." : "No matches."}
           </div>
@@ -365,7 +515,14 @@ export function CommitList() {
               const c = filtered[vRow.index];
               if (!c) return null;
               const row = rowsByOid.get(c.oid);
-              const selected = c.oid === selectedOid;
+              const isFocus = c.oid === selectedOid;
+              // v0.13.26 — a row is "selected" if the user has it in
+              // the multi-selection set (the focus row is always also a
+              // member, so this single check covers both cases). Extra
+              // members get the same accent so the batch reads as one
+              // continuous block.
+              const inMulti = selectedOids.has(c.oid);
+              const selected = inMulti || isFocus;
               // v0.13.16 — when a highlight set is active, dim every row
               // outside it. The selected row is never dimmed (so the
               // commit details panel still has obvious context).
@@ -375,12 +532,27 @@ export function CommitList() {
               return (
                 <div
                   key={c.oid}
-                  onClick={() => selectCommit(c.oid)}
+                  onClick={(e) => {
+                    // v0.13.26 — modifier-aware multi-select. Plain
+                    // click collapses to single; ctrl/cmd toggles; shift
+                    // extends the range from the anchor.
+                    const mode: "single" | "ctrl" | "shift" = e.shiftKey
+                      ? "shift"
+                      : e.ctrlKey || e.metaKey
+                        ? "ctrl"
+                        : "single";
+                    void selectCommitMulti(c.oid, mode);
+                  }}
                   onContextMenu={(e) => onContextMenu(e, c)}
                   className={cn(
                     "absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-border/40 px-3 text-[12.5px]",
                     "hover:bg-accent/40",
                     selected && "bg-accent",
+                    // Slight inner ring so the user can see the
+                    // currently focused row inside a wide multi-selection.
+                    isFocus &&
+                      selectedOids.size > 1 &&
+                      "ring-1 ring-inset ring-[hsl(var(--branch-1)/.6)]",
                     dimmed && "opacity-25",
                     isHighlightRoot &&
                       "ring-1 ring-inset ring-[hsl(var(--branch-3)/.6)] bg-[hsl(var(--branch-3)/.07)]",
@@ -390,7 +562,11 @@ export function CommitList() {
                     transform: `translateY(${vRow.start}px)`,
                     gridTemplateColumns: gridCols,
                   }}
-                  title="Right-click for actions"
+                  title={
+                    selectedOids.size > 1
+                      ? `${selectedOids.size} commits selected · right-click for batch actions`
+                      : "Click to focus, Ctrl/Shift+Click for multi-select, right-click for actions"
+                  }
                 >
                   {!hidden && (
                     <div

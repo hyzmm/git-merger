@@ -1,20 +1,13 @@
 import { memo, type ReactElement } from "react";
 import type { RowLayout } from "@/lib/graph";
+import { branchColorVar } from "@/lib/branchColors";
 
-// Resolve to literal HSL strings so SVG `stroke=` works in all WebViews.
-// Keep these in sync with --branch-* tokens in src/styles/globals.css.
-const BRANCH_COLORS = [
-  "hsl(199 89% 60%)", // branch-1 (cyan/blue)
-  "hsl(280 70% 70%)", // branch-2 (purple)
-  "hsl(40 95% 60%)", // branch-3 (yellow/gold)
-  "hsl(142 70% 55%)", // branch-4 (green)
-  "hsl(0 75% 65%)", // branch-5 (red)
-  "hsl(170 70% 60%)", // branch-6 (teal — extra fallback)
-];
-
-function colorOf(idx: number): string {
-  return BRANCH_COLORS[idx % BRANCH_COLORS.length] ?? BRANCH_COLORS[0];
-}
+// v0.13.23 — colors now come from `--branch-1..6` defined in
+// src/styles/globals.css via the shared `branchColorVar` helper. The
+// previous hard-coded HSL literals (a) drifted from the theme, (b) didn't
+// participate in light/dark switching, and (c) used a different palette
+// from the RefsPane left-side dots. With the shared module, the same
+// branch is the same color everywhere on screen.
 
 // Default geometry (used when no `compact` prop is passed). Compact mode
 // scales these down ~36% so dense fork histories don't crowd out the
@@ -64,7 +57,7 @@ export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H, comp
         y1={top}
         x2={x}
         y2={bot}
-        stroke={colorOf(seg.color)}
+        stroke={branchColorVar(seg.color)}
         strokeWidth={2}
       />,
     );
@@ -80,7 +73,7 @@ export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H, comp
       y1={top}
       x2={dotX}
       y2={mid}
-      stroke={colorOf(row.dotColor)}
+      stroke={branchColorVar(row.dotColor)}
       strokeWidth={2}
     />,
   );
@@ -89,7 +82,7 @@ export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H, comp
   for (const c of row.curves) {
     const x1 = xOf(c.fromCol);
     const x2 = xOf(c.toCol);
-    const stroke = colorOf(c.color);
+    const stroke = branchColorVar(c.color);
     if (c.kind === "straight" || x1 === x2) {
       elements.push(
         <line
@@ -122,7 +115,7 @@ export const GraphRow = memo(function GraphRow({ row, cols, height = ROW_H, comp
       cx={dotX}
       cy={mid}
       r={dotR}
-      fill={colorOf(row.dotColor)}
+      fill={branchColorVar(row.dotColor)}
       stroke="hsl(220 13% 9%)"
       strokeWidth={2}
     />,
