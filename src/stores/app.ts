@@ -65,6 +65,7 @@ import {
 } from "@/lib/tabsPersist";
 import { toast } from "@/lib/toast";
 import { buildSubsetPatch, reversePatch, selectionKey } from "@/lib/subsetPatch";
+import { searchDiff, type DiffMatch } from "@/lib/diffSearch";
 
 /**
  * Module-scoped scratch buffer for the v0.13.20 amend toggle: when the
@@ -184,6 +185,31 @@ interface DiffState {
    * to decode it. `null` until the user makes a first click.
    */
   selectionAnchor: string | null;
+  /**
+   * v0.13.34 — In-pane content search (Ctrl/Cmd+F). The bar is mounted
+   * lazily — when `open=false`, the rest of the fields are dormant
+   * (matches=[], activeIdx=-1) but kept around so reopening preserves
+   * the user's last query/case/regex toggles.
+   *
+   * `matches` is recomputed by the openDiffSearch / setDiffQuery actions
+   * (synchronously from `fileDiff`, no IPC); the components that render
+   * matches read from this single source of truth.
+   *
+   * `activeIdx` is the cursor — the match that's highlighted strongest
+   * (orange vs yellow) and that scrollIntoView targets. -1 means
+   * "no current match" (e.g. empty query).
+   */
+  search: DiffSearchState;
+}
+
+interface DiffSearchState {
+  open: boolean;
+  query: string;
+  caseSensitive: boolean;
+  regex: boolean;
+  matches: DiffMatch[];
+  /** Index into `matches`; -1 when there are no matches. */
+  activeIdx: number;
 }
 
 /**
@@ -576,6 +602,22 @@ interface AppState {
   /** Discard the selected +/− lines from the working tree (reversed sub-patch → WorkDir). */
   discardSelectedLines: () => Promise<void>;
 
+  // ---- v0.13.34 in-pane diff search (Ctrl/Cmd+F) ----
+  /** Open the search bar. If already open, focuses without resetting. */
+  openDiffSearch: () => void;
+  /** Close the search bar and clear matches (but keep query/toggles
+   *  for the next time the user opens it). */
+  closeDiffSearch: () => void;
+  /** Update the query string and recompute matches synchronously. */
+  setDiffSearchQuery: (query: string) => void;
+  /** Toggle case-sensitive matching and rerun the search. */
+  toggleDiffSearchCase: () => void;
+  /** Toggle regex mode and rerun the search. */
+  toggleDiffSearchRegex: () => void;
+  /** Move the active match cursor by `dir` (+1 = next, -1 = prev),
+   *  wrapping at the ends so the user can keep tapping Enter. */
+  stepDiffSearch: (dir: 1 | -1) => void;
+
   // merge
   loadMerge: () => Promise<void>;
   selectConflict: (file: string) => Promise<void>;
@@ -785,6 +827,15 @@ const emptyEdit: WorkingEditState = {
   error: null,
 };
 
+const emptyDiffSearch: DiffSearchState = {
+  open: false,
+  query: "",
+  caseSensitive: false,
+  regex: false,
+  matches: [],
+  activeIdx: -1,
+};
+
 const emptyDiff: DiffState = {
   oid: null,
   files: [],
@@ -798,6 +849,7 @@ const emptyDiff: DiffState = {
   edit: { ...emptyEdit },
   selectedLines: new Set<string>(),
   selectionAnchor: null,
+  search: { ...emptyDiffSearch },
 };
 
 const emptyMerge: MergeView = {
@@ -1913,13 +1965,38 @@ export const useApp = create<AppState>((set, get) => ({
         // selection from the previous diff.
         selectedLines: new Set<string>(),
         selectionAnchor: null,
+        // v0.13.34 — close the search bar on file switch. Keep query
+        // / toggles around in case the user wants the same search on
+        // the next file (just press Ctrl+F again).
+        search: { ...s.diff.search, open: false, matches: [], activeIdx: -1 },
       },
     }));
     try {
       const fd = await git.fileDiff(repo.path, oid, file, get().diff.ignoreWhitespace);
       set((s) =>
         s.diff.oid === oid && s.diff.selectedFile === file
-          ? { diff: { ...s.diff, fileDiff: fd, loading: false } }
+          ? {
+              diff: {
+                ...s.diff,
+                fileDiff: fd,
+                loading: false,
+                // v0.13.34 — recompute matches against the just-loaded
+                // diff. The bar is closed so this is a no-op for the
+                // hidden state, but keeps things consistent if someone
+                // reopens search later (openDiffSearch will see fresh
+                // matches without an extra computation).
+                search: {
+                  ...s.diff.search,
+                  matches: s.diff.search.query
+                    ? searchDiff(fd, s.diff.search.query, {
+                        caseSensitive: s.diff.search.caseSensitive,
+                        regex: s.diff.search.regex,
+                      })
+                    : [],
+                  activeIdx: -1,
+                },
+              },
+            }
           : s,
       );
       // v0.13.8 — bump in the recent-files MRU. We do this on success only
@@ -1974,6 +2051,8 @@ export const useApp = create<AppState>((set, get) => ({
         // v0.13.25 — switching files invalidates the line selection.
         selectedLines: new Set<string>(),
         selectionAnchor: null,
+        // v0.13.34 — close search bar on file switch (see openDiff).
+        search: { ...s.diff.search, open: false, matches: [], activeIdx: -1 },
       },
     }));
     try {
@@ -1996,6 +2075,17 @@ export const useApp = create<AppState>((set, get) => ({
                   savedText: working.missing ? "" : working.content,
                   busy: false,
                   error: null,
+                },
+                // v0.13.34 — recompute matches against the just-loaded diff.
+                search: {
+                  ...s.diff.search,
+                  matches: s.diff.search.query
+                    ? searchDiff(fd, s.diff.search.query, {
+                        caseSensitive: s.diff.search.caseSensitive,
+                        regex: s.diff.search.regex,
+                      })
+                    : [],
+                  activeIdx: -1,
                 },
               },
             }
@@ -2297,6 +2387,135 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (e) {
       toast.error(`Discard selected lines failed: ${String(e)}`);
     }
+  },
+
+  // ---------- v0.13.34 in-pane diff search ----------
+  // All six actions are pure synchronous mutations — searchDiff() is fast
+  // enough to run on every keystroke for any reasonable diff size.
+
+  openDiffSearch: () => {
+    set((s) => {
+      // Reopening with an existing query: re-derive matches so the bar
+      // shows the same M-of-N counter the user saw before closing it.
+      // The toggles (case/regex) and query string are preserved.
+      const matches = searchDiff(s.diff.fileDiff, s.diff.search.query, {
+        caseSensitive: s.diff.search.caseSensitive,
+        regex: s.diff.search.regex,
+      });
+      return {
+        diff: {
+          ...s.diff,
+          search: {
+            ...s.diff.search,
+            open: true,
+            matches,
+            // Preserve activeIdx if it's still in range; otherwise reset to 0.
+            activeIdx:
+              matches.length === 0
+                ? -1
+                : s.diff.search.activeIdx >= 0 && s.diff.search.activeIdx < matches.length
+                  ? s.diff.search.activeIdx
+                  : 0,
+          },
+        },
+      };
+    });
+  },
+
+  closeDiffSearch: () => {
+    // Drop matches/activeIdx but keep query/case/regex so reopening
+    // restores the user's last search context.
+    set((s) => ({
+      diff: {
+        ...s.diff,
+        search: {
+          ...s.diff.search,
+          open: false,
+          matches: [],
+          activeIdx: -1,
+        },
+      },
+    }));
+  },
+
+  setDiffSearchQuery: (query) => {
+    set((s) => {
+      const matches = searchDiff(s.diff.fileDiff, query, {
+        caseSensitive: s.diff.search.caseSensitive,
+        regex: s.diff.search.regex,
+      });
+      return {
+        diff: {
+          ...s.diff,
+          search: {
+            ...s.diff.search,
+            query,
+            matches,
+            // Reset to first match on every query edit so Enter immediately
+            // jumps somewhere visible. If the user wants to stay put they
+            // can just stop typing.
+            activeIdx: matches.length === 0 ? -1 : 0,
+          },
+        },
+      };
+    });
+  },
+
+  toggleDiffSearchCase: () => {
+    set((s) => {
+      const caseSensitive = !s.diff.search.caseSensitive;
+      const matches = searchDiff(s.diff.fileDiff, s.diff.search.query, {
+        caseSensitive,
+        regex: s.diff.search.regex,
+      });
+      return {
+        diff: {
+          ...s.diff,
+          search: {
+            ...s.diff.search,
+            caseSensitive,
+            matches,
+            activeIdx: matches.length === 0 ? -1 : 0,
+          },
+        },
+      };
+    });
+  },
+
+  toggleDiffSearchRegex: () => {
+    set((s) => {
+      const regex = !s.diff.search.regex;
+      const matches = searchDiff(s.diff.fileDiff, s.diff.search.query, {
+        caseSensitive: s.diff.search.caseSensitive,
+        regex,
+      });
+      return {
+        diff: {
+          ...s.diff,
+          search: {
+            ...s.diff.search,
+            regex,
+            matches,
+            activeIdx: matches.length === 0 ? -1 : 0,
+          },
+        },
+      };
+    });
+  },
+
+  stepDiffSearch: (dir) => {
+    set((s) => {
+      const n = s.diff.search.matches.length;
+      if (n === 0) return {} as Partial<typeof s>; // nothing to step through
+      // Wrap-around: pressing Next at the last match jumps back to the
+      // first; pressing Prev at the first match jumps to the last.
+      // This matches Chrome/VS Code/IDEA find-bar behaviour.
+      const cur = s.diff.search.activeIdx;
+      const next = cur < 0 ? (dir === 1 ? 0 : n - 1) : (cur + dir + n) % n;
+      return {
+        diff: { ...s.diff, search: { ...s.diff.search, activeIdx: next } },
+      };
+    });
   },
 
   // ---------- Merge ----------

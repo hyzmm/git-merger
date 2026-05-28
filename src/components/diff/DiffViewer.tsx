@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, ClipboardCopy, Plus, Minus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCopy, Plus, Minus, Search, Trash2 } from "lucide-react";
 import { useApp, WORKING_OID } from "@/stores/app";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { git } from "@/ipc/git";
@@ -9,6 +9,7 @@ import { isImagePath } from "@/lib/imageMime";
 import { SideBySide, Unified } from "./DiffViews";
 import { ImageDiff } from "./ImageDiff";
 import { WorkingDiffEditor } from "./WorkingDiffEditor";
+import { DiffSearchBar } from "./DiffSearchBar";
 
 export function DiffViewer() {
   const oid = useApp((s) => s.diff.oid);
@@ -40,6 +41,10 @@ export function DiffViewer() {
   const unstageSelectedLines = useApp((s) => s.unstageSelectedLines);
   const discardSelectedLines = useApp((s) => s.discardSelectedLines);
   const clearDiffLineSelection = useApp((s) => s.clearDiffLineSelection);
+  // v0.13.34 — in-pane content search (Ctrl/Cmd+F).
+  const searchOpen = useApp((s) => s.diff.search.open);
+  const openDiffSearch = useApp((s) => s.openDiffSearch);
+  const closeDiffSearch = useApp((s) => s.closeDiffSearch);
 
   const isWorking = oid === WORKING_OID;
   const dirty = isWorking && editBuffer !== null && editSaved !== null && editBuffer !== editSaved;
@@ -103,10 +108,19 @@ export function DiffViewer() {
       p: () => goToHunk(-1),
       "shift+n": () => goToHunk(1),
       "shift+p": () => goToHunk(-1),
-      // v0.13.25 — Esc clears the line-staging selection.
-      escape: () => clearDiffLineSelection(),
+      // v0.13.34 — Find in diff. The bar's <input> is auto-focused so
+      // the user can start typing immediately.
+      "ctrl+f": () => openDiffSearch(),
+      // v0.13.25 + v0.13.34 — Esc has two jobs depending on what's open.
+      // The search bar takes priority (it's the more transient overlay
+      // and matches Chrome / VS Code semantics); falling through to
+      // the line selection clear is the legacy behaviour.
+      escape: () => {
+        if (searchOpen) closeDiffSearch();
+        else clearDiffLineSelection();
+      },
     }),
-    [goToHunk, clearDiffLineSelection],
+    [goToHunk, openDiffSearch, closeDiffSearch, searchOpen, clearDiffLineSelection],
   );
   useShortcuts(shortcuts, view === "diff");
 
@@ -279,6 +293,19 @@ export function DiffViewer() {
             </>
           )}
           <button
+            onClick={() => (searchOpen ? closeDiffSearch() : openDiffSearch())}
+            disabled={!fileDiff}
+            className={cn(
+              "flex h-7 items-center gap-1 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
+              !fileDiff && "cursor-not-allowed opacity-50",
+              searchOpen && "border-border bg-secondary text-foreground",
+            )}
+            title="Find in diff (Ctrl+F)"
+          >
+            <Search className="h-3 w-3" />
+            Find
+          </button>
+          <button
             onClick={() => void copyPatch()}
             disabled={!file || loading}
             className={cn(
@@ -343,7 +370,11 @@ export function DiffViewer() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* v0.13.34 — find-in-diff floating bar. Self-mounting based on
+            store state; renders nothing when closed so the diff content
+            remains untouched. */}
+        <DiffSearchBar />
         {isWorking && editActive && mode === "sbs" ? (
           <WorkingDiffEditor />
         ) : file && isImagePath(file) ? (
