@@ -4,8 +4,25 @@ import { fullDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import { toast } from "@/lib/toast";
-import { Check, Copy, GitBranch, Tag } from "lucide-react";
-import type { CommitSummary, FileChange } from "@/ipc/git";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  GitBranch,
+  HelpCircle,
+  KeyRound,
+  Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  Tag,
+} from "lucide-react";
+import {
+  git,
+  type CommitSignatureInfo,
+  type CommitSummary,
+  type FileChange,
+  type VerifyResult,
+} from "@/ipc/git";
 
 const STATUS_LABEL: Record<FileChange["status"], string> = {
   added: "A",
@@ -45,12 +62,20 @@ export function CommitDetails() {
   const allCommits = useApp((s) => s.history.commits);
   const files = useApp((s) => s.history.files);
   const filesLoading = useApp((s) => s.history.filesLoading);
+  const repoPath = useApp((s) => s.repo?.path ?? null);
   const openDiff = useApp((s) => s.openDiff);
   const openBlame = useApp((s) => s.openBlame);
   const openFileHistory = useApp((s) => s.openFileHistory);
   const selectCommit = useApp((s) => s.selectCommit);
 
   const [menu, setMenu] = useState<{ pos: ContextMenuPos; items: MenuItem[] } | null>(null);
+
+  // Signature status (v0.13.19) ships inside `commit_meta` as of the post-
+  // release perf cleanup — one fewer Tauri round-trip per commit selection
+  // and zero extra `Repository::discover` calls. Falls back to `null`
+  // until meta finishes loading so the row stays hidden rather than
+  // briefly showing "Not signed".
+  const sigInfo: CommitSignatureInfo | null = meta?.signature ?? null;
 
   // Children = commits in the currently-loaded history window whose `parents`
   // include this commit's oid. This is purely client-side — no extra IPC —
@@ -147,6 +172,20 @@ export function CommitDetails() {
 
           <span className="text-muted-foreground">Date</span>
           <span className="text-[11.5px]">{fullDate(commit.time)}</span>
+
+          {sigInfo?.signed && (
+            <>
+              <span className="text-muted-foreground">Signature</span>
+              <span className="flex items-center gap-1.5 text-[11.5px]">
+                <SignatureBadge
+                  key={commit.oid}
+                  info={sigInfo}
+                  repoPath={repoPath}
+                  oid={commit.oid}
+                />
+              </span>
+            </>
+          )}
 
           {committerDiffersFromAuthor && meta && (
             <>
@@ -324,6 +363,168 @@ function RefChip({ text, title, onClick }: { text: string; title: string; onClic
       {text}
     </button>
   );
+}
+
+/**
+ * Signature badge with **on-demand** trust verification (v0.13.20).
+ *
+ * Defaults to "header present, not verified" — same as v0.13.19. Clicking
+ * the badge fires `verify_commit_signature`, which shells out to gpg /
+ * ssh-keygen and surfaces a structured outcome:
+ *   - good   → green shield with the signer's identity in the tooltip
+ *   - no_key → amber shield (we don't have the public key locally)
+ *   - bad    → red triangle (signature does NOT match the payload)
+ *   - error  → grey question mark (verifier itself failed — gpg missing, …)
+ *
+ * The verify result is cached per commit oid for the lifetime of the
+ * panel; switching commits resets it (parent component remounts the badge
+ * via `key={commit.oid}` when oid changes — actually we rely on local
+ * useState being scoped per render, since CommitDetails itself rebuilds
+ * sigInfo from the meta payload).
+ */
+function SignatureBadge({
+  info,
+  repoPath,
+  oid,
+}: {
+  info: CommitSignatureInfo;
+  repoPath: string | null;
+  oid: string;
+}) {
+  const [verify, setVerify] = useState<VerifyResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const isPgp = info.format === "openpgp";
+  const isSsh = info.format === "ssh";
+  const formatLabel = isPgp ? "GPG" : isSsh ? "SSH" : "Signed";
+
+  // Tone + icon are derived from the verify state when we have one;
+  // otherwise we fall back to the v0.13.19 "header-only" green shield.
+  const effective: {
+    tone: "ok" | "warn" | "bad" | "neutral";
+    icon: React.ReactNode;
+    label: string;
+  } = (() => {
+    if (!verify) {
+      return {
+        tone: "neutral",
+        icon: isSsh ? <KeyRound className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />,
+        label: formatLabel,
+      };
+    }
+    switch (verify.state) {
+      case "good":
+        return {
+          tone: "ok",
+          icon: <ShieldCheck className="h-3 w-3" />,
+          label: `${formatLabel} ✓`,
+        };
+      case "no_key":
+        return {
+          tone: "warn",
+          icon: <HelpCircle className="h-3 w-3" />,
+          label: `${formatLabel} no key`,
+        };
+      case "bad":
+        return {
+          tone: "bad",
+          icon: <ShieldAlert className="h-3 w-3" />,
+          label: `${formatLabel} BAD`,
+        };
+      case "error":
+        return {
+          tone: "warn",
+          icon: <AlertTriangle className="h-3 w-3" />,
+          label: `${formatLabel} ?`,
+        };
+      case "unsigned":
+      default:
+        return {
+          tone: "neutral",
+          icon: <ShieldCheck className="h-3 w-3" />,
+          label: formatLabel,
+        };
+    }
+  })();
+
+  const toneClass = {
+    ok: "border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.10)] text-[hsl(var(--branch-1))]",
+    warn: "border-[hsl(var(--branch-3)/.4)] bg-[hsl(var(--branch-3)/.10)] text-[hsl(var(--branch-3))]",
+    bad: "border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] text-[hsl(var(--destructive))]",
+    neutral:
+      "border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.10)] text-[hsl(var(--branch-1))]",
+  }[effective.tone];
+
+  const tooltip = verify
+    ? buildVerifyTooltip(verify)
+    : `${info.summary} — click to verify against your keyring / allowed-signers file.`;
+
+  const onClick = async () => {
+    if (!repoPath || busy) return;
+    setBusy(true);
+    try {
+      const r = await git.verifyCommitSignature(repoPath, oid);
+      setVerify(r);
+    } catch (e) {
+      // Surface as `error` state so the badge tone reflects the failure
+      // even when the verifier itself blew up before we could parse it.
+      setVerify({
+        state: "error",
+        format: info.format,
+        signer: null,
+        output: String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy || !repoPath}
+      title={tooltip}
+      className={cn(
+        "inline-flex h-[18px] items-center gap-1 rounded-full border px-1.5 text-[10.5px] font-medium hover:opacity-80",
+        toneClass,
+        (busy || !repoPath) && "cursor-not-allowed",
+      )}
+    >
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : effective.icon}
+      <span className="font-mono">{busy ? "verify…" : effective.label}</span>
+    </button>
+  );
+}
+
+/** Multiline tooltip describing a verify result. Trimmed so libgit2 / gpg
+ *  walls of text don't overflow the OS tooltip box. */
+function buildVerifyTooltip(v: VerifyResult): string {
+  const lines: string[] = [];
+  switch (v.state) {
+    case "good":
+      lines.push("Signature verified against your keyring.");
+      if (v.signer) lines.push(`Signer: ${v.signer}`);
+      break;
+    case "no_key":
+      lines.push("Signature is well-formed, but no matching public key in your trust store.");
+      break;
+    case "bad":
+      lines.push("BAD signature — the signature does NOT match the commit payload.");
+      break;
+    case "unsigned":
+      lines.push("This commit is not signed.");
+      break;
+    case "error":
+      lines.push("Verifier failed to run — see details below.");
+      break;
+  }
+  if (v.output) {
+    const trimmed = v.output.length > 400 ? `${v.output.slice(0, 400)}…` : v.output;
+    lines.push("");
+    lines.push(trimmed);
+  }
+  return lines.join("\n");
 }
 
 /** "Contained in" panel — branches + tags that include this commit. */

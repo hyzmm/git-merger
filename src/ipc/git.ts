@@ -66,6 +66,9 @@ export interface CommitMeta {
   containing_branches: string[];
   /** Tag short names (no `refs/tags/` prefix), peeled before comparison. */
   containing_tags: string[];
+  /** Embedded GPG / SSH signature status (v0.13.19). Always present —
+   *  unsigned commits report `signed: false` rather than null. */
+  signature: CommitSignatureInfo;
 }
 
 export interface FileChange {
@@ -109,6 +112,32 @@ export interface FileDiff {
   is_binary: boolean;
   hunks: DiffHunk[];
 }
+
+/**
+ * v0.13.25 — where `apply_patch` should land.
+ *   - `work_dir`: working tree only (legacy v0.13.9 behaviour).
+ *   - `index`:    index only (= `git apply --cached`); the line-level
+ *                 staging path uses this with a synthesised sub-patch.
+ *   - `both`:     apply to both, mirroring `git apply --index`.
+ *
+ * Mirrors `git::patch::PatchLocation` on the backend.
+ */
+export type PatchLocation = "work_dir" | "index" | "both";
+
+/**
+ * v0.13.26 — outcome of a `cherry_pick_sequence` IPC. Tagged union
+ * mirroring the backend `CherrySequenceOutcome` enum:
+ *   - `done`: every oid landed cleanly and was committed; `applied`
+ *      equals the input length.
+ *   - `stopped`: cherry-pick of `failed_oid` produced index conflicts.
+ *      `applied` commits before this point are already on HEAD; the
+ *      repo is in `CHERRY_PICK_HEAD` state and the user should resolve
+ *      via the merge view. `pending` lists the oids that were not
+ *      attempted (the failing one is the *first* of `pending`).
+ */
+export type CherrySequenceOutcome =
+  | { kind: "done"; applied: number }
+  | { kind: "stopped"; applied: number; failed_oid: string; pending: string[] };
 
 /**
  * Raw-bytes payload for binary / image previews (v0.13.14).
@@ -368,6 +397,75 @@ export interface SearchSummary {
   truncated: boolean;
 }
 
+// ---------- Commit signing (v0.13.19) ----------
+
+/**
+ * Format detected on a signed commit. Mirrors `signing::SignFormat` on
+ * the backend. `null` means we found a `gpgsig` header but couldn't
+ * recognise the armor (rare).
+ */
+export type SignFormat = "openpgp" | "ssh";
+
+/**
+ * Signature status for one commit, as reported by `commit_signature_status`.
+ * The backend only inspects the embedded header — it does NOT run an
+ * external verifier — so this answers "is it signed?" + "what format?",
+ * not "is the signature valid?". Trust-rooted verification is a future
+ * follow-up that needs platform-specific keyrings.
+ */
+export interface CommitSignatureInfo {
+  signed: boolean;
+  format: SignFormat | null;
+  /** Short single-line label suitable for tooltips ("OpenPGP signed", "Not signed", …). */
+  summary: string;
+}
+
+// ---------- Verify commit signature (v0.13.20) ----------
+
+/**
+ * Outcome bucket from `verify_commit_signature`. Mirrors `signing::VerifyState`.
+ * - good      — signature checked out + key in trust store
+ * - no_key    — signature is well-formed but trust root has no matching key
+ * - bad       — signature does NOT match payload (tampering / corruption)
+ * - unsigned  — no embedded `gpgsig` header at all
+ * - error     — verifier itself failed (binary missing, IO, …)
+ */
+export type VerifyState = "good" | "no_key" | "bad" | "unsigned" | "error";
+
+export interface VerifyResult {
+  state: VerifyState;
+  format: SignFormat | null;
+  /** "Alice <alice@example.com>" / SSH fingerprint, when verifier could extract it. */
+  signer: string | null;
+  /** Raw stderr / stdout from the verifier. Empty for `unsigned`. */
+  output: string;
+}
+
+// ---------- Commit options (v0.13.20) ----------
+
+/**
+ * Knobs for `commitChanges`. Mirrors `workspace::CommitOptions`.
+ * Defaults match `git commit` with no flags (no amend, no signoff,
+ * hooks ON).
+ */
+export interface CommitOptions {
+  /** `git commit --amend` */
+  amend?: boolean;
+  /** Append `Signed-off-by:` trailer using `user.{name,email}` */
+  signoff?: boolean;
+  /** With amend: also reset the author identity + timestamp to current user. */
+  reset_author?: boolean;
+  /** Run pre-commit / commit-msg / post-commit hooks. Default true. */
+  run_hooks?: boolean;
+}
+
+/** Result of a successful `commitChanges` invocation. */
+export interface CommitOutcome {
+  oid: string;
+  amended: boolean;
+  post_commit_ran: boolean;
+}
+
 // ---------- Interactive Rebase ----------
 
 export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "drop";
@@ -417,6 +515,19 @@ export const git = {
       limit: opts?.limit ?? 1000,
       pathspec: opts?.pathspec ?? null,
     }),
+  /**
+   * v0.13.21 — incremental "top-up" walk. Returns commits strictly newer
+   * than `knownOid`, in newest-first order. Returns `null` when `knownOid`
+   * is no longer reachable from HEAD (force-push / hard-reset rewrote the
+   * branch out from under us); callers should fall back to a full
+   * `logPage` reload in that case.
+   */
+  logSince: (path: string, knownOid: string, cap?: number) =>
+    invoke<CommitSummary[] | null>("git_log_since", {
+      path,
+      knownOid,
+      cap: cap ?? null,
+    }),
   commitFiles: (path: string, oid: string) => invoke<FileChange[]>("commit_files", { path, oid }),
   /** Rich metadata for one commit: full message, author + committer, parents, containing branches & tags. */
   commitMeta: (path: string, oid: string) => invoke<CommitMeta>("commit_meta", { path, oid }),
@@ -431,6 +542,14 @@ export const git = {
       limit: limit ?? null,
       scanLimit: scanLimit ?? null,
     }),
+  /** v0.13.19 — does this commit carry a GPG / SSH signature header? Read-only probe. */
+  commitSignatureStatus: (path: string, oid: string) =>
+    invoke<CommitSignatureInfo>("commit_signature_status", { path, oid }),
+  /** v0.13.20 — trust-rooted verification: shells out to gpg --verify or
+   *  ssh-keygen -Y verify. Call on demand (e.g. user clicks the Signature
+   *  badge), not for every history row. */
+  verifyCommitSignature: (path: string, oid: string) =>
+    invoke<VerifyResult>("verify_commit_signature", { path, oid }),
   fileDiff: (path: string, oid: string, file: string, ignoreWhitespace = false) =>
     invoke<FileDiff>("file_diff", { path, oid, file, ignoreWhitespace }),
   workingDiff: (path: string, file: string, ignoreWhitespace = false) =>
@@ -454,8 +573,8 @@ export const git = {
   stageFiles: (path: string, paths: string[]) => invoke<void>("stage_files", { path, paths }),
   unstageFiles: (path: string, paths: string[]) => invoke<void>("unstage_files", { path, paths }),
   discardFiles: (path: string, paths: string[]) => invoke<void>("discard_files", { path, paths }),
-  commitChanges: (path: string, message: string) =>
-    invoke<string>("commit_changes", { path, message }),
+  commitChanges: (path: string, message: string, options?: CommitOptions) =>
+    invoke<CommitOutcome>("commit_changes", { path, message, options: options ?? null }),
   /** Read a working-tree file's full text. Returns `missing: true` when the file doesn't exist on disk. */
   readWorkingFile: (path: string, file: string) =>
     invoke<WorkingFileText>("read_working_file", { path, file }),
@@ -473,11 +592,25 @@ export const git = {
    *  unified-patch string. */
   formatWorkingFilePatch: (path: string, file: string) =>
     invoke<string>("format_working_file_patch", { path, file }),
-  /** v0.13.9 — dry-run: would `patch_text` apply cleanly to the workdir? */
-  applyPatchCheck: (path: string, patchText: string) =>
-    invoke<void>("apply_patch_check", { path, patchText }),
-  /** v0.13.9 — apply `patch_text` to the workdir (does not touch the index). */
-  applyPatch: (path: string, patchText: string) => invoke<void>("apply_patch", { path, patchText }),
+  /** v0.13.9 — dry-run: would `patch_text` apply cleanly?
+   *  v0.13.25 added `location` so callers can dry-run an Index apply
+   *  (line-level staging path) instead of just the working tree. */
+  applyPatchCheck: (path: string, patchText: string, opts?: { location?: PatchLocation }) =>
+    invoke<void>("apply_patch_check", {
+      path,
+      patchText,
+      location: opts?.location ?? null,
+    }),
+  /** v0.13.9 — apply `patch_text`. Default location is `work_dir` (just
+   *  like the original v0.13.9 behaviour); v0.13.25 added `index` /
+   *  `both` for line-level staging. Pair with `reversePatch` from
+   *  `@/lib/subsetPatch` to un-apply. */
+  applyPatch: (path: string, patchText: string, opts?: { location?: PatchLocation }) =>
+    invoke<void>("apply_patch", {
+      path,
+      patchText,
+      location: opts?.location ?? null,
+    }),
   /** v0.13.14 — raw bytes of a file at a commit, base64-encoded for image previews. */
   readBlobAtCommit: (path: string, oid: string, file: string) =>
     invoke<BlobPayload>("read_blob_at_commit", { path, oid, file }),
@@ -487,12 +620,34 @@ export const git = {
   fetch: (path: string, remote?: string) =>
     invoke<RemoteOpResult>("git_fetch", { path, remote: remote ?? null }),
   pull: (path: string) => invoke<RemoteOpResult>("git_pull", { path }),
-  push: (path: string, opts?: { remote?: string; branch?: string; setUpstream?: boolean }) =>
+  push: (
+    path: string,
+    opts?: {
+      remote?: string;
+      branch?: string;
+      setUpstream?: boolean;
+      /** v0.13.21 — unconditional `git push --force`. Skips the lease check. */
+      force?: boolean;
+      /**
+       * v0.13.21 — `force-with-lease`: caller-known oid of the remote ref. If
+       * the server-side ref still matches, the push is promoted to a forced
+       * refspec; otherwise the backend returns an `AppError` of kind
+       * `StaleLease` and the caller should fetch + retry.
+       *
+       * Pass `null` (or omit) for a plain non-forced push; pass an oid string
+       * for the safer "force only if nothing changed since I last saw it"
+       * semantics. Mutually-exclusive with `force: true`.
+       */
+      expectedRemoteOid?: string | null;
+    },
+  ) =>
     invoke<RemoteOpResult>("git_push", {
       path,
       remote: opts?.remote ?? null,
       branch: opts?.branch ?? null,
       setUpstream: opts?.setUpstream ?? false,
+      force: opts?.force ?? false,
+      expectedRemoteOid: opts?.expectedRemoteOid ?? null,
     }),
   submitCredentials: (id: number, username: string, password: string) =>
     invoke<void>("submit_credentials", { id, reply: { username, password } }),
@@ -549,6 +704,11 @@ export const git = {
       tagName,
     }),
   cherryPick: (path: string, oid: string) => invoke<void>("cherry_pick", { path, oid }),
+  /** v0.13.26 — batch cherry-pick. Applies `oids` in order, stops on the
+   *  first conflict and returns `Stopped { applied, failed_oid, pending }`
+   *  so the caller can switch to the merge view + remember the queue tail. */
+  cherryPickSequence: (path: string, oids: string[]) =>
+    invoke<CherrySequenceOutcome>("cherry_pick_sequence", { path, oids }),
   revertCommit: (path: string, oid: string) => invoke<void>("revert_commit", { path, oid }),
   resetTo: (path: string, oid: string, mode: "soft" | "mixed" | "hard") =>
     invoke<void>("reset_to", { path, oid, mode }),

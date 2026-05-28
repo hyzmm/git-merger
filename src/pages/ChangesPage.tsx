@@ -42,6 +42,15 @@ export function ChangesPage() {
   const discardSel = useApp((s) => s.discardSelected);
   const setMessage = useApp((s) => s.setCommitMessage);
   const commit = useApp((s) => s.commitWorking);
+  // v0.13.20 — amend / signoff / skip-hooks toggles live on the changes
+  // slice; selectors stay narrow so unrelated state churn doesn't re-render
+  // the panel.
+  const amend = useApp((s) => s.changes.amend);
+  const signoff = useApp((s) => s.changes.signoff);
+  const skipHooks = useApp((s) => s.changes.skipHooks);
+  const setAmend = useApp((s) => s.setAmend);
+  const setSignoff = useApp((s) => s.setSignoff);
+  const setSkipHooks = useApp((s) => s.setSkipHooks);
   const setView = useApp((s) => s.setView);
   const saveStash = useApp((s) => s.saveStash);
   const openWorkingDiff = useApp((s) => s.openWorkingDiff);
@@ -236,29 +245,78 @@ export function ChangesPage() {
       {/* Right: commit panel */}
       <aside className="flex h-full min-w-0 flex-col border-l border-border bg-card">
         <div className="border-b border-border p-3">
-          <h2 className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Commit staged changes
-          </h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {amend ? "Amend last commit" : "Commit staged changes"}
+            </h2>
+          </div>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Commit message&#10;&#10;Optional longer body…"
             className="block h-32 w-full resize-none rounded-md border border-input bg-background p-2 font-mono text-xs outline-none focus:border-ring"
           />
+
+          {/* v0.13.20 — commit modifier toggles. Compact row to keep the
+              panel from growing taller; tooltips carry the long-form
+              explanation. */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+            <label
+              className="inline-flex cursor-pointer select-none items-center gap-1.5"
+              title="git commit --amend — replace the current HEAD with this commit instead of chaining onto it. Pre-fills the message with HEAD's message; toggle off to restore your previous draft."
+            >
+              <input
+                type="checkbox"
+                checked={amend}
+                onChange={(e) => void setAmend(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span>Amend last commit</span>
+            </label>
+            <label
+              className="inline-flex cursor-pointer select-none items-center gap-1.5"
+              title="Append a Signed-off-by: trailer using user.name and user.email (DCO compliance)."
+            >
+              <input
+                type="checkbox"
+                checked={signoff}
+                onChange={(e) => setSignoff(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span>Sign off</span>
+            </label>
+            <label
+              className="inline-flex cursor-pointer select-none items-center gap-1.5"
+              title="git commit --no-verify — skip pre-commit, commit-msg, and post-commit hooks for THIS commit only."
+            >
+              <input
+                type="checkbox"
+                checked={skipHooks}
+                onChange={(e) => setSkipHooks(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span>Skip hooks</span>
+            </label>
+          </div>
+
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={commit}
-              disabled={committing || stagedCount === 0 || !message.trim()}
+              disabled={committing || (!amend && stagedCount === 0) || !message.trim()}
               className={cn(
                 "h-8 flex-1 rounded-md text-xs font-medium",
-                stagedCount > 0 && message.trim() && !committing
+                (amend || stagedCount > 0) && message.trim() && !committing
                   ? "bg-primary text-primary-foreground hover:opacity-90"
                   : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
               )}
             >
               {committing
-                ? "Committing..."
-                : `Commit ${stagedCount} file${stagedCount === 1 ? "" : "s"}`}
+                ? amend
+                  ? "Amending..."
+                  : "Committing..."
+                : amend
+                  ? "Amend commit"
+                  : `Commit ${stagedCount} file${stagedCount === 1 ? "" : "s"}`}
             </button>
           </div>
           {error && <div className="mt-2 text-[11px] text-destructive">{error}</div>}

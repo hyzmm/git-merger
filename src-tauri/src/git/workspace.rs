@@ -189,18 +189,181 @@ pub fn discard_files(path: &str, paths: &[String]) -> Result<(), git2::Error> {
     Ok(())
 }
 
-/// Create a normal commit using the current index. Author/committer come from
-/// the user's git config.
-pub fn commit_changes(path: &str, message: &str) -> Result<String, git2::Error> {
+/// Options governing a commit operation. Captured as one struct so the
+/// Tauri command surface stays small and easy to extend (we can add e.g.
+/// `--allow-empty` later without re-shaping callers).
+///
+/// Defaults match `git commit` with no flags.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CommitOptions {
+    /// Replace HEAD with a new commit (`git commit --amend`). Parents are
+    /// taken from the *current HEAD's parents*, not from HEAD itself, so
+    /// this rewrites the existing tip rather than chaining onto it.
+    #[serde(default)]
+    pub amend: bool,
+    /// Append a `Signed-off-by:` trailer using `user.name` / `user.email`.
+    /// Idempotent when the trailer already terminates the message.
+    #[serde(default)]
+    pub signoff: bool,
+    /// When `amend` is true, replace the original author's name+email+time
+    /// with the current `user.{name,email}` + now (matches `git commit
+    /// --amend --reset-author`). Ignored for non-amend commits.
+    #[serde(default)]
+    pub reset_author: bool,
+    /// Run `pre-commit`, `commit-msg`, and `post-commit` hooks. Default on
+    /// — disabling matches `git commit --no-verify` semantics. Failures in
+    /// pre-commit / commit-msg abort the commit; post-commit failures are
+    /// logged but non-fatal.
+    #[serde(default = "default_run_hooks")]
+    pub run_hooks: bool,
+}
+
+fn default_run_hooks() -> bool {
+    true
+}
+
+/// Result of a successful commit. Carries the new oid plus a small bag of
+/// observability output (hook stdout/stderr) so the UI can show "look,
+/// pre-commit ran your formatter and these files were re-staged" toasts.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommitOutcome {
+    pub oid: String,
+    /// True when this overwrote HEAD (amend) rather than chaining a new tip.
+    pub amended: bool,
+    /// True when post-commit ran (purely observational).
+    pub post_commit_ran: bool,
+}
+
+/// Create a commit using the current index. Honours `commit.gpgsign`
+/// (v0.13.19), optional sign-off trailer (v0.13.20), optional amend mode
+/// (v0.13.20), and the user's `pre-commit` / `commit-msg` / `post-commit`
+/// hooks (v0.13.20).
+///
+/// Hook semantics mirror upstream git:
+///   1. `pre-commit` runs against the staged tree; non-zero exit aborts.
+///   2. The message is written to a temp file and `commit-msg <path>` is
+///      invoked; the hook may rewrite the file in place. Non-zero aborts.
+///   3. The (possibly rewritten) message is used to build the commit
+///      object, signed if requested.
+///   4. `post-commit` runs after success; failures are non-fatal.
+pub fn commit_changes(
+    path: &str,
+    message: &str,
+    opts: &CommitOptions,
+) -> Result<CommitOutcome, git2::Error> {
     let repo = Repository::discover(path)?;
+
+    // ---- 1. pre-commit hook ----
+    if opts.run_hooks {
+        if let super::hooks::HookOutcome::Failed { exit_code, stderr } =
+            super::hooks::run_pre_commit(&repo)
+        {
+            return Err(git2::Error::from_str(&format!(
+                "pre-commit hook failed (exit {exit_code}):\n{stderr}"
+            )));
+        }
+    }
+
+    // ---- 2. resolve signatures + parents ----
+    let head_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+    let cfg_sig = repo.signature()?;
+
+    // Author / committer / parent layout depends on amend.
+    let (author, committer, parents_owned, amended): (
+        git2::Signature<'_>,
+        git2::Signature<'_>,
+        Vec<git2::Commit<'_>>,
+        bool,
+    ) = if opts.amend {
+        let head = head_commit.clone().ok_or_else(|| {
+            git2::Error::from_str("cannot --amend on an unborn HEAD: there is no commit to amend")
+        })?;
+        // Parents come from the original HEAD's parents (we're replacing it,
+        // not chaining onto it).
+        let parents: Vec<git2::Commit<'_>> = (0..head.parent_count())
+            .map(|i| head.parent(i))
+            .collect::<Result<_, _>>()?;
+        let author = if opts.reset_author {
+            cfg_sig.clone()
+        } else {
+            head.author().to_owned()
+        };
+        // Committer is always "now, you", matching `git commit --amend`.
+        (author, cfg_sig.clone(), parents, true)
+    } else {
+        let parents: Vec<git2::Commit<'_>> = head_commit.into_iter().collect();
+        (cfg_sig.clone(), cfg_sig.clone(), parents, false)
+    };
+
+    // ---- 3. apply sign-off trailer (idempotent) ----
+    let mut effective_message = message.trim().to_string();
+    if opts.signoff {
+        let name = cfg_sig.name().unwrap_or("");
+        let email = cfg_sig.email().unwrap_or("");
+        if !name.is_empty() && !email.is_empty() {
+            effective_message = super::signing::append_signoff(&effective_message, name, email);
+        }
+    }
+
+    // ---- 4. commit-msg hook (may rewrite the message) ----
+    if opts.run_hooks
+        && super::hooks::hook_path(&repo, super::hooks::CommitHook::CommitMsg).is_some()
+    {
+        // Write message to a temp file inside the .git dir so hook
+        // tools (e.g. commitizen) that look for `.git/COMMIT_EDITMSG`-
+        // style siblings still find them. We use a unique name to
+        // avoid clobbering an in-progress real commit edit.
+        let msg_path = repo.path().join("GITTOOLS_COMMIT_EDITMSG");
+        std::fs::write(&msg_path, effective_message.as_bytes())
+            .map_err(|e| git2::Error::from_str(&format!("write commit-msg buffer: {e}")))?;
+
+        match super::hooks::run_commit_msg(&repo, &msg_path) {
+            super::hooks::HookOutcome::Failed { exit_code, stderr } => {
+                let _ = std::fs::remove_file(&msg_path);
+                return Err(git2::Error::from_str(&format!(
+                    "commit-msg hook failed (exit {exit_code}):\n{stderr}"
+                )));
+            }
+            super::hooks::HookOutcome::Ok => {
+                // Re-read whatever the hook left behind.
+                if let Ok(rewritten) = std::fs::read_to_string(&msg_path) {
+                    effective_message = rewritten;
+                }
+            }
+            super::hooks::HookOutcome::Skipped => {}
+        }
+        let _ = std::fs::remove_file(&msg_path);
+    }
+
+    // ---- 5. write tree + commit object (signed if configured) ----
     let mut index = repo.index()?;
     let tree_id = index.write_tree()?;
     let tree = repo.find_tree(tree_id)?;
-    let sig = repo.signature()?;
-    let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
-    let oid = repo.commit(Some("HEAD"), &sig, &sig, message.trim(), &tree, &parents)?;
-    Ok(oid.to_string())
+    let parent_refs: Vec<&git2::Commit<'_>> = parents_owned.iter().collect();
+    let oid = super::signing::commit_to_head(
+        &repo,
+        &author,
+        &committer,
+        effective_message.trim(),
+        &tree,
+        &parent_refs,
+    )?;
+
+    // ---- 6. post-commit hook (non-fatal) ----
+    let post_commit_ran = if opts.run_hooks {
+        matches!(
+            super::hooks::run_post_commit(&repo),
+            super::hooks::HookOutcome::Ok
+        )
+    } else {
+        false
+    };
+
+    Ok(CommitOutcome {
+        oid: oid.to_string(),
+        amended,
+        post_commit_ran,
+    })
 }
 
 // ---------- Working-tree file editor (v0.13.3) ----------

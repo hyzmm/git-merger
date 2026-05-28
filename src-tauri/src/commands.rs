@@ -64,6 +64,47 @@ pub fn commit_meta(path: String, oid: String) -> R<git::CommitMeta> {
     Ok(git::log::commit_meta(&path, &oid)?)
 }
 
+/// v0.13.21 — incremental "top-up" walk from HEAD to a previously-known
+/// oid. Returns only the commits strictly newer than `known_oid`, in
+/// newest-first order. `null` means the cursor is no longer reachable
+/// from HEAD (force-push / reset) and the caller should fall back to a
+/// full `git_log_page` reload.
+#[tauri::command]
+pub fn git_log_since(
+    path: String,
+    known_oid: String,
+    cap: Option<usize>,
+) -> R<Option<Vec<git::CommitSummary>>> {
+    Ok(git::log::log_since(
+        &path,
+        &known_oid,
+        cap.unwrap_or(5_000),
+    )?)
+}
+
+// ---------- Commit signing (v0.13.19) ----------
+//
+// Read-only probe used by the History detail panel. Returns whether the
+// commit carries an embedded `gpgsig` header and (best-effort) what format
+// the signature is in. We intentionally do NOT verify signatures here —
+// `verify_commit_signature` (v0.13.20) does that on demand.
+
+#[tauri::command]
+pub fn commit_signature_status(path: String, oid: String) -> R<git::CommitSignatureInfo> {
+    let repo = git2::Repository::discover(&path).map_err(crate::error::AppError::from)?;
+    Ok(git::signing::commit_signature_info(&repo, &oid)?)
+}
+
+// Trust-rooted verification (v0.13.20). Shells out to `gpg --verify` /
+// `ssh-keygen -Y verify`, so this is more expensive than the read-only
+// probe above — call it on user demand (e.g. clicking the Signature badge),
+// not for every history row.
+#[tauri::command]
+pub fn verify_commit_signature(path: String, oid: String) -> R<git::VerifyResult> {
+    let repo = git2::Repository::discover(&path).map_err(crate::error::AppError::from)?;
+    Ok(git::signing::verify_commit(&repo, &oid)?)
+}
+
 // ---------- Reachability queries (v0.13.16) ----------
 //
 // Used by the History view's "Highlight ancestors / descendants" feature.
@@ -199,8 +240,13 @@ pub fn discard_files(path: String, paths: Vec<String>) -> R<()> {
 }
 
 #[tauri::command]
-pub fn commit_changes(path: String, message: String) -> R<String> {
-    Ok(git::workspace::commit_changes(&path, &message)?)
+pub fn commit_changes(
+    path: String,
+    message: String,
+    options: Option<git::workspace::CommitOptions>,
+) -> R<git::workspace::CommitOutcome> {
+    let opts = options.unwrap_or_default();
+    Ok(git::workspace::commit_changes(&path, &message, &opts)?)
 }
 
 // ---------- Working-tree file editor (v0.13.3) ----------
@@ -234,14 +280,22 @@ pub fn format_working_file_patch(path: String, file: String) -> R<String> {
 }
 
 #[tauri::command]
-pub fn apply_patch_check(path: String, patch_text: String) -> R<()> {
-    git::patch::apply_patch_check(&path, &patch_text)?;
+pub fn apply_patch_check(
+    path: String,
+    patch_text: String,
+    location: Option<git::patch::PatchLocation>,
+) -> R<()> {
+    git::patch::apply_patch_check(&path, &patch_text, location.unwrap_or_default())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn apply_patch(path: String, patch_text: String) -> R<()> {
-    git::patch::apply_patch(&path, &patch_text)?;
+pub fn apply_patch(
+    path: String,
+    patch_text: String,
+    location: Option<git::patch::PatchLocation>,
+) -> R<()> {
+    git::patch::apply_patch(&path, &patch_text, location.unwrap_or_default())?;
     Ok(())
 }
 
@@ -278,6 +332,8 @@ pub fn git_push(
     remote: Option<String>,
     branch: Option<String>,
     set_upstream: bool,
+    force: Option<bool>,
+    expected_remote_oid: Option<String>,
 ) -> R<git::RemoteOpResult> {
     Ok(git::remote::push(
         app,
@@ -285,6 +341,8 @@ pub fn git_push(
         remote.as_deref(),
         branch.as_deref(),
         set_upstream,
+        force.unwrap_or(false),
+        expected_remote_oid.as_deref(),
     )?)
 }
 
@@ -443,6 +501,17 @@ pub fn delete_tag(path: String, name: String) -> R<()> {
 pub fn cherry_pick(path: String, oid: String) -> R<()> {
     git::commit_ops::cherry_pick(&path, &oid)?;
     Ok(())
+}
+
+/// v0.13.26 — batch cherry-pick. `oids` is applied in order; the first
+/// conflict short-circuits and reports the still-pending tail so the
+/// frontend can resume after the user resolves in the Merge view.
+#[tauri::command]
+pub fn cherry_pick_sequence(
+    path: String,
+    oids: Vec<String>,
+) -> R<git::commit_ops::CherrySequenceOutcome> {
+    Ok(git::commit_ops::cherry_pick_sequence(&path, &oids)?)
 }
 
 #[tauri::command]

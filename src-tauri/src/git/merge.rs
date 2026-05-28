@@ -213,7 +213,7 @@ pub fn commit_merge(path: &str, message: Option<&str>) -> Result<String, git2::E
     // Author / committer come from the user's git config.
     let sig = repo.signature()?;
 
-    let new_oid = repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents_ref)?;
+    let new_oid = super::signing::commit_to_head(&repo, &sig, &sig, msg, &tree, &parents_ref)?;
 
     // Clean up MERGE_HEAD / MERGE_MSG / etc.
     repo.cleanup_state()?;

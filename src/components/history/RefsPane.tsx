@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { GitBranch, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
+import { branchColorForName } from "@/lib/branchColors";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { RefEntry } from "@/ipc/git";
 
@@ -11,19 +12,10 @@ const KIND_LABEL: Record<string, string> = {
   tag: "Tags",
 };
 
-const HUE_VARS = [
-  "var(--branch-1)",
-  "var(--branch-2)",
-  "var(--branch-3)",
-  "var(--branch-4)",
-  "var(--branch-5)",
-];
-
-function colorFor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return HUE_VARS[Math.abs(h) % HUE_VARS.length];
-}
+// v0.13.23 — palette + hashing now live in `@/lib/branchColors` so the
+// RefsPane left dot, the GraphRow commit dot, and the lane lines all
+// agree on what color a given branch is. The previous local `colorFor`
+// hashed into a 5-slot list that didn't match GraphRow's 6-slot list.
 
 interface MenuState {
   pos: ContextMenuPos;
@@ -87,8 +79,24 @@ export function RefsPane() {
       items.push(
         { label: ref.name, heading: true },
         {
-          label: "Checkout",
-          onClick: () => void checkoutBranch(ref.name),
+          label: "Checkout…",
+          onClick: () => {
+            void (async () => {
+              // v0.13.22 — checkout is a destructive op (working tree
+              // switches, in-flight unsaved buffers may be lost). Always
+              // route through the unified ConfirmDialog so it's never a
+              // "one click and you're on a different branch" mistake.
+              const ok = await confirm({
+                level: "warning",
+                title: `Checkout '${ref.name}'?`,
+                message:
+                  "Switches the working tree to this branch. Unsaved edits in the in-app editor will not migrate; commit or stash first if you care about them.",
+                detail: `git checkout ${ref.name}`,
+                confirmLabel: "Checkout",
+              });
+              if (ok) void checkoutBranch(ref.name);
+            })();
+          },
         },
         {
           label: "New branch from here…",
@@ -135,7 +143,20 @@ export function RefsPane() {
               .prompt(`New local branch name (tracking ${ref.name}):`, def)
               ?.trim();
             if (!name) return;
-            void createBranchAct(name, ref.name, true);
+            // createBranch with checkout=true is a destructive op (working
+            // tree switches); funnel it through the same confirm path so
+            // it can never happen on a single accidental click.
+            void (async () => {
+              const ok = await confirm({
+                level: "warning",
+                title: `Create '${name}' tracking ${ref.name} and check it out?`,
+                message:
+                  "Creates a local branch that tracks this remote branch and switches the working tree to it.",
+                detail: `git checkout -b ${name} ${ref.name}`,
+                confirmLabel: "Create + checkout",
+              });
+              if (ok) void createBranchAct(name, ref.name, true);
+            })();
           },
         },
       );
@@ -189,7 +210,11 @@ export function RefsPane() {
           const isDetached = headBranch === null;
           const headLabel = headBranch?.name ?? repo?.head ?? "(unknown)";
           const headTarget = headBranch?.target ?? null;
-          const color = headBranch ? colorFor(headBranch.name) : "var(--muted-foreground)";
+          // `branchColorForName` already returns a full `hsl(var(--branch-N))`
+          // expression so it can drop straight into a CSS property.
+          const color = headBranch
+            ? branchColorForName(headBranch.name)
+            : "hsl(var(--muted-foreground))";
           return (
             <div
               onClick={() => {
@@ -201,7 +226,7 @@ export function RefsPane() {
                 "bg-accent/30",
                 !headTarget && "cursor-default opacity-80",
               )}
-              style={{ borderLeft: `2px solid hsl(${color})` }}
+              style={{ borderLeft: `2px solid ${color}` }}
               title={
                 isDetached ? "HEAD is detached" : `HEAD → ${headLabel} (click to jump to its tip)`
               }
@@ -228,31 +253,25 @@ export function RefsPane() {
                 {KIND_LABEL[kind]}
               </div>
               {list.map((r) => {
-                const color = colorFor(r.name);
+                const color = branchColorForName(r.name);
                 return (
                   <div
                     key={`${kind}:${r.name}`}
                     onClick={() => {
+                      // v0.13.22 — clicking a ref is a *read-only* navigation:
+                      // jump the History view to the ref's tip. Anything
+                      // destructive (checkout, delete, rename) lives in the
+                      // right-click context menu and goes through ConfirmDialog.
                       if (r.target) void selectCommit(r.target);
                     }}
                     onContextMenu={(e) => onContextMenu(e, r)}
-                    onDoubleClick={() => {
-                      if (r.kind === "local_branch") void checkoutBranch(r.name);
-                    }}
                     className={cn(
                       "flex cursor-pointer items-center gap-2 px-3 py-1 text-xs",
                       "hover:bg-accent/50",
                     )}
-                    title={
-                      r.kind === "local_branch"
-                        ? "Click: jump · double-click: checkout · right-click: more"
-                        : "Click: jump · right-click: more"
-                    }
+                    title="Click: jump to tip · right-click: actions"
                   >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: `hsl(${color})` }}
-                    />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
                     <span className="flex-1 truncate font-mono">{r.name}</span>
                   </div>
                 );

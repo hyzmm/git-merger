@@ -170,6 +170,12 @@ fn commit_meta_lists_containing_branches_and_tags() {
         .iter()
         .any(|b| b == &default_branch));
     assert_eq!(meta3.containing_tags, vec!["v1.1".to_string()]);
+
+    // v0.13.19 perf cleanup folded the signature probe into commit_meta.
+    // For an unsigned commit it must surface as `signed: false` rather than
+    // erroring or being absent — the CommitDetails panel keys on this.
+    assert!(!meta3.signature.signed);
+    assert_eq!(meta3.signature.format, None);
 }
 
 // ---------------------------------------------------------------------------
@@ -710,6 +716,59 @@ fn log_page_cursor_at_root_yields_empty_next_page() {
 }
 
 // ---------------------------------------------------------------------------
+// log_since (v0.13.21 — incremental top-up walk)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn log_since_returns_only_commits_newer_than_cursor() {
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1");
+    let _c2 = r.commit_file("a.txt", "2\n", "c2");
+    let _c3 = r.commit_file("a.txt", "3\n", "c3");
+
+    // Ask for everything strictly newer than c1 — should be c3, c2 in that order.
+    let added = git::log::log_since(&r.path_str(), &c1.to_string(), 1000)
+        .unwrap()
+        .expect("cursor still reachable");
+    let summaries: Vec<&str> = added.iter().map(|c| c.summary.as_str()).collect();
+    assert_eq!(summaries, vec!["c3", "c2"]);
+}
+
+#[test]
+fn log_since_returns_empty_when_cursor_is_head() {
+    let r = TempRepo::init();
+    let head = r.commit_file("a.txt", "1\n", "only");
+    let added = git::log::log_since(&r.path_str(), &head.to_string(), 1000)
+        .unwrap()
+        .expect("cursor reachable");
+    assert!(
+        added.is_empty(),
+        "no new commits when cursor == HEAD, got {} entries",
+        added.len()
+    );
+}
+
+#[test]
+fn log_since_returns_none_when_cursor_is_orphaned() {
+    // Build a repo where the cursor commit becomes unreachable from HEAD —
+    // the realistic case is `git reset --hard <older>` after the user has
+    // already loaded the History view. log_since must report None so the
+    // caller can fall back to a full reload.
+    let r = TempRepo::init();
+    let c1 = r.commit_file("a.txt", "1\n", "c1");
+    let c2 = r.commit_file("a.txt", "2\n", "c2");
+    // Now hard-reset HEAD back to c1; c2 is still in the object DB but not
+    // reachable from HEAD anymore.
+    git::commit_ops::reset(&r.path_str(), &c1.to_string(), "hard").unwrap();
+
+    let res = git::log::log_since(&r.path_str(), &c2.to_string(), 1000).unwrap();
+    assert!(
+        res.is_none(),
+        "orphaned cursor must return None to trigger full reload"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // search (cross-history grep + pickaxe)
 // ---------------------------------------------------------------------------
 
@@ -961,6 +1020,45 @@ fn diff_commit_files_lists_added_modified_and_deleted() {
     ));
 }
 
+/// Regression for the v0.13.19 perf cleanup that swapped per-file
+/// `Patch::from_diff` for a single `diff.foreach` line-callback pass.
+/// Make sure the `+` / `-` counters still attribute to the right file
+/// and stay accurate when the commit touches a mix of pure-add /
+/// pure-delete / modified files.
+#[test]
+fn diff_commit_files_per_file_line_stats_are_accurate() {
+    let r = TempRepo::init();
+    // c1: seed two files we'll churn in c2.
+    r.commit_file("keep.txt", "k1\nk2\nk3\n", "c1: seed keep");
+    r.commit_file("mod.txt", "m1\nm2\nm3\n", "c2: seed mod");
+    // c3: modify mod.txt (1 added, 1 removed line, 2 context),
+    //     add new.txt (3 added),
+    //     delete keep.txt (3 removed).
+    std::fs::write(r.path().join("mod.txt"), "m1\nM_2\nm3\n").unwrap();
+    std::fs::write(r.path().join("new.txt"), "n1\nn2\nn3\n").unwrap();
+    std::fs::remove_file(r.path().join("keep.txt")).unwrap();
+    let oid = r.commit_all("c3: per-file stats").to_string();
+
+    let files = git::diff::commit_files(&r.path_str(), &oid).unwrap();
+    let by_path: std::collections::HashMap<&str, &git::FileChange> =
+        files.iter().map(|f| (f.path.as_str(), f)).collect();
+
+    // Modified file: exactly +1 / -1 (the M_2 line).
+    let m = by_path["mod.txt"];
+    assert_eq!(m.insertions, 1, "mod.txt insertions");
+    assert_eq!(m.deletions, 1, "mod.txt deletions");
+
+    // Pure addition: all three lines counted as inserts, zero deletes.
+    let n = by_path["new.txt"];
+    assert_eq!(n.insertions, 3, "new.txt insertions");
+    assert_eq!(n.deletions, 0, "new.txt deletions");
+
+    // Pure deletion: zero inserts, three deletes.
+    let k = by_path["keep.txt"];
+    assert_eq!(k.insertions, 0, "keep.txt insertions");
+    assert_eq!(k.deletions, 3, "keep.txt deletions");
+}
+
 #[test]
 fn diff_file_diff_returns_hunks_for_a_modified_file() {
     let r = TempRepo::init();
@@ -1061,6 +1159,16 @@ fn blame_previous_filename_returns_none_at_introduction_commit() {
 
 #[test]
 fn commit_ops_cherry_pick_stages_target_change_into_index() {
+    // v0.13.26 — what this test checks changed. Pre-v0.13.26, libgit2's
+    // bare `repo.cherrypick()` was used and it left the cherry-picked
+    // change in the index without ever creating a commit — a hidden bug
+    // we accidentally codified here. The new sequence-backed
+    // `commit_ops::cherry_pick` always finishes the cherry-pick into a
+    // real commit (matches `git cherry-pick`'s behaviour), so the
+    // assertions are now:
+    //   - the file appears on disk + in the index after cherry-pick
+    //   - HEAD has *advanced* by exactly one commit, parented at the
+    //     pre-cherry-pick HEAD, with the source commit's message.
     let r = TempRepo::init();
     let c1 = r.commit_file("a.txt", "1\n", "c1");
     let c2 = r.commit_file("b.txt", "from-c2\n", "c2: add b");
@@ -1069,21 +1177,35 @@ fn commit_ops_cherry_pick_stages_target_change_into_index() {
     git::commit_ops::reset(&r.path_str(), &c1.to_string(), "hard").unwrap();
     assert!(!r.path().join("b.txt").exists());
 
-    // Now cherry-pick c2: the change should land in the index (b.txt
-    // staged), but cherry_pick deliberately doesn't auto-commit so HEAD
-    // stays at c1.
     git::commit_ops::cherry_pick(&r.path_str(), &c2.to_string()).unwrap();
 
+    // The cherry-picked file should land in both the working tree and
+    // the index.
+    assert!(r.path().join("b.txt").exists(), "b.txt should be on disk");
     let mut index = r.repo.index().unwrap();
     index.read(true).unwrap();
     let staged = index.get_path(std::path::Path::new("b.txt"), 0);
-    assert!(
-        staged.is_some(),
-        "cherry-pick should stage b.txt into the index"
-    );
+    assert!(staged.is_some(), "b.txt should be staged in the index");
 
-    let head_now = r.repo.head().unwrap().peel_to_commit().unwrap().id();
-    assert_eq!(head_now, c1, "cherry_pick should not auto-commit");
+    // HEAD must have advanced to a new commit whose parent is c1 and
+    // whose message comes from c2 (sequence-backed cherry-pick reuses
+    // the source commit's message). Note: when c2 is c1's direct child,
+    // cherry-picking it onto c1 deterministically produces a commit
+    // with the same tree, parent, author *and* committer as c2, and
+    // therefore the same oid — that's not a bug, it's content-addressed
+    // storage doing its job. So we don't assert HEAD ≠ c2.
+    let head_now = r.repo.head().unwrap().peel_to_commit().unwrap();
+    assert_ne!(head_now.id(), c1, "cherry_pick should advance HEAD");
+    assert_eq!(head_now.parent_count(), 1);
+    assert_eq!(
+        head_now.parent(0).unwrap().id(),
+        c1,
+        "new HEAD should sit on top of the pre-cherry-pick HEAD",
+    );
+    assert!(
+        head_now.message().unwrap_or("").contains("c2: add b"),
+        "new commit should preserve the source commit's message",
+    );
 }
 
 #[test]
@@ -1249,8 +1371,14 @@ fn workspace_commit_changes_creates_a_new_head_commit() {
     git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
     let head_before = r.repo.head().unwrap().target().unwrap();
 
-    let new_oid_str = git::workspace::commit_changes(&r.path_str(), "v2 commit").unwrap();
-    let new_oid = git2::Oid::from_str(&new_oid_str).unwrap();
+    let outcome = git::workspace::commit_changes(
+        &r.path_str(),
+        "v2 commit",
+        &git::workspace::CommitOptions::default(),
+    )
+    .unwrap();
+    let new_oid = git2::Oid::from_str(&outcome.oid).unwrap();
+    assert!(!outcome.amended);
 
     let head_after = r.repo.head().unwrap().target().unwrap();
     assert_ne!(head_before, head_after);
@@ -1260,6 +1388,180 @@ fn workspace_commit_changes_creates_a_new_head_commit() {
     // No remaining working changes.
     let after = git::workspace::working_changes(&r.path_str()).unwrap();
     assert!(after.is_empty());
+}
+
+/// v0.13.20 amend: replaces HEAD with a new commit whose parents are
+/// HEAD's parents (root commit ⇒ no parents) and whose tree picks up the
+/// freshly-staged delta. The original commit becomes unreferenced.
+#[test]
+fn workspace_commit_amend_replaces_head_and_keeps_history_linear() {
+    let r = TempRepo::init();
+    let first = r.commit_file("a.txt", "v1\n", "init");
+    // Stage an additional file we want to fold into the same commit.
+    std::fs::write(r.path().join("b.txt"), "fresh\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["b.txt".to_string()]).unwrap();
+
+    let outcome = git::workspace::commit_changes(
+        &r.path_str(),
+        "init (amended)",
+        &git::workspace::CommitOptions {
+            amend: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(outcome.amended);
+
+    // HEAD has moved to a brand-new oid…
+    let head_after = r.repo.head().unwrap().target().unwrap();
+    assert_ne!(head_after, first);
+    // …but the parent count is preserved (was a root commit → still a root).
+    let amended = r.repo.find_commit(head_after).unwrap();
+    assert_eq!(amended.parent_count(), 0);
+    assert_eq!(amended.summary().unwrap_or(""), "init (amended)");
+    // And it now contains b.txt as well.
+    let tree = amended.tree().unwrap();
+    assert!(tree.get_path(std::path::Path::new("a.txt")).is_ok());
+    assert!(tree.get_path(std::path::Path::new("b.txt")).is_ok());
+}
+
+/// Signoff = true appends `Signed-off-by:` trailer using user.{name,email}
+/// from git config.
+#[test]
+fn workspace_commit_changes_appends_signoff_trailer_when_requested() {
+    let r = TempRepo::init();
+    r.commit_file("seed.txt", "1\n", "seed");
+    std::fs::write(r.path().join("seed.txt"), "2\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["seed.txt".to_string()]).unwrap();
+
+    let outcome = git::workspace::commit_changes(
+        &r.path_str(),
+        "Subject only",
+        &git::workspace::CommitOptions {
+            signoff: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let c = r
+        .repo
+        .find_commit(git2::Oid::from_str(&outcome.oid).unwrap())
+        .unwrap();
+    let msg = c.message().unwrap_or("");
+    assert!(msg.contains("Signed-off-by: Test User <test@example.com>"));
+    // Subject + blank line + trailer.
+    assert!(msg.starts_with("Subject only\n\nSigned-off-by:"));
+}
+
+/// Amend with `reset_author = true` overwrites the original author
+/// identity + timestamp with `user.*` + now. Useful when picking up
+/// someone else's commit and re-attributing it to yourself.
+#[test]
+fn workspace_commit_amend_with_reset_author_replaces_author_identity() {
+    let r = TempRepo::init();
+    // Seed a commit authored by a *different* identity than the test repo's
+    // configured user.{name,email}.
+    let other = git2::Signature::new(
+        "Other",
+        "other@example.com",
+        &git2::Time::new(1_700_000_000, 0),
+    )
+    .unwrap();
+    let mut idx = r.repo.index().unwrap();
+    std::fs::write(r.path().join("a.txt"), "1\n").unwrap();
+    idx.add_path(std::path::Path::new("a.txt")).unwrap();
+    idx.write().unwrap();
+    let tree = r.repo.find_tree(idx.write_tree().unwrap()).unwrap();
+    r.repo
+        .commit(Some("HEAD"), &other, &other, "first", &tree, &[])
+        .unwrap();
+
+    // Amend with reset_author.
+    std::fs::write(r.path().join("a.txt"), "2\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+    let outcome = git::workspace::commit_changes(
+        &r.path_str(),
+        "first (amended)",
+        &git::workspace::CommitOptions {
+            amend: true,
+            reset_author: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let amended = r
+        .repo
+        .find_commit(git2::Oid::from_str(&outcome.oid).unwrap())
+        .unwrap();
+    let new_author = amended.author();
+    assert_eq!(new_author.email().unwrap_or(""), "test@example.com");
+    assert_eq!(new_author.name().unwrap_or(""), "Test User");
+}
+
+/// pre-commit failure aborts the commit (no new HEAD) with the hook's
+/// stderr surfaced verbatim. Skipped on Windows because writing a
+/// shebang-style hook that reliably runs in CI is brittle there.
+#[cfg(unix)]
+#[test]
+fn workspace_commit_changes_aborts_when_pre_commit_hook_fails() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "seed");
+    std::fs::write(r.path().join("a.txt"), "v2\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+
+    // Drop a pre-commit that bails with a recognisable string.
+    let hook = r.path().join(".git").join("hooks").join("pre-commit");
+    std::fs::write(&hook, b"#!/bin/sh\necho \"linter says no\" >&2\nexit 7\n").unwrap();
+    let mut perm = std::fs::metadata(&hook).unwrap().permissions();
+    perm.set_mode(0o755);
+    std::fs::set_permissions(&hook, perm).unwrap();
+
+    let head_before = r.repo.head().unwrap().target().unwrap();
+    let err = git::workspace::commit_changes(
+        &r.path_str(),
+        "should not land",
+        &git::workspace::CommitOptions::default(),
+    )
+    .unwrap_err();
+    assert!(err.message().contains("pre-commit"));
+    assert!(err.message().contains("linter says no"));
+    let head_after = r.repo.head().unwrap().target().unwrap();
+    assert_eq!(
+        head_before, head_after,
+        "HEAD must not move when pre-commit fails"
+    );
+}
+
+/// `run_hooks: false` skips hook execution entirely, even if a hook exists
+/// and would normally fail. Mirrors `git commit --no-verify`.
+#[cfg(unix)]
+#[test]
+fn workspace_commit_changes_skips_hooks_when_disabled() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let r = TempRepo::init();
+    r.commit_file("a.txt", "v1\n", "seed");
+    std::fs::write(r.path().join("a.txt"), "v2\n").unwrap();
+    git::workspace::stage_files(&r.path_str(), &["a.txt".to_string()]).unwrap();
+
+    let hook = r.path().join(".git").join("hooks").join("pre-commit");
+    std::fs::write(&hook, b"#!/bin/sh\nexit 1\n").unwrap();
+    let mut perm = std::fs::metadata(&hook).unwrap().permissions();
+    perm.set_mode(0o755);
+    std::fs::set_permissions(&hook, perm).unwrap();
+
+    let outcome = git::workspace::commit_changes(
+        &r.path_str(),
+        "no-verify",
+        &git::workspace::CommitOptions {
+            run_hooks: false,
+            ..Default::default()
+        },
+    )
+    .expect("hook bypass");
+    assert!(!outcome.amended);
 }
 
 // ---------------------------------------------------------------------------

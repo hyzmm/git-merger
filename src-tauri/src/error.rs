@@ -26,6 +26,12 @@ pub enum Kind {
     Auth,
     /// User dismissed the credential dialog or aborted a long-running op.
     UserCancelled,
+    /// `force-with-lease` push refused because the remote ref no longer
+    /// matches the oid we believed it pointed at (someone else pushed in the
+    /// window between our last fetch and now). Strictly safer than `--force`:
+    /// the user has to explicitly fetch + retry to confirm they want to
+    /// overwrite the new state. v0.13.21.
+    StaleLease,
     /// Caller passed something the command rejects up-front (bad mode, bad oid string, etc.).
     InvalidArgument,
     /// Catch-all for libgit2 errors that don't map to a more specific kind.
@@ -47,6 +53,7 @@ impl Kind {
             Kind::NonFastForward => "NonFastForward",
             Kind::Auth => "Auth",
             Kind::UserCancelled => "UserCancelled",
+            Kind::StaleLease => "StaleLease",
             Kind::InvalidArgument => "InvalidArgument",
             Kind::Git => "Git",
             Kind::Io => "Io",
@@ -121,6 +128,11 @@ fn classify_git_error(e: &git2::Error) -> Kind {
             let lower = msg.to_ascii_lowercase();
             if lower.contains("non-fast-forward") {
                 Kind::NonFastForward
+            } else if lower.contains("stale lease")
+                || lower.contains("force-with-lease")
+                || lower.contains("force_with_lease")
+            {
+                Kind::StaleLease
             } else if lower.contains("authentication required")
                 || lower.contains("no usable credentials")
             {
@@ -269,6 +281,19 @@ mod tests {
         let g = git2::Error::from_str("non-fast-forward — use the merge UI");
         let e: AppError = g.into();
         assert_eq!(e.kind, Kind::NonFastForward);
+    }
+
+    #[test]
+    fn classifies_stale_lease_via_message_heuristic() {
+        // v0.13.21 — force-with-lease push refusal stays GenericError on the
+        // libgit2 side because we synthesise it ourselves; the heuristic must
+        // route it to the dedicated kind so the UI can show a "fetch + retry"
+        // banner instead of a generic libgit2 wall of text.
+        let g = git2::Error::from_str(
+            "stale lease: refs/heads/main on origin moved from abc1234 to def5678",
+        );
+        let e: AppError = g.into();
+        assert_eq!(e.kind, Kind::StaleLease);
     }
 
     #[test]

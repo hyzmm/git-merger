@@ -415,7 +415,11 @@ pub fn status(path: &str) -> Result<RebaseStatus, git2::Error> {
 
 /// Resolve the author/committer signatures, preferring the original author
 /// of `source` (so rebasing preserves authorship), with a fresh committer.
-fn signatures<'a>(
+///
+/// `pub(super)` so sibling modules in `git/` can build commits the same way
+/// (v0.13.26 — `commit_ops::cherry_pick_sequence` reuses this for the
+/// per-step \"finish the cherry-pick into a real commit\" finalisation).
+pub(super) fn signatures<'a>(
     repo: &'a Repository,
     source: &'a git2::Commit<'a>,
 ) -> Result<(Signature<'a>, Signature<'a>), git2::Error> {
@@ -424,8 +428,14 @@ fn signatures<'a>(
     Ok((author, committer))
 }
 
-/// Commit the current index with the given parent + message.
-fn create_commit(
+/// Commit the current index with the given parent + message. Honours
+/// `commit.gpgsign` (v0.13.19) so rebased commits stay signed.
+///
+/// `pub(super)` for the same reason as `signatures` — sibling modules
+/// in `git/` use this to materialise the post-cherrypick index into a
+/// real commit. Caller is responsible for first checking
+/// `repo.index()?.has_conflicts()` is `false`.
+pub(super) fn create_commit(
     repo: &Repository,
     source: &git2::Commit<'_>,
     parent: &git2::Commit<'_>,
@@ -435,14 +445,16 @@ fn create_commit(
     let tree_oid = index.write_tree()?;
     let tree = repo.find_tree(tree_oid)?;
     let (author, committer) = signatures(repo, source)?;
-    let new_oid = repo.commit(Some("HEAD"), &author, &committer, message, &tree, &[parent])?;
+    let new_oid =
+        super::signing::commit_to_head(repo, &author, &committer, message, &tree, &[parent])?;
     index.write()?;
     Ok(new_oid)
 }
 
 /// Replace `prev` with a new commit that has `prev`'s parent and the current
 /// index tree (which already includes `source`'s changes), preserving
-/// `source`'s author. Updates HEAD to point at the new commit.
+/// `source`'s author. Updates HEAD to point at the new commit. Honours
+/// `commit.gpgsign` (v0.13.19) so squash / fixup amend stays signed.
 fn amend_with_index(
     repo: &Repository,
     prev: &git2::Commit<'_>,
@@ -457,14 +469,8 @@ fn amend_with_index(
         .map(|i| prev.parent(i))
         .collect::<Result<_, _>>()?;
     let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
-    let new_oid = repo.commit(
-        Some("HEAD"),
-        &author,
-        &committer,
-        message,
-        &tree,
-        &parent_refs,
-    )?;
+    let new_oid =
+        super::signing::commit_to_head(repo, &author, &committer, message, &tree, &parent_refs)?;
     index.write()?;
     Ok(new_oid)
 }

@@ -37,6 +37,19 @@ export function SettingsDialog({ open, onClose }: Props) {
   const [autocrlfBusy, setAutocrlfBusy] = useState(false);
   const [autocrlfStatus, setAutocrlfStatus] = useState<string | null>(null);
 
+  // ---------- Commit signing (v0.13.19) ----------
+  // Five linked git config keys: commit.gpgsign / gpg.format / user.signingkey
+  // / gpg.program / gpg.ssh.program. We mirror the same scope toggle as
+  // core.autocrlf and write all five in a single Save click.
+  const [signEnabled, setSignEnabled] = useState(false);
+  const [signFormat, setSignFormat] = useState<"openpgp" | "ssh">("openpgp");
+  const [signKey, setSignKey] = useState("");
+  const [signGpgProgram, setSignGpgProgram] = useState("");
+  const [signSshProgram, setSignSshProgram] = useState("");
+  const [signScope, setSignScope] = useState<"local" | "global">("global");
+  const [signBusy, setSignBusy] = useState(false);
+  const [signStatus, setSignStatus] = useState<string | null>(null);
+
   // Re-load core.autocrlf each time the dialog opens.
   useEffect(() => {
     if (!open || !repo) return;
@@ -53,6 +66,38 @@ export function SettingsDialog({ open, onClose }: Props) {
       cancelled = true;
     };
   }, [open, repo]);
+
+  // Re-load commit-signing config (v0.13.19) on dialog open.
+  // We pull the merged view (local overrides global) for each of the five
+  // keys; missing keys come back as null and surface as the field default.
+  useEffect(() => {
+    if (!open || !repo) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [gpgsign, fmt, key, gpgp, sshp] = await Promise.all([
+          git.configGet(repo.path, "commit.gpgsign"),
+          git.configGet(repo.path, "gpg.format"),
+          git.configGet(repo.path, "user.signingkey"),
+          git.configGet(repo.path, "gpg.program"),
+          git.configGet(repo.path, "gpg.ssh.program"),
+        ]);
+        if (cancelled) return;
+        const truthy = (v: string | null) =>
+          !!v && ["true", "yes", "on", "1"].includes(v.trim().toLowerCase());
+        setSignEnabled(truthy(gpgsign));
+        setSignFormat((fmt ?? "").trim().toLowerCase() === "ssh" ? "ssh" : "openpgp");
+        setSignKey(key ?? "");
+        setSignGpgProgram(gpgp ?? "");
+        setSignSshProgram(sshp ?? "");
+      } catch (e) {
+        if (!cancelled) setSignStatus(`${t("settings.signing.failedRead")}: ${e}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repo, t]);
 
   // ESC closes
   useEffect(() => {
@@ -81,6 +126,38 @@ export function SettingsDialog({ open, onClose }: Props) {
       setAutocrlfStatus(`Failed: ${e}`);
     } finally {
       setAutocrlfBusy(false);
+    }
+  };
+
+  // Save all five commit-signing keys atomically (well, sequentially — git
+  // config is a flat ini file, no transaction). On failure we surface the
+  // first error and bail; previously-written keys stay set, which is the
+  // same semantics `git config` gives anyway.
+  const onSaveSigning = async () => {
+    if (!repo) return;
+    setSignBusy(true);
+    setSignStatus(null);
+    try {
+      await git.configSet(repo.path, "commit.gpgsign", signEnabled ? "true" : "false", signScope);
+      // Empty string deletes the key, falling back to git's default.
+      await git.configSet(
+        repo.path,
+        "gpg.format",
+        signFormat === "ssh" ? "ssh" : "openpgp",
+        signScope,
+      );
+      await git.configSet(repo.path, "user.signingkey", signKey.trim(), signScope);
+      await git.configSet(repo.path, "gpg.program", signGpgProgram.trim(), signScope);
+      await git.configSet(repo.path, "gpg.ssh.program", signSshProgram.trim(), signScope);
+      setSignStatus(
+        signEnabled
+          ? t("settings.signing.savedEnabled").replace("{scope}", signScope)
+          : t("settings.signing.savedDisabled").replace("{scope}", signScope),
+      );
+    } catch (e) {
+      setSignStatus(`${t("settings.signing.failedSave")}: ${e}`);
+    } finally {
+      setSignBusy(false);
     }
   };
 
@@ -218,6 +295,108 @@ export function SettingsDialog({ open, onClose }: Props) {
                     )}
                   >
                     {autocrlfBusy ? t("settings.gitConfig.saving") : t("settings.gitConfig.save")}
+                  </button>
+                </div>
+              </>
+            )}
+          </Section>
+
+          <Section title={t("settings.signing")} subtitle={t("settings.signing.subtitle")}>
+            {!repo ? (
+              <p className="text-[11px] text-muted-foreground">
+                {t("settings.gitConfig.openFirst")}
+              </p>
+            ) : (
+              <>
+                <Row label={t("settings.signing.enabled")}>
+                  <SegGroup<"on" | "off">
+                    value={signEnabled ? "on" : "off"}
+                    options={[
+                      { v: "off", label: t("settings.signing.off") },
+                      { v: "on", label: t("settings.signing.on") },
+                    ]}
+                    onChange={(v) => setSignEnabled(v === "on")}
+                  />
+                </Row>
+                <Row label={t("settings.signing.format")}>
+                  <SegGroup<"openpgp" | "ssh">
+                    value={signFormat}
+                    options={[
+                      { v: "openpgp", label: t("settings.signing.format.openpgp") },
+                      { v: "ssh", label: t("settings.signing.format.ssh") },
+                    ]}
+                    onChange={setSignFormat}
+                  />
+                </Row>
+                <Row label={t("settings.signing.signingKey")}>
+                  <input
+                    type="text"
+                    value={signKey}
+                    onChange={(e) => setSignKey(e.target.value)}
+                    placeholder={
+                      signFormat === "ssh"
+                        ? t("settings.signing.signingKey.placeholderSsh")
+                        : t("settings.signing.signingKey.placeholderGpg")
+                    }
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+                    spellCheck={false}
+                  />
+                </Row>
+                <Row
+                  label={
+                    signFormat === "ssh"
+                      ? t("settings.signing.sshProgram")
+                      : t("settings.signing.gpgProgram")
+                  }
+                >
+                  <input
+                    type="text"
+                    value={signFormat === "ssh" ? signSshProgram : signGpgProgram}
+                    onChange={(e) =>
+                      signFormat === "ssh"
+                        ? setSignSshProgram(e.target.value)
+                        : setSignGpgProgram(e.target.value)
+                    }
+                    placeholder={signFormat === "ssh" ? "ssh-keygen" : "gpg"}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+                    spellCheck={false}
+                  />
+                </Row>
+                <Row label={t("settings.gitConfig.scope")}>
+                  <SegGroup<"local" | "global">
+                    value={signScope}
+                    options={[
+                      { v: "local", label: t("settings.gitConfig.scope.local") },
+                      { v: "global", label: t("settings.gitConfig.scope.global") },
+                    ]}
+                    onChange={setSignScope}
+                  />
+                </Row>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {t("settings.signing.help")}
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  {signStatus && (
+                    <span
+                      className={cn(
+                        "mr-auto text-[11px]",
+                        signStatus.toLowerCase().includes("fail")
+                          ? "text-destructive"
+                          : "text-[hsl(var(--branch-1))]",
+                      )}
+                    >
+                      {signStatus}
+                    </span>
+                  )}
+                  <button
+                    onClick={onSaveSigning}
+                    disabled={signBusy}
+                    className={cn(
+                      "h-7 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90",
+                      signBusy && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    {signBusy ? t("settings.gitConfig.saving") : t("settings.gitConfig.save")}
                   </button>
                 </div>
               </>

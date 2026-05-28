@@ -63,6 +63,16 @@ import {
   stablePartitionPinned,
   nextTabId,
 } from "@/lib/tabsPersist";
+import { toast } from "@/lib/toast";
+import { buildSubsetPatch, reversePatch, selectionKey } from "@/lib/subsetPatch";
+
+/**
+ * Module-scoped scratch buffer for the v0.13.20 amend toggle: when the
+ * user flips amend ON we stash their in-progress message here keyed by
+ * repo path, so flipping OFF restores it. Cleared after a successful
+ * commit. Lives outside Zustand state because it's purely UX recovery.
+ */
+const draftBeforeAmend = new Map<string, string>();
 
 export type ViewKey =
   | "history"
@@ -85,6 +95,23 @@ interface HistoryState {
   commits: CommitSummary[];
   refs: RefEntry[];
   selectedOid: string | null;
+  /**
+   * v0.13.26 — multi-selection set for batch operations (cherry-pick is the
+   * first user). `selectedOid` (singular) above is the *focus* — the row
+   * whose CommitDetails panel is shown — and is always also a member of
+   * `selectedOids`. The two stay in sync:
+   *   - plain click   → set = { oid }, focus = oid, anchor = oid
+   *   - ctrl/cmd-click → toggle oid in set, focus = oid (if added) or
+   *                      anchor stays put if removed; anchor = oid
+   *   - shift-click   → set ∪= range(anchor, oid); focus = oid; anchor unchanged
+   * Empty set means "nothing explicitly multi-selected"; in practice we
+   * always keep at least the focused oid in the set when there is one.
+   */
+  selectedOids: Set<string>;
+  /** v0.13.26 — anchor for shift-click range selection. Null until the
+   *  first click. Updated on plain-click and ctrl/cmd-click; stable on
+   *  shift-click (so multiple shift-clicks all extend from the same point). */
+  anchorOid: string | null;
   files: FileChange[];
   filesLoading: boolean;
   /**
@@ -138,6 +165,25 @@ interface DiffState {
    * (i.e. when viewing a working-tree file from the Changes view).
    */
   edit: WorkingEditState;
+  /**
+   * v0.13.25 — line-level staging selection. Each entry is the result
+   * of {@link import("@/lib/subsetPatch").selectionKey}, i.e.
+   * `"<hunkIdx>:<lineIdx>"`. Only meaningful when `oid === WORKING_OID`
+   * (HEAD diffs are read-only). Cleared whenever `selectedFile` changes
+   * or the diff is reloaded.
+   *
+   * Why a `Set<string>` instead of a `Set<{hunk, line}>`? React/Zustand
+   * compare set membership by reference, so primitive keys keep equality
+   * checks cheap and let us serialise to localStorage later if needed.
+   */
+  selectedLines: Set<string>;
+  /**
+   * v0.13.25 — anchor for shift-click range selection in the Unified
+   * view. Stored as the same `"hunkIdx:lineIdx"` selection key that
+   * `selectedLines` uses, so we don't need a separate flat-index lookup
+   * to decode it. `null` until the user makes a first click.
+   */
+  selectionAnchor: string | null;
 }
 
 /**
@@ -198,6 +244,14 @@ interface ChangesView {
   loading: boolean;
   committing: boolean;
   error: string | null;
+  /** v0.13.20 — `git commit --amend` mode: replace HEAD instead of chaining. */
+  amend: boolean;
+  /** v0.13.20 — append `Signed-off-by:` trailer (per-commit override; default
+   *  comes from the persisted UI setting). */
+  signoff: boolean;
+  /** v0.13.20 — bypass pre-commit / commit-msg / post-commit hooks
+   *  (`git commit --no-verify`). Off by default, opt-in per commit. */
+  skipHooks: boolean;
 }
 
 interface StashView {
@@ -207,6 +261,27 @@ interface StashView {
   error: string | null;
   /** Last successful action message, shown briefly. */
   status: string | null;
+  // ----- v0.13.24 inline preview -----
+  /**
+   * Stack index of the currently-selected stash entry, or `null` when no
+   * row is selected (= the right-hand preview pane shows an empty state).
+   * Cleared automatically after `loadStash` returns no matching entry.
+   */
+  selectedIndex: number | null;
+  /**
+   * File-level changes for the selected stash, computed via
+   * `commit_files(stashEntry.oid)` — works because libgit2 stores every
+   * stash as a real commit whose first parent is the working-tree state
+   * at stash time, so the existing parent-vs-tree diff machinery
+   * answers "what does this stash change?" with zero backend code.
+   */
+  files: FileChange[];
+  filesLoading: boolean;
+  /** Path of the file the user picked from `files`. `null` until they pick one. */
+  selectedFile: string | null;
+  /** FileDiff for `selectedFile` of the selected stash. */
+  fileDiff: FileDiff | null;
+  diffLoading: boolean;
 }
 
 interface ReflogView {
@@ -430,7 +505,30 @@ interface AppState {
   // history
   loadHistory: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
+  /** v0.13.21 — incremental "top-up" refresh: only fetch commits newer than
+   *  the current list head, prepend them, and refresh refs. Falls back to a
+   *  full `loadHistory` when the cursor is orphaned (force-push / reset) or
+   *  when a pathspec filter is active. */
+  topUpHistory: () => Promise<void>;
   selectCommit: (oid: string) => Promise<void>;
+  /**
+   * v0.13.26 — multi-selection click handler for the history list. The
+   * three modifier modes mirror IntelliJ's commit table:
+   *   - "single": replaces the set with `{oid}`; anchor = oid.
+   *   - "ctrl":   toggles `oid` in the set; anchor = oid.
+   *   - "shift":  unions the [anchor..oid] range into the set; anchor
+   *               unchanged. When there's no anchor (first click is
+   *               shift-click) we fall back to "single".
+   *
+   * Always also drives `selectCommit` for the focused oid so the
+   * CommitDetails panel and existing single-selection consumers (e.g.
+   * the visualisation graph's auto-scroll, RefsPane head highlight)
+   * stay in sync.
+   */
+  selectCommitMulti: (oid: string, mode: "single" | "ctrl" | "shift") => Promise<void>;
+  /** v0.13.26 — clear the multi-selection back to nothing. Useful when
+   *  the user presses Esc or clicks an empty area. */
+  clearCommitMultiSelect: () => void;
   setFilter: (q: string) => void;
   setAuthorFilter: (a: string | null) => void;
   setDateRange: (since: number | null, until: number | null) => void;
@@ -459,6 +557,24 @@ interface AppState {
   saveEditBuffer: () => Promise<void>;
   /** Discard buffer edits and restore the on-disk version. */
   resetEditBuffer: () => Promise<void>;
+
+  // ---- v0.13.25 line-level staging ----
+  /** Toggle a single +/− line into the selection. Resets the shift-click
+   *  anchor to this line. No-op for context lines (which can't be staged). */
+  toggleDiffLine: (hunkIdx: number, lineIdx: number) => void;
+  /** Extend the selection from the current anchor to (hunkIdx, lineIdx),
+   *  inclusive on both ends. Adds every +/− line in that range to the
+   *  selection; doesn't change the anchor. No-op when there's no anchor
+   *  yet (caller should fall back to `toggleDiffLine`). */
+  extendDiffLineRangeTo: (hunkIdx: number, lineIdx: number) => void;
+  /** Drop the selection (e.g. user pressed Esc / clicked outside the diff). */
+  clearDiffLineSelection: () => void;
+  /** Stage the selected +/− lines (sub-patch → apply to Index). */
+  stageSelectedLines: () => Promise<void>;
+  /** Unstage the selected +/− lines (reversed sub-patch → apply to Index). */
+  unstageSelectedLines: () => Promise<void>;
+  /** Discard the selected +/− lines from the working tree (reversed sub-patch → WorkDir). */
+  discardSelectedLines: () => Promise<void>;
 
   // merge
   loadMerge: () => Promise<void>;
@@ -492,6 +608,14 @@ interface AppState {
   unstageSelected: () => Promise<void>;
   discardSelected: () => Promise<void>;
   setCommitMessage: (m: string) => void;
+  /** v0.13.20 — toggle amend mode; pre-fills the message input with the
+   *  HEAD commit's existing message when turned on, and restores the
+   *  previously typed draft when turned off. */
+  setAmend: (on: boolean) => Promise<void>;
+  /** v0.13.20 — per-commit override of the persisted "Sign-off by default" setting. */
+  setSignoff: (on: boolean) => void;
+  /** v0.13.20 — `git commit --no-verify` toggle; opt-in per commit. */
+  setSkipHooks: (on: boolean) => void;
   commitWorking: () => Promise<void>;
 
   // stash
@@ -504,6 +628,11 @@ interface AppState {
   applyStash: (index: number) => Promise<void>;
   popStash: (index: number) => Promise<void>;
   dropStash: (index: number) => Promise<void>;
+  /** v0.13.24 — pick a stash entry to preview; loads its file list (and
+   *  auto-selects the first file). Pass `null` to clear the selection. */
+  selectStashEntry: (index: number | null) => Promise<void>;
+  /** v0.13.24 — pick a file in the currently-selected stash to load its diff. */
+  selectStashFile: (file: string) => Promise<void>;
 
   // ref ops (branch / tag)
   createBranch: (name: string, startPoint: string, checkout?: boolean) => Promise<void>;
@@ -522,6 +651,15 @@ interface AppState {
 
   // commit ops
   cherryPick: (oid: string) => Promise<void>;
+  /**
+   * v0.13.26 — batch cherry-pick. Caller passes oids in *any* order;
+   * the action sorts them oldest-first using the current history list
+   * (commits is newest-first, so it's just a filter+reverse). Confirms,
+   * runs `cherry_pick_sequence`, and on a `Stopped` outcome routes to
+   * the merge view + remembers the pending tail in `s.history.error`
+   * (read by the toolbar) so the user can finish manually after
+   * resolving the conflict. */
+  cherryPickMany: (oids: string[]) => Promise<void>;
   revertCommit: (oid: string) => Promise<void>;
   resetTo: (oid: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
 
@@ -615,6 +753,9 @@ const emptyHistory: HistoryState = {
   commits: [],
   refs: [],
   selectedOid: null,
+  // v0.13.26 — multi-selection.
+  selectedOids: new Set<string>(),
+  anchorOid: null,
   files: [],
   filesLoading: false,
   meta: null,
@@ -655,6 +796,8 @@ const emptyDiff: DiffState = {
   ignoreWhitespace: false,
   error: null,
   edit: { ...emptyEdit },
+  selectedLines: new Set<string>(),
+  selectionAnchor: null,
 };
 
 const emptyMerge: MergeView = {
@@ -685,6 +828,9 @@ const emptyChanges: ChangesView = {
   loading: false,
   committing: false,
   error: null,
+  amend: false,
+  signoff: false,
+  skipHooks: false,
 };
 
 const emptyStash: StashView = {
@@ -693,6 +839,13 @@ const emptyStash: StashView = {
   busy: false,
   error: null,
   status: null,
+  // v0.13.24 — inline preview state.
+  selectedIndex: null,
+  files: [],
+  filesLoading: false,
+  selectedFile: null,
+  fileDiff: null,
+  diffLoading: false,
 };
 
 const emptyReflog: ReflogView = {
@@ -1296,7 +1449,11 @@ export const useApp = create<AppState>((set, get) => ({
     const { view, repo, diff } = get();
     if (!repo) return;
     if (view === "history") {
-      await get().loadHistory();
+      // v0.13.21 — prefer the incremental top-up walk so a refresh doesn't
+      // discard the user's scroll position / virtualizer cache for the
+      // common "I just made a commit" case. Falls back to a full reload
+      // when the cursor is orphaned or a pathspec filter is active.
+      await get().topUpHistory();
     } else if (view === "diff") {
       if (diff.oid && diff.selectedFile) {
         await get().openDiff(diff.oid, diff.selectedFile);
@@ -1423,6 +1580,74 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  /**
+   * v0.13.21 — incremental refresh. When the user clicks the Topbar Refresh
+   * button while the History view is already populated, we don't want to
+   * blow the in-memory commit list away and pay the cost of a full `logPage`
+   * reload. Instead we ask the backend for *only* the commits added since
+   * the head of our current list and prepend them, while still refreshing
+   * the refs map in parallel (cheap).
+   *
+   * Falls back to a full `loadHistory` when:
+   *   - the list was empty to begin with (nothing to top up against),
+   *   - the user has an active pathspec filter (top-up walk is unfiltered),
+   *   - the current head oid is no longer reachable (force-push / reset
+   *     rewrote history; backend signals this with `null`).
+   */
+  topUpHistory: async () => {
+    const repo = get().repo;
+    if (!repo) return;
+    const h = get().history;
+    // Anything that would make the top-up math unreliable → just full reload.
+    if (h.loading || h.loadingMore) return;
+    if (h.commits.length === 0) {
+      await get().loadHistory();
+      return;
+    }
+    if (h.pathspec.trim() !== "") {
+      // The pathspec filter is applied on the backend per-page, so a top-up
+      // walk would need to re-do the same filter. Easier + correct: full
+      // reload. Path-filtered views are rare relative to the default view.
+      await get().loadHistory();
+      return;
+    }
+    const currentHead = h.commits[0]?.oid;
+    if (!currentHead) {
+      await get().loadHistory();
+      return;
+    }
+    set((s) => ({ history: { ...s.history, loading: true, error: null } }));
+    try {
+      const [added, refs] = await Promise.all([
+        git.logSince(repo.path, currentHead),
+        git.listRefs(repo.path),
+      ]);
+      if (added === null) {
+        // Backend told us the cursor is orphaned — fall back. Don't clear
+        // refs we already fetched; loadHistory will refetch anyway.
+        set((s) => ({ history: { ...s.history, loading: false } }));
+        await get().loadHistory();
+        return;
+      }
+      // Defensively de-dup by oid in case a parallel `loadMoreHistory`
+      // raced us. `added` is newest-first, then existing list.
+      set((s) => {
+        const seen = new Set(s.history.commits.map((c) => c.oid));
+        const fresh = added.filter((c) => !seen.has(c.oid));
+        return {
+          history: {
+            ...s.history,
+            commits: fresh.length > 0 ? [...fresh, ...s.history.commits] : s.history.commits,
+            refs,
+            loading: false,
+          },
+        };
+      });
+    } catch (e) {
+      set((s) => ({ history: { ...s.history, loading: false, error: String(e) } }));
+    }
+  },
+
   selectCommit: async (oid: string) => {
     const repo = get().repo;
     if (!repo) return;
@@ -1430,6 +1655,11 @@ export const useApp = create<AppState>((set, get) => ({
       history: {
         ...s.history,
         selectedOid: oid,
+        // v0.13.26 — single-select implies the multi-selection collapses
+        // to just this oid. Anchor moves to the new focus so a follow-up
+        // shift-click extends from here.
+        selectedOids: new Set([oid]),
+        anchorOid: oid,
         filesLoading: true,
         files: [],
         // Reset the meta payload so the side panel shows "loading…" rather
@@ -1473,6 +1703,86 @@ export const useApp = create<AppState>((set, get) => ({
       }
     })();
   },
+
+  selectCommitMulti: async (oid, mode) => {
+    // Three-way decision tree — see the type-doc on `selectCommitMulti`.
+    // We compute the new {set, anchor} synchronously, then defer the
+    // CommitDetails refresh to `selectCommit` (or its inline equivalent
+    // when the focus stays on the same oid).
+    const cur = get().history;
+    let nextSet: Set<string>;
+    let nextAnchor: string | null;
+    if (mode === "shift" && cur.anchorOid !== null) {
+      // Range from anchor to oid, inclusive on both ends. Use the
+      // *filtered* history view's order is overkill here — work directly
+      // on `commits` (filter agnosticism is a non-goal: shift-click only
+      // makes sense between two visible rows, and in practice the user
+      // is only shift-clicking inside what they can see). The list is
+      // newest-first; we walk it once and gather any oid whose index
+      // falls between the two endpoints.
+      const fromIdx = cur.commits.findIndex((c) => c.oid === cur.anchorOid);
+      const toIdx = cur.commits.findIndex((c) => c.oid === oid);
+      if (fromIdx < 0 || toIdx < 0) {
+        // Anchor or target is off-list (e.g. anchor scrolled out of the
+        // pagination window). Fall back to plain single-select.
+        nextSet = new Set([oid]);
+        nextAnchor = oid;
+      } else {
+        const lo = Math.min(fromIdx, toIdx);
+        const hi = Math.max(fromIdx, toIdx);
+        nextSet = new Set(cur.selectedOids);
+        for (let i = lo; i <= hi; i++) {
+          const c = cur.commits[i];
+          if (c) nextSet.add(c.oid);
+        }
+        nextAnchor = cur.anchorOid; // shift doesn't move the anchor
+      }
+    } else if (mode === "ctrl") {
+      nextSet = new Set(cur.selectedOids);
+      if (nextSet.has(oid)) nextSet.delete(oid);
+      else nextSet.add(oid);
+      // Make sure the focused oid stays selected — if the user just
+      // toggled the focused oid off, fall back to whatever's still in
+      // the set as the new focus, else the just-clicked oid.
+      nextAnchor = oid;
+    } else {
+      // "single" — or "shift" with no anchor.
+      nextSet = new Set([oid]);
+      nextAnchor = oid;
+    }
+    // Always update the multi-selection synchronously so the UI repaints
+    // even if the focus oid didn't change.
+    set((s) => ({
+      history: {
+        ...s.history,
+        selectedOids: nextSet,
+        anchorOid: nextAnchor,
+      },
+    }));
+    // Drive the CommitDetails refresh through the existing single-select
+    // path. Note: `selectCommit` itself also resets selectedOids to
+    // {oid} — that's wrong for ctrl/shift, so we re-apply our nextSet
+    // *after* selectCommit completes. We accept the tiny flicker here
+    // because the alternative is duplicating the entire CommitDetails
+    // load logic.
+    await get().selectCommit(oid);
+    set((s) => ({
+      history: {
+        ...s.history,
+        selectedOids: nextSet,
+        anchorOid: nextAnchor,
+      },
+    }));
+  },
+
+  clearCommitMultiSelect: () =>
+    set((s) => ({
+      history: {
+        ...s.history,
+        selectedOids: s.history.selectedOid ? new Set([s.history.selectedOid]) : new Set<string>(),
+        anchorOid: s.history.selectedOid,
+      },
+    })),
 
   setFilter: (q) => set((s) => ({ history: { ...s.history, filter: q } })),
   setAuthorFilter: (a) => set((s) => ({ history: { ...s.history, authorFilter: a } })),
@@ -1599,6 +1909,10 @@ export const useApp = create<AppState>((set, get) => ({
         fileDiff: null,
         loading: true,
         error: null,
+        // v0.13.25 — switching files / commits invalidates the line
+        // selection from the previous diff.
+        selectedLines: new Set<string>(),
+        selectionAnchor: null,
       },
     }));
     try {
@@ -1657,6 +1971,9 @@ export const useApp = create<AppState>((set, get) => ({
         loading: true,
         error: null,
         edit: { ...emptyEdit },
+        // v0.13.25 — switching files invalidates the line selection.
+        selectedLines: new Set<string>(),
+        selectionAnchor: null,
       },
     }));
     try {
@@ -1804,6 +2121,181 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({
         diff: { ...s.diff, edit: { ...s.diff.edit, busy: false, error: String(e) } },
       }));
+    }
+  },
+
+  // ---------- Line-level staging (v0.13.25) ----------
+  //
+  // The picker UI lives in the Unified diff view; these actions mutate
+  // `diff.selectedLines` (a `Set<"hunkIdx:lineIdx">`) and feed it into
+  // `buildSubsetPatch` to synthesise the smallest valid patch carrying
+  // exactly those edits.
+  //
+  // Three apply paths share the same patch-building front half:
+  //   - stageSelectedLines    → forward patch  → Index
+  //   - unstageSelectedLines  → reversed patch → Index
+  //   - discardSelectedLines  → reversed patch → WorkDir
+  //
+  // We dry-run with `apply_patch_check` first so a malformed sub-patch
+  // (e.g. user picked a `-` from a hunk we already invalidated) surfaces
+  // as a structured error before clobbering anything.
+
+  toggleDiffLine: (hunkIdx, lineIdx) => {
+    const k = selectionKey(hunkIdx, lineIdx);
+    set((s) => {
+      // No-op for context lines: the +/- check is the caller's
+      // responsibility (UI doesn't fire onClick on " " rows), but
+      // we belt-and-brace it here too.
+      const fd = s.diff.fileDiff;
+      const ln = fd?.hunks[hunkIdx]?.lines[lineIdx];
+      if (!ln || ln.origin === " ") return s;
+      const next = new Set(s.diff.selectedLines);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return { diff: { ...s.diff, selectedLines: next, selectionAnchor: k } };
+    });
+  },
+
+  extendDiffLineRangeTo: (hunkIdx, lineIdx) => {
+    const cur = get().diff;
+    if (!cur.fileDiff || cur.selectionAnchor === null) return;
+    // Decode the anchor key.
+    const [aHi, aLi] = cur.selectionAnchor.split(":").map((n) => parseInt(n, 10));
+    if (aHi === undefined || aLi === undefined || Number.isNaN(aHi) || Number.isNaN(aLi)) return;
+    // Walk the hunks newest-first and collect all (hunkIdx, lineIdx)
+    // pairs of +/- lines whose flat index falls inside [from, to]. We
+    // compute the flat index by counting every line (any origin) in
+    // hunks order; this matches the visual order of the Unified view.
+    const flat: { hunk: number; line: number; origin: " " | "+" | "-" }[] = [];
+    for (let hi = 0; hi < cur.fileDiff.hunks.length; hi++) {
+      const h = cur.fileDiff.hunks[hi]!;
+      for (let li = 0; li < h.lines.length; li++) {
+        flat.push({ hunk: hi, line: li, origin: h.lines[li]!.origin });
+      }
+    }
+    const idxOf = (hi: number, li: number) => flat.findIndex((e) => e.hunk === hi && e.line === li);
+    const fromFlat = idxOf(aHi, aLi);
+    const toFlat = idxOf(hunkIdx, lineIdx);
+    if (fromFlat < 0 || toFlat < 0) return;
+    const lo = Math.min(fromFlat, toFlat);
+    const hi = Math.max(fromFlat, toFlat);
+    const next = new Set(cur.selectedLines);
+    for (let f = lo; f <= hi; f++) {
+      const e = flat[f]!;
+      if (e.origin === "+" || e.origin === "-") {
+        next.add(selectionKey(e.hunk, e.line));
+      }
+    }
+    set((s) => ({ diff: { ...s.diff, selectedLines: next } }));
+  },
+
+  clearDiffLineSelection: () =>
+    set((s) => ({
+      diff: { ...s.diff, selectedLines: new Set<string>(), selectionAnchor: null },
+    })),
+
+  stageSelectedLines: async () => {
+    const repo = get().repo;
+    const { diff } = get();
+    if (!repo || diff.oid !== WORKING_OID || !diff.fileDiff) return;
+    if (diff.selectedLines.size === 0) return;
+    const patch = buildSubsetPatch(diff.fileDiff, diff.selectedLines);
+    if (!patch) return;
+    try {
+      await git.applyPatchCheck(repo.path, patch, { location: "index" });
+      await git.applyPatch(repo.path, patch, { location: "index" });
+      // Refresh the diff so staged lines disappear from the unstaged view
+      // (working_diff is HEAD→workdir, so freshly-staged lines now show
+      // up as both "in index" and "in workdir" but the workdir delta
+      // against HEAD is unchanged — we still want to clear the
+      // selection though, the user is done with these lines).
+      const fd = await git.workingDiff(repo.path, diff.selectedFile!, get().diff.ignoreWhitespace);
+      set((s) => ({
+        diff: {
+          ...s.diff,
+          fileDiff: fd,
+          selectedLines: new Set<string>(),
+          selectionAnchor: null,
+        },
+      }));
+      void get().loadChanges();
+      toast.success("Staged selected lines.");
+    } catch (e) {
+      toast.error(`Stage selected lines failed: ${String(e)}`);
+    }
+  },
+
+  unstageSelectedLines: async () => {
+    const repo = get().repo;
+    const { diff } = get();
+    if (!repo || diff.oid !== WORKING_OID || !diff.fileDiff) return;
+    if (diff.selectedLines.size === 0) return;
+    const fwd = buildSubsetPatch(diff.fileDiff, diff.selectedLines);
+    if (!fwd) return;
+    const rev = reversePatch(fwd);
+    try {
+      await git.applyPatchCheck(repo.path, rev, { location: "index" });
+      await git.applyPatch(repo.path, rev, { location: "index" });
+      const fd = await git.workingDiff(repo.path, diff.selectedFile!, get().diff.ignoreWhitespace);
+      set((s) => ({
+        diff: {
+          ...s.diff,
+          fileDiff: fd,
+          selectedLines: new Set<string>(),
+          selectionAnchor: null,
+        },
+      }));
+      void get().loadChanges();
+      toast.success("Unstaged selected lines.");
+    } catch (e) {
+      toast.error(`Unstage selected lines failed: ${String(e)}`);
+    }
+  },
+
+  discardSelectedLines: async () => {
+    const repo = get().repo;
+    const { diff } = get();
+    if (!repo || diff.oid !== WORKING_OID || !diff.fileDiff) return;
+    if (diff.selectedLines.size === 0) return;
+    // v0.13.22 policy — destructive op must confirm.
+    const ok = await get().confirm({
+      level: "danger",
+      title: `Discard ${diff.selectedLines.size} line${diff.selectedLines.size === 1 ? "" : "s"}?`,
+      message:
+        "Reverts the selected +/− lines in the working tree. The index isn't touched. This cannot be undone.",
+      detail: diff.selectedFile ?? "",
+      confirmLabel: "Discard lines",
+    });
+    if (!ok) return;
+    const fwd = buildSubsetPatch(diff.fileDiff, diff.selectedLines);
+    if (!fwd) return;
+    const rev = reversePatch(fwd);
+    try {
+      await git.applyPatchCheck(repo.path, rev, { location: "work_dir" });
+      await git.applyPatch(repo.path, rev, { location: "work_dir" });
+      // Re-read the working file to refresh the editor buffer (if open)
+      // and then refresh the diff itself.
+      const [fd, working] = await Promise.all([
+        git.workingDiff(repo.path, diff.selectedFile!, get().diff.ignoreWhitespace),
+        git.readWorkingFile(repo.path, diff.selectedFile!),
+      ]);
+      set((s) => ({
+        diff: {
+          ...s.diff,
+          fileDiff: fd,
+          selectedLines: new Set<string>(),
+          selectionAnchor: null,
+          edit: {
+            ...s.diff.edit,
+            buffer: working.missing ? "" : working.content,
+            savedText: working.missing ? "" : working.content,
+          },
+        },
+      }));
+      void get().loadChanges();
+      toast.success("Discarded selected lines.");
+    } catch (e) {
+      toast.error(`Discard selected lines failed: ${String(e)}`);
     }
   },
 
@@ -2185,6 +2677,49 @@ export const useApp = create<AppState>((set, get) => ({
 
   setCommitMessage: (m) => set((s) => ({ changes: { ...s.changes, message: m } })),
 
+  // ---- v0.13.20 amend / signoff / skip-hooks toggles ----
+  //
+  // Amend toggle is async because turning it ON pre-fills the message
+  // editor with HEAD's commit message (matching `git commit --amend`'s
+  // editor behaviour). Turning it OFF restores whatever the user was
+  // typing before — we stash that in `_draftBeforeAmend` so a misclick
+  // doesn't lose work.
+  setAmend: async (on) => {
+    const repo = get().repo;
+    const { changes } = get();
+    if (changes.amend === on) return;
+    if (on) {
+      // Snapshot the current draft into a local closure cell, prefill with
+      // HEAD's message. We keep the snapshot on the store object via a
+      // module-scoped Map keyed by repo path so multiple tabs don't cross-
+      // contaminate.
+      if (changes.message) draftBeforeAmend.set(repo?.path ?? "", changes.message);
+      let prefill = changes.message;
+      if (repo) {
+        try {
+          // Use the already-loaded HEAD commit summary if the user has
+          // history selected; fall back to a fresh meta lookup otherwise.
+          const head = get().history.commits[0];
+          if (head) {
+            const meta = await git.commitMeta(repo.path, head.oid);
+            prefill = (meta.message || head.summary).trimEnd();
+          }
+        } catch {
+          /* leave prefill = current draft */
+        }
+      }
+      set((s) => ({ changes: { ...s.changes, amend: true, message: prefill } }));
+    } else {
+      const restored = draftBeforeAmend.get(repo?.path ?? "") ?? "";
+      draftBeforeAmend.delete(repo?.path ?? "");
+      set((s) => ({ changes: { ...s.changes, amend: false, message: restored } }));
+    }
+  },
+
+  setSignoff: (on) => set((s) => ({ changes: { ...s.changes, signoff: on } })),
+
+  setSkipHooks: (on) => set((s) => ({ changes: { ...s.changes, skipHooks: on } })),
+
   commitWorking: async () => {
     const repo = get().repo;
     const { changes } = get();
@@ -2195,13 +2730,25 @@ export const useApp = create<AppState>((set, get) => ({
     }
     set((s) => ({ changes: { ...s.changes, committing: true, error: null } }));
     try {
-      await git.commitChanges(repo.path, changes.message);
+      const outcome = await git.commitChanges(repo.path, changes.message, {
+        amend: changes.amend,
+        signoff: changes.signoff,
+        run_hooks: !changes.skipHooks,
+      });
+      // Surface a small toast when the post-commit hook ran, so users
+      // wiring up notification scripts get feedback.
+      if (outcome.post_commit_ran) {
+        toast.info("post-commit hook ran");
+      }
+      // Clear amend draft snapshot after a successful commit.
+      draftBeforeAmend.delete(repo.path);
       set((s) => ({
         changes: {
           ...s.changes,
           message: "",
           selected: new Set(),
           committing: false,
+          amend: false,
         },
       }));
       void get().loadChanges();
@@ -2220,7 +2767,33 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ stash: { ...s.stash, loading: true, error: null } }));
     try {
       const entries = await git.stashList(repo.path);
-      set((s) => ({ stash: { ...s.stash, entries, loading: false } }));
+      // v0.13.24 — keep the inline preview consistent with the new list:
+      //   - if the previously-selected index is still in range AND points
+      //     at the same oid, keep it (the file list & diff are still valid);
+      //   - otherwise clear the preview state so we don't show stale files
+      //     against a different stash.
+      const prev = get().stash;
+      const stillValid =
+        prev.selectedIndex !== null &&
+        prev.selectedIndex < entries.length &&
+        entries[prev.selectedIndex]?.oid === prev.entries[prev.selectedIndex]?.oid;
+      set((s) => ({
+        stash: {
+          ...s.stash,
+          entries,
+          loading: false,
+          ...(stillValid
+            ? {}
+            : {
+                selectedIndex: null,
+                files: [],
+                filesLoading: false,
+                selectedFile: null,
+                fileDiff: null,
+                diffLoading: false,
+              }),
+        },
+      }));
     } catch (e) {
       set((s) => ({ stash: { ...s.stash, loading: false, error: String(e) } }));
     }
@@ -2243,6 +2816,18 @@ export const useApp = create<AppState>((set, get) => ({
   applyStash: async (index) => {
     const repo = get().repo;
     if (!repo) return;
+    // v0.13.22 — apply is destructive (working-tree merge with possible
+    // conflicts) so it must never happen on a single click. Same dialog
+    // shape as the rest of the unified ConfirmDialog usage.
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Apply stash@{${index}}?`,
+      message:
+        "Re-applies the stashed changes onto the working tree. Existing edits stay; conflicts will route you to the Merge view.",
+      detail: `git stash apply stash@{${index}}`,
+      confirmLabel: "Apply",
+    });
+    if (!ok) return;
     set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
     try {
       await git.stashApply(repo.path, index);
@@ -2256,6 +2841,18 @@ export const useApp = create<AppState>((set, get) => ({
   popStash: async (index) => {
     const repo = get().repo;
     if (!repo) return;
+    // v0.13.22 — pop both *applies* (destructive: conflicts possible) AND
+    // *removes* the stash entry. The combined nature is what makes a "did
+    // you mean apply?" mistake painful; force a confirmation.
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Pop stash@{${index}}?`,
+      message:
+        "Applies the stashed changes onto the working tree AND removes the stash entry. If apply produces conflicts the entry is kept; otherwise it's gone.",
+      detail: `git stash pop stash@{${index}}`,
+      confirmLabel: "Pop",
+    });
+    if (!ok) return;
     set((s) => ({ stash: { ...s.stash, busy: true, error: null, status: null } }));
     try {
       await git.stashPop(repo.path, index);
@@ -2284,6 +2881,106 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadStash();
     } catch (e) {
       set((s) => ({ stash: { ...s.stash, busy: false, error: String(e) } }));
+    }
+  },
+
+  // v0.13.24 — inline stash preview. Each stash is stored by libgit2 as a
+  // real commit whose first parent captures the working-tree state at
+  // stash time, so `commit_files(stashOid)` and `file_diff(stashOid, …)`
+  // already do the right thing without any new backend code: the existing
+  // parent-vs-tree machinery answers "what does this stash change?" and
+  // "what does it change in this one file?" for free.
+  selectStashEntry: async (index) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (index === null) {
+      set((s) => ({
+        stash: {
+          ...s.stash,
+          selectedIndex: null,
+          files: [],
+          filesLoading: false,
+          selectedFile: null,
+          fileDiff: null,
+          diffLoading: false,
+        },
+      }));
+      return;
+    }
+    const entry = get().stash.entries[index];
+    if (!entry) return;
+    set((s) => ({
+      stash: {
+        ...s.stash,
+        selectedIndex: index,
+        files: [],
+        filesLoading: true,
+        selectedFile: null,
+        fileDiff: null,
+        diffLoading: false,
+        error: null,
+      },
+    }));
+    try {
+      const files = await git.commitFiles(repo.path, entry.oid);
+      // Race-check: only commit results if the user hasn't moved on. We
+      // identify the request by the stash *oid* rather than its index,
+      // because a concurrent loadStash could have shifted indices around
+      // (e.g. the user dropped a different entry).
+      const cur = get().stash;
+      const stillThis =
+        cur.selectedIndex !== null && cur.entries[cur.selectedIndex]?.oid === entry.oid;
+      if (!stillThis) return;
+      const first = files[0]?.path ?? null;
+      set((s) => ({
+        stash: {
+          ...s.stash,
+          files,
+          filesLoading: false,
+          selectedFile: first,
+          fileDiff: null,
+          diffLoading: first !== null,
+        },
+      }));
+      if (first) void get().selectStashFile(first);
+    } catch (e) {
+      set((s) => ({
+        stash: { ...s.stash, filesLoading: false, error: String(e) },
+      }));
+    }
+  },
+
+  selectStashFile: async (file) => {
+    const repo = get().repo;
+    const cur = get().stash;
+    if (!repo || cur.selectedIndex === null) return;
+    const entry = cur.entries[cur.selectedIndex];
+    if (!entry) return;
+    set((s) => ({
+      stash: {
+        ...s.stash,
+        selectedFile: file,
+        fileDiff: null,
+        diffLoading: true,
+      },
+    }));
+    try {
+      // `false` = don't ignore whitespace; the StashPage doesn't expose a
+      // toggle for it (the global Diff view's toggle lives on a separate
+      // state slice), and "show every change as-is" is the safer default
+      // for the preview-before-apply use case anyway.
+      const fd = await git.fileDiff(repo.path, entry.oid, file, false);
+      const after = get().stash;
+      const sameStash =
+        after.selectedIndex !== null && after.entries[after.selectedIndex]?.oid === entry.oid;
+      if (!sameStash || after.selectedFile !== file) return;
+      set((s) => ({
+        stash: { ...s.stash, fileDiff: fd, diffLoading: false },
+      }));
+    } catch (e) {
+      set((s) => ({
+        stash: { ...s.stash, diffLoading: false, error: String(e) },
+      }));
     }
   },
 
@@ -2502,6 +3199,74 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  cherryPickMany: async (oids) => {
+    const repo = get().repo;
+    if (!repo) return;
+    if (oids.length === 0) return;
+    if (oids.length === 1) {
+      // Defer to the single-shot path (which already has its own
+      // confirm + error handling).
+      await get().cherryPick(oids[0]!);
+      return;
+    }
+    // Sort the user's selection by topo position (oldest first), since
+    // git is happiest applying parents before children. The history
+    // list is newest-first; filter+reverse gives us the right order.
+    const cur = get().history.commits;
+    const indexByOid = new Map<string, number>();
+    cur.forEach((c, i) => indexByOid.set(c.oid, i));
+    const ordered = oids
+      .filter((o) => indexByOid.has(o))
+      .sort((a, b) => indexByOid.get(b)! - indexByOid.get(a)!) // newest-first → push oldest to the front
+      .map((o) => o); // identity, just for readability
+    if (ordered.length === 0) {
+      // None of the selected oids are in the loaded history window.
+      // Punt rather than guess the order.
+      set({ error: "Cannot cherry-pick: selected commits are not in the loaded history." });
+      return;
+    }
+
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Cherry-pick ${ordered.length} commits onto HEAD?`,
+      message: `Each commit will be replayed in turn (oldest first). The first conflict pauses the sequence and routes you to the Merge view; remaining commits stay queued.`,
+      detail:
+        ordered
+          .slice(0, 8)
+          .map((o) => `  ${o.slice(0, 7)}`)
+          .join("\n") + (ordered.length > 8 ? `\n  … and ${ordered.length - 8} more` : ""),
+      confirmLabel: `Cherry-pick ${ordered.length}`,
+    });
+    if (!ok) return;
+
+    try {
+      const outcome = await git.cherryPickSequence(repo.path, ordered);
+      void get().loadHistory();
+      void get().loadChanges();
+      if (outcome.kind === "stopped") {
+        // Stop on first conflict — switch to merge view, surface a
+        // structured message saying which oid stuck and how many are
+        // still pending. We deliberately do NOT auto-resume after the
+        // user resolves: the next `cherryPick` / `cherryPickMany` is
+        // their explicit choice (matches IntelliJ's behaviour).
+        set({ view: "merge" });
+        void get().loadMerge();
+        const remaining = outcome.pending.length;
+        set((s) => ({
+          history: {
+            ...s.history,
+            error: `Cherry-pick stopped at ${outcome.failed_oid.slice(0, 7)} (${outcome.applied} applied, ${remaining} pending). Resolve in the Merge view, then continue manually.`,
+          },
+        }));
+      } else {
+        // Done: clear any stale error banner from a previous attempt.
+        set((s) => ({ history: { ...s.history, error: null } }));
+      }
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
   revertCommit: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
@@ -2579,6 +3344,18 @@ export const useApp = create<AppState>((set, get) => ({
   initSubmodule: async (name) => {
     const repo = get().repo;
     if (!repo) return;
+    // v0.13.22 — uniform "any write op confirms" policy. Init only writes
+    // .git/config so the blast radius is small, but a single click should
+    // still never silently mutate the user's repo.
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Initialize submodule '${name}'?`,
+      message:
+        "Copies the URL from .gitmodules into .git/config so this submodule is registered locally. Doesn't fetch or check out anything yet — use Update for that.",
+      detail: `git submodule init -- ${name}`,
+      confirmLabel: "Init",
+    });
+    if (!ok) return;
     set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
     try {
       await git.submoduleInit(repo.path, name);
@@ -2636,6 +3413,16 @@ export const useApp = create<AppState>((set, get) => ({
   syncSubmodule: async (name) => {
     const repo = get().repo;
     if (!repo) return;
+    // v0.13.22 — same policy: any write op confirms.
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Sync submodule URL for '${name}'?`,
+      message:
+        "Copies the current URL from .gitmodules into .git/config. Useful when the upstream repository moved and you've already updated .gitmodules.",
+      detail: `git submodule sync -- ${name}`,
+      confirmLabel: "Sync",
+    });
+    if (!ok) return;
     set((s) => ({ submodules: { ...s.submodules, busy: true, status: null, error: null } }));
     try {
       await git.submoduleSync(repo.path, name);
@@ -2703,6 +3490,17 @@ export const useApp = create<AppState>((set, get) => ({
   pruneWorktrees: async () => {
     const repo = get().repo;
     if (!repo) return;
+    // v0.13.22 — prune is destructive: removes the .git/worktrees/<name>
+    // metadata for every worktree libgit2 considers stale. Always confirm.
+    const ok = await get().confirm({
+      level: "warning",
+      title: "Prune stale worktrees?",
+      message:
+        "Removes .git/worktrees/<name> metadata for every linked worktree whose working directory is gone. The actual files are not touched (they're already gone); this just cleans up the bookkeeping.",
+      detail: "git worktree prune",
+      confirmLabel: "Prune",
+    });
+    if (!ok) return;
     set((s) => ({ worktrees: { ...s.worktrees, busy: true, status: null, error: null } }));
     try {
       const pruned = await git.worktreePrune(repo.path);
@@ -2990,6 +3788,20 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     const { rebase } = get();
     if (!repo || !rebase.baseOid || rebase.plan.length === 0) return;
+    // v0.13.22 — rebase rewrites history. The plan is already on screen
+    // (the user reordered / picked actions explicitly), but the actual
+    // commit-rewriting still needs a final go/no-go acknowledgement.
+    const stepCount = rebase.plan.filter((p) => p.action !== "drop").length;
+    const dropCount = rebase.plan.length - stepCount;
+    const ok = await get().confirm({
+      level: "warning",
+      title: `Start rebase: ${rebase.plan.length} step${rebase.plan.length === 1 ? "" : "s"}?`,
+      message:
+        "Replays the plan above on top of the base commit. Conflicts will pause execution and route you to the Merge view; you can Continue or Abort from there.",
+      detail: `${stepCount} pick/reword/squash/fixup, ${dropCount} drop, base = ${rebase.baseOid.slice(0, 7)}`,
+      confirmLabel: "Start rebase",
+    });
+    if (!ok) return;
     set((s) => ({ rebase: { ...s.rebase, busy: true, error: null, status: null } }));
     try {
       const status = await git.rebaseStart(repo.path, rebase.baseOid, rebase.plan);

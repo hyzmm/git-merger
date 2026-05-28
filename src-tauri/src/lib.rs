@@ -63,6 +63,7 @@ pub fn run() {
             commands::create_tag,
             commands::delete_tag,
             commands::cherry_pick,
+            commands::cherry_pick_sequence,
             commands::revert_commit,
             commands::reset_to,
             commands::reflog_list,
@@ -88,9 +89,12 @@ pub fn run() {
             commands::gitignore_preview,
             commands::gitignore_templates,
             commands::git_log_page,
+            commands::git_log_since,
             commands::commit_meta,
             commands::commit_ancestors,
             commands::commit_descendants,
+            commands::commit_signature_status,
+            commands::verify_commit_signature,
             commands::search_commits,
         ])
         .run(tauri::generate_context!())
