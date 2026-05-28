@@ -411,7 +411,7 @@ function RenderResult({
               onFocus={() => onFocus(c.index)}
               spellCheck={false}
               className={cn(
-                "block w-full resize-none border-0 bg-transparent px-2 py-1 font-mono text-[12px] leading-[18px] outline-none",
+                "block w-full resize-none border-0 bg-transparent px-2 py-1 font-mono text-[12px] leading-4.5 outline-none",
                 c.resolution === "pending" && "bg-[hsl(0_72%_51%/.10)]",
                 c.resolution === "left" && "bg-[hsl(199_89%_60%/.14)]",
                 c.resolution === "right" && "bg-[hsl(280_70%_70%/.14)]",
