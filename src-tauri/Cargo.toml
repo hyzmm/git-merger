@@ -1,6 +1,6 @@
 [package]
 name = "git-tools"
-version = "0.13.5"
+version = "0.13.33"
 description = "IDEA-style Git tools (History / Diff / Merge)"
 authors = ["you"]
 edition = "2021"
@@ -28,8 +28,9 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 regex = "1"
 base64 = "0.22"
-
-[dev-dependencies]
+# Promoted from dev-dep in v0.13.20: signing::verify_commit + hooks::run_commit_msg
+# both need a one-shot temp file at runtime (sig file for gpg, message buffer
+# for the hook). Keep the same `3` major to avoid an unnecessary lockfile churn.
 tempfile = "3"
 
 [profile.release]

@@ -1,7 +1,7 @@
 {
   "name": "git-tools",
   "private": true,
-  "version": "0.13.5",
+  "version": "0.13.33",
   "type": "module",
   "description": "IDEA-style Git tools (History / Diff / Merge) built on Tauri 2 + React 19",
   "scripts": {
