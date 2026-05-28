@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  ChevronDown,
   Cloud,
   GitBranch,
   RefreshCw,
@@ -21,6 +22,19 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
 
 type RemoteOp = "fetch" | "pull" | "push";
+
+/**
+ * v0.13.21 — push variants surfaced via the push button's dropdown.
+ *
+ * - "plain":  plain non-forced push (default).
+ * - "lease":  `force-with-lease` — backend probes the remote tip first; if
+ *             it matches what we last saw, it promotes to a forced refspec,
+ *             otherwise it returns a `StaleLease` error and we route the
+ *             user to "Fetch + retry".
+ * - "force":  unconditional `git push --force`. Gated behind a confirmation
+ *             dialog and an explicit dropdown choice — there is no shortcut.
+ */
+type PushVariant = "plain" | "lease" | "force";
 
 /**
  * Structured progress snapshot for an in-flight fetch / pull / push.
@@ -53,9 +67,11 @@ export function Topbar() {
   const refresh = useApp((s) => s.refresh);
   const loadHistory = useApp((s) => s.loadHistory);
   const loadChanges = useApp((s) => s.loadChanges);
+  const refs = useApp((s) => s.history.refs);
   const loading = useApp((s) => s.loading);
   const error = useApp((s) => s.error);
   const openPalette = useApp((s) => s.openPalette);
+  const confirm = useApp((s) => s.confirm);
   const t = useT();
 
   const [running, setRunning] = useState<RemoteOp | null>(null);
@@ -64,10 +80,16 @@ export function Topbar() {
     ok: boolean;
     message: string;
     details: string[];
+    /** v0.13.21 — when set, the banner shows a "Fetch + retry" button. */
+    staleLease?: {
+      variant: PushVariant;
+    };
   } | null>(null);
   const [progress, setProgress] = useState<OpProgress | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pushMenuOpen, setPushMenuOpen] = useState(false);
+  const pushMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Subscribe to backend progress events. We always update our local
   // snapshot when the event's op_id matches the current one (or when a
@@ -184,17 +206,82 @@ export function Topbar() {
     }
   }
 
-  async function runRemote(op: RemoteOp) {
+  /**
+   * Best-effort lookup of the remote-tracking ref for the current HEAD.
+   * Used to compute the `expectedRemoteOid` for a force-with-lease push.
+   *
+   * Returns `null` when:
+   *   - HEAD is detached or unknown,
+   *   - we can't find a matching `<remote>/<branch>` in the refs list (e.g.
+   *     the branch hasn't been pushed yet),
+   *   - the matching ref has no target oid.
+   *
+   * In any of those cases the caller should treat lease-push as a "first
+   * time push" — the backend will detect the absent remote ref and fall
+   * back to a plain create.
+   */
+  function leaseExpectedOid(): string | null {
+    const branch = repo?.head;
+    if (!branch) return null;
+    const remoteRef = refs.find((r) => r.kind === "remote_branch" && r.name.endsWith(`/${branch}`));
+    return remoteRef?.target ?? null;
+  }
+
+  async function runRemote(op: RemoteOp, pushVariant: PushVariant = "plain") {
     if (!repo || running) return;
+
+    // v0.13.22 — every remote op that mutates the local or remote state must
+    // pass through ConfirmDialog before firing. Fetch is read-only (just
+    // updates remote-tracking refs and the object DB), so it's exempt; pull
+    // (rewrites HEAD), plain push (mutates the remote), force/lease push
+    // (already gated on the dropdown / confirm path) all confirm. The lease
+    // variant doesn't add a *second* dialog because the dropdown click is
+    // already an explicit choice and the failure path has its own banner.
+    if (op === "pull") {
+      const ok = await confirm({
+        level: "warning",
+        title: "Pull?",
+        message:
+          "Fetches the upstream of the current branch and fast-forwards. Refuses on a non-fast-forward; use the Merge view to integrate diverging history.",
+        detail: `git pull (fast-forward only) on ${repo.head ?? "HEAD"}`,
+        confirmLabel: "Pull",
+      });
+      if (!ok) return;
+    } else if (op === "push" && pushVariant === "plain") {
+      const ok = await confirm({
+        level: "warning",
+        title: "Push current branch?",
+        message:
+          "Sends the current branch to its upstream. Plain (non-forced) push refuses on a non-fast-forward.",
+        detail: `git push${repo.head ? ` origin ${repo.head}` : ""}`,
+        confirmLabel: "Push",
+      });
+      if (!ok) return;
+    }
+
     setRunning(op);
     setOpResult(null);
     setProgress(null);
     setCancelling(false);
     try {
       let result: RemoteOpResult;
-      if (op === "fetch") result = await git.fetch(repo.path);
-      else if (op === "pull") result = await git.pull(repo.path);
-      else result = await git.push(repo.path);
+      if (op === "fetch") {
+        result = await git.fetch(repo.path);
+      } else if (op === "pull") {
+        result = await git.pull(repo.path);
+      } else {
+        // Push variant decides what we send to the backend:
+        //  - plain:  no force, no lease.
+        //  - lease:  no force, expected_remote_oid = current remote-tracking ref.
+        //  - force:  force=true (skips lease check entirely).
+        const opts: Parameters<typeof git.push>[1] =
+          pushVariant === "force"
+            ? { force: true }
+            : pushVariant === "lease"
+              ? { expectedRemoteOid: leaseExpectedOid() }
+              : {};
+        result = await git.push(repo.path, opts);
+      }
       setOpResult({ op, ok: result.success, message: result.message, details: result.details });
       if (result.success) {
         void loadHistory();
@@ -206,10 +293,16 @@ export function Topbar() {
       // user can copy the original for bug reports.
       const original = String(e);
       let message = original;
+      let staleLease: { variant: PushVariant } | undefined;
       if (isAppErrorThrown(e)) {
         const ae = e.appError;
         if (ae.kind === "NonFastForward") {
           message = "Remote has diverged from your branch — open the Merge view or rebase first.";
+        } else if (ae.kind === "StaleLease") {
+          // v0.13.21 — surface a dedicated banner with a one-click
+          // "Fetch + retry" action instead of the raw libgit2 detail.
+          message = t("topbar.push.staleLease.message");
+          staleLease = { variant: pushVariant };
         } else if (ae.kind === "Auth") {
           message = "Authentication failed — check your credentials or SSH key.";
         } else if (ae.kind === "UserCancelled") {
@@ -223,6 +316,7 @@ export function Topbar() {
         ok: false,
         message,
         details: original === message ? [] : [original],
+        staleLease,
       });
     } finally {
       setRunning(null);
@@ -232,6 +326,54 @@ export function Topbar() {
       // If for some reason we missed it, leave the last frame visible
       // for one more render rather than blink it away.
     }
+  }
+
+  // Close push menu on outside click / Esc.
+  useEffect(() => {
+    if (!pushMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pushMenuRef.current && !pushMenuRef.current.contains(e.target as Node)) {
+        setPushMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPushMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pushMenuOpen]);
+
+  async function onForcePushClicked() {
+    setPushMenuOpen(false);
+    const ok = await confirm({
+      level: "danger",
+      title: t("topbar.push.forceConfirm.title"),
+      message: t("topbar.push.forceConfirm.message"),
+      detail: `git push --force ${repo?.head ? `origin ${repo.head}` : ""}`.trim(),
+      confirmLabel: t("topbar.push.forceConfirm.confirmLabel"),
+    });
+    if (!ok) return;
+    void runRemote("push", "force");
+  }
+
+  async function onFetchAndRetryStaleLease(variant: PushVariant) {
+    // The user fetched the remote out-of-band by clicking "Fetch + retry":
+    // do the fetch, refresh refs (so leaseExpectedOid() picks up the new
+    // tip), and re-attempt the same variant of push.
+    setOpResult(null);
+    try {
+      await git.fetch(repo!.path);
+      // Refresh the in-memory refs so the next leaseExpectedOid() reads the
+      // updated remote-tracking oid. Cheaper than a full loadHistory.
+      void loadHistory();
+    } catch {
+      // If fetch fails, the next push attempt will surface its own error.
+    }
+    void runRemote("push", variant);
   }
 
   return (
@@ -274,13 +416,60 @@ export function Topbar() {
                 onClick={() => runRemote("pull")}
                 title={t("topbar.pull")}
               />
-              <RemoteBtn
-                op="push"
-                running={running}
-                Icon={ArrowUpFromLine}
-                onClick={() => runRemote("push")}
-                title={t("topbar.push")}
-              />
+              {/* v0.13.21 — push split-button: main click = plain push,
+                  the chevron flyout offers force-with-lease + force. */}
+              <div ref={pushMenuRef} className="relative flex items-center">
+                <RemoteBtn
+                  op="push"
+                  running={running}
+                  Icon={ArrowUpFromLine}
+                  onClick={() => runRemote("push", "plain")}
+                  title={t("topbar.push")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPushMenuOpen((v) => !v)}
+                  disabled={running !== null}
+                  title={t("topbar.push.menu")}
+                  className={cn(
+                    "inline-flex h-8 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    running !== null && "cursor-not-allowed opacity-50",
+                    pushMenuOpen && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {pushMenuOpen && (
+                  <div
+                    className="absolute left-0 top-9 z-50 w-72 rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
+                    role="menu"
+                  >
+                    <PushMenuItem
+                      label={t("topbar.push.plain")}
+                      hint={t("topbar.push.plainHint")}
+                      onClick={() => {
+                        setPushMenuOpen(false);
+                        void runRemote("push", "plain");
+                      }}
+                    />
+                    <PushMenuItem
+                      label={t("topbar.push.lease")}
+                      hint={t("topbar.push.leaseHint")}
+                      onClick={() => {
+                        setPushMenuOpen(false);
+                        void runRemote("push", "lease");
+                      }}
+                    />
+                    <div className="my-1 h-px bg-border" />
+                    <PushMenuItem
+                      label={t("topbar.push.force")}
+                      hint={t("topbar.push.forceHint")}
+                      danger
+                      onClick={() => void onForcePushClicked()}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="ml-2 flex items-center">
@@ -324,7 +513,18 @@ export function Topbar() {
         </div>
       </header>
 
-      {opResult && <RemoteResultBanner result={opResult} onDismiss={() => setOpResult(null)} />}
+      {opResult && (
+        <RemoteResultBanner
+          result={opResult}
+          onDismiss={() => setOpResult(null)}
+          onFetchAndRetry={
+            opResult.staleLease
+              ? () => void onFetchAndRetryStaleLease(opResult.staleLease!.variant)
+              : undefined
+          }
+          t={t}
+        />
+      )}
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
@@ -434,21 +634,38 @@ function ProgressIndicator({
 function RemoteResultBanner({
   result,
   onDismiss,
+  onFetchAndRetry,
+  t,
 }: {
-  result: { op: RemoteOp; ok: boolean; message: string; details: string[] };
+  result: {
+    op: RemoteOp;
+    ok: boolean;
+    message: string;
+    details: string[];
+    staleLease?: { variant: PushVariant };
+  };
   onDismiss: () => void;
+  /** v0.13.21 — when the failure was a stale lease, this is wired to a
+   *  one-click "fetch + retry the same push variant" handler. */
+  onFetchAndRetry?: () => void;
+  t: (key: TKey) => string;
 }) {
+  const isStaleLease = !!result.staleLease;
   return (
     <div
       className={cn(
         "flex shrink-0 items-start gap-2 border-b border-border px-3 py-1.5 text-[11px]",
         result.ok
           ? "bg-[hsl(142_70%_55%/.10)] text-[hsl(142_70%_55%)]"
-          : "bg-[hsl(0_72%_51%/.10)] text-[hsl(0_72%_65%)]",
+          : isStaleLease
+            ? "bg-[hsl(38_90%_55%/.10)] text-[hsl(38_90%_55%)]"
+            : "bg-[hsl(0_72%_51%/.10)] text-[hsl(0_72%_65%)]",
       )}
     >
       <span className="shrink-0 font-semibold uppercase tracking-wider">
-        {result.op} {result.ok ? "ok" : "failed"}
+        {isStaleLease
+          ? t("topbar.push.staleLease.title")
+          : `${result.op} ${result.ok ? "ok" : "failed"}`}
       </span>
       <div className="m-0 max-h-24 flex-1 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/85">
         <div>{result.message}</div>
@@ -460,6 +677,15 @@ function RemoteResultBanner({
           </ul>
         )}
       </div>
+      {onFetchAndRetry && (
+        <button
+          type="button"
+          onClick={onFetchAndRetry}
+          className="shrink-0 rounded border border-border bg-background/40 px-2 py-0.5 text-[10.5px] text-foreground hover:bg-accent"
+        >
+          {t("topbar.push.staleLease.fetch")}
+        </button>
+      )}
       <button
         onClick={onDismiss}
         className="shrink-0 rounded px-2 py-0.5 text-[10.5px] text-muted-foreground hover:bg-accent"
@@ -467,5 +693,32 @@ function RemoteResultBanner({
         Dismiss
       </button>
     </div>
+  );
+}
+
+function PushMenuItem({
+  label,
+  hint,
+  danger,
+  onClick,
+}: {
+  label: string;
+  hint?: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      role="menuitem"
+      className={cn(
+        "flex w-full flex-col items-start gap-0.5 px-2.5 py-1.5 text-left hover:bg-accent",
+        danger && "text-destructive",
+      )}
+    >
+      <span className="text-xs">{label}</span>
+      {hint && <span className="text-[10.5px] text-muted-foreground">{hint}</span>}
+    </button>
   );
 }

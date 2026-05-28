@@ -576,25 +576,48 @@ fn pull_inner(
 }
 
 /// Push the current branch (or `branch` on `remote`) to its upstream.
+///
+/// `force` controls the refspec lead character:
+///   - `false` + `expected_remote_oid = None`: plain non-forced push (default).
+///   - `false` + `expected_remote_oid = Some(oid)`: **force-with-lease**.
+///     We first refresh our remote-tracking ref via a small `ls_remote`-style
+///     probe and compare it to `oid`. If they match, the lease holds and we
+///     promote to a `+` refspec; if they differ, we abort with a structured
+///     `stale lease` error so the user has to fetch + reconfirm. v0.13.21.
+///   - `true`: unconditional `git push --force` (`+refspec`). Use sparingly.
 pub fn push(
     app: AppHandle,
     path: &str,
     remote: Option<&str>,
     branch: Option<&str>,
     set_upstream: bool,
+    force: bool,
+    expected_remote_oid: Option<&str>,
 ) -> Result<RemoteOpResult, git2::Error> {
     let handle = start_op(&app, RemoteOpKind::Push);
-    let result = push_inner(&app, path, remote, branch, set_upstream, &handle);
+    let result = push_inner(
+        &app,
+        path,
+        remote,
+        branch,
+        set_upstream,
+        force,
+        expected_remote_oid,
+        &handle,
+    );
     finish_op(&app, &handle, &result);
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_inner(
     app: &AppHandle,
     path: &str,
     remote: Option<&str>,
     branch: Option<&str>,
     set_upstream: bool,
+    force: bool,
+    expected_remote_oid: Option<&str>,
     handle: &OpHandle,
 ) -> Result<RemoteOpResult, git2::Error> {
     let repo = Repository::discover(path)?;
@@ -635,8 +658,56 @@ fn push_inner(
     };
 
     let mut remote = repo.find_remote(&remote_name)?;
+
+    // ---- v0.13.21: force-with-lease lease check --------------------------
+    //
+    // Strategy: connect read-only to the remote, list its advertised refs,
+    // find ours, and compare to `expected_remote_oid`. If the remote ref is
+    // absent that's fine (we'll be creating it). If it differs, refuse with
+    // a structured error the UI can route to a "fetch + retry" banner.
+    //
+    // We don't fall back to the local remote-tracking ref, because the whole
+    // point of force-with-lease is to compare against the *truth* on the
+    // server right now, not against whatever we last saw via fetch.
+    let mut promote_to_force = force;
+    if !force {
+        if let Some(expected_str) = expected_remote_oid {
+            let expected = git2::Oid::from_str(expected_str).map_err(|_| {
+                git2::Error::from_str("force-with-lease: expected remote oid is malformed")
+            })?;
+            let actual = remote_branch_tip(
+                app,
+                &mut remote,
+                handle.op_id,
+                handle.token.clone(),
+                &local_branch_name,
+            )?;
+            match actual {
+                Some(actual_oid) if actual_oid == expected => {
+                    // Lease holds — safe to overwrite. Promote to forced refspec.
+                    promote_to_force = true;
+                }
+                Some(actual_oid) => {
+                    return Err(git2::Error::from_str(&format!(
+                        "stale lease: {remote_name}/{local_branch_name} is at {} on the server but you expected {} — fetch and reconfirm before re-pushing",
+                        &actual_oid.to_string()[..7],
+                        &expected.to_string()[..7],
+                    )));
+                }
+                None => {
+                    // Remote doesn't have the ref yet — there's nothing to
+                    // overwrite, so a plain (non-forced) create is fine. We
+                    // *don't* promote to `+` here: a fast-forward-only refspec
+                    // is enough and keeps the operation symmetrical with a
+                    // first-time push of a brand-new branch.
+                }
+            }
+        }
+    }
+
+    let lead = if promote_to_force { "+" } else { "" };
     let refspec = format!(
-        "refs/heads/{name}:refs/heads/{name}",
+        "{lead}refs/heads/{name}:refs/heads/{name}",
         name = local_branch_name
     );
     {
@@ -650,8 +721,42 @@ fn push_inner(
         local_branch.set_upstream(Some(&upstream_name))?;
     }
 
-    let summary = format!("pushed {} → {}", local_branch_name, remote_name);
+    let summary = if promote_to_force && !force {
+        format!("force-pushed (lease held) {local_branch_name} → {remote_name}")
+    } else if promote_to_force {
+        format!("force-pushed {local_branch_name} → {remote_name}")
+    } else {
+        format!("pushed {local_branch_name} → {remote_name}")
+    };
     Ok(RemoteOpResult::ok(summary))
+}
+
+/// Look up the current advertised oid of `refs/heads/<branch>` on a remote
+/// without fetching any objects. Returns `Ok(None)` when the remote doesn't
+/// have the ref yet (first-time push). Closes the connection before
+/// returning, so the caller can immediately reuse the `Remote`.
+fn remote_branch_tip(
+    app: &AppHandle,
+    remote: &mut git2::Remote<'_>,
+    op_id: u64,
+    cancel: Arc<AtomicBool>,
+    branch: &str,
+) -> Result<Option<git2::Oid>, git2::Error> {
+    let cb = make_callbacks(app.clone(), op_id, cancel, false);
+    // We don't need progress events for a refs-only probe, but the credentials
+    // callback is shared so we can't strip it. `connect_auth` handles the
+    // auth dance for us; if it fails we surface the libgit2 error.
+    let conn = remote.connect_auth(git2::Direction::Fetch, Some(cb), None)?;
+    let target = format!("refs/heads/{branch}");
+    let mut found: Option<git2::Oid> = None;
+    for head in conn.list()? {
+        if head.name() == target {
+            found = Some(head.oid());
+            break;
+        }
+    }
+    drop(conn);
+    Ok(found)
 }
 
 /// Push a single tag to a remote. Uses `+refs/tags/<name>:refs/tags/<name>`
