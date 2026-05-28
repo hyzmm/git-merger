@@ -23,6 +23,22 @@ export const en = {
   "topbar.fetch": "Fetch from all remotes (prune)",
   "topbar.pull": "Pull (fast-forward only)",
   "topbar.push": "Push current branch",
+  // v0.13.21 — push variants surfaced via the push button's dropdown menu.
+  "topbar.push.menu": "Push options",
+  "topbar.push.plain": "Push",
+  "topbar.push.plainHint": "Plain non-fast-forward refused",
+  "topbar.push.lease": "Force-with-lease push",
+  "topbar.push.leaseHint": "Force only if remote hasn't moved since last fetch",
+  "topbar.push.force": "Force push (unconfirmed)",
+  "topbar.push.forceHint": "Overwrite remote even if it has new commits — use with care",
+  "topbar.push.staleLease.title": "Stale lease — remote has moved",
+  "topbar.push.staleLease.message":
+    "Someone else pushed to this branch while you were working. Fetch the latest history and reconfirm before re-pushing.",
+  "topbar.push.staleLease.fetch": "Fetch + retry",
+  "topbar.push.forceConfirm.title": "Force push (no lease)?",
+  "topbar.push.forceConfirm.message":
+    "Unconditionally overwrites the remote branch with your local copy. Anyone else who has pushed in the meantime will lose their commits. Prefer Force-with-lease unless you really know what you're doing.",
+  "topbar.push.forceConfirm.confirmLabel": "Force push",
   "topbar.search": "Search",
   "topbar.settings": "Settings",
   "topbar.menu": "Menu",
@@ -69,6 +85,27 @@ export const en = {
   "settings.gitConfig.scope.global": "Global (~/.gitconfig)",
   "settings.gitConfig.save": "Save",
   "settings.gitConfig.saving": "Saving...",
+  "settings.signing": "Commit signing",
+  "settings.signing.subtitle":
+    "Sign every new commit (regular / merge / rebase) with GPG or SSH. Requires the chosen tool installed and on PATH; the signer is invoked via your existing user.signingkey.",
+  "settings.signing.enabled": "Sign commits",
+  "settings.signing.on": "On",
+  "settings.signing.off": "Off",
+  "settings.signing.format": "Format",
+  "settings.signing.format.openpgp": "OpenPGP (gpg)",
+  "settings.signing.format.ssh": "SSH (ssh-keygen -Y sign)",
+  "settings.signing.signingKey": "Signing key",
+  "settings.signing.signingKey.placeholderGpg":
+    "Key id / fingerprint (optional — gpg picks default)",
+  "settings.signing.signingKey.placeholderSsh": "Path to private key, e.g. ~/.ssh/id_ed25519",
+  "settings.signing.gpgProgram": "gpg program",
+  "settings.signing.sshProgram": "ssh-keygen program",
+  "settings.signing.help":
+    "Empty fields fall back to git defaults. SSH signing requires OpenSSH 8.0+. If signing fails the commit is aborted and the toolbar shows the signer's stderr.",
+  "settings.signing.savedEnabled": "Commit signing enabled in {scope} config.",
+  "settings.signing.savedDisabled": "Commit signing disabled in {scope} config.",
+  "settings.signing.failedRead": "Failed to read signing config",
+  "settings.signing.failedSave": "Failed to save",
   "settings.close": "Close",
 
   // Common buttons / actions

@@ -17,6 +17,9 @@ export type AppErrorKind =
   | "NonFastForward"
   | "Auth"
   | "UserCancelled"
+  /** v0.13.21 — `force-with-lease` push refused: the remote ref no longer
+   *  points where we expected it. Caller should fetch and reconfirm. */
+  | "StaleLease"
   | "InvalidArgument"
   | "Git"
   | "Io"
@@ -38,6 +41,7 @@ const KNOWN_KINDS: ReadonlySet<AppErrorKind> = new Set<AppErrorKind>([
   "NonFastForward",
   "Auth",
   "UserCancelled",
+  "StaleLease",
   "InvalidArgument",
   "Git",
   "Io",
