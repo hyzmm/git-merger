@@ -126,6 +126,42 @@ function TagRow({
 }) {
   const annotated = tag.is_annotated;
   const confirm = useApp((s) => s.confirm);
+  // v0.13.22 — every "git" button below funnels through ConfirmDialog so a
+  // mis-click can't push, delete on remote, or wipe the local ref. Force-push
+  // already had this dialog from v0.13.12; the rest get their own copy here.
+  const askPush = async () => {
+    const ok = await confirm({
+      level: "warning",
+      title: `Push tag '${tag.name}'?`,
+      message:
+        "Sends this tag to the remote. Existing tags with the same name will not be overwritten — use Force for that.",
+      detail: `git push origin refs/tags/${tag.name}:refs/tags/${tag.name}`,
+      confirmLabel: "Push tag",
+    });
+    if (ok) onPush(false);
+  };
+  const askDeleteLocal = async () => {
+    const ok = await confirm({
+      level: "danger",
+      title: `Delete local tag '${tag.name}'?`,
+      message:
+        "Removes this tag locally. The remote copy is left untouched — use the Remote button if you also want to delete it on the server.",
+      detail: `git tag -d ${tag.name}`,
+      confirmLabel: "Delete locally",
+    });
+    if (ok) onDeleteLocal();
+  };
+  const askDeleteRemote = async () => {
+    const ok = await confirm({
+      level: "danger",
+      title: `Delete remote tag '${tag.name}'?`,
+      message:
+        "Removes the tag on the remote. Anyone who already fetched the tag still has their local copy until they manually re-fetch with --prune-tags.",
+      detail: `git push origin :refs/tags/${tag.name}`,
+      confirmLabel: "Delete on remote",
+    });
+    if (ok) onDeleteRemote();
+  };
   return (
     <div className="border-b border-border/40">
       <div className="flex items-center gap-3 px-3 py-2 hover:bg-accent/30">
@@ -166,7 +202,7 @@ function TagRow({
         <span className="shrink-0 text-[10.5px] text-muted-foreground">{fmtTime(tag.time)}</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <button
-            onClick={() => onPush(false)}
+            onClick={() => void askPush()}
             disabled={busy}
             title={`git push origin ${tag.name}`}
             className={cn(
@@ -175,7 +211,7 @@ function TagRow({
             )}
           >
             <Upload className="h-3 w-3" />
-            Push
+            Push…
           </button>
           <button
             onClick={() => {
@@ -198,11 +234,11 @@ function TagRow({
               busy && "cursor-not-allowed opacity-60",
             )}
           >
-            Force
+            Force…
           </button>
           <span className="mx-0.5 h-3 w-px bg-border" aria-hidden />
           <button
-            onClick={onDeleteLocal}
+            onClick={() => void askDeleteLocal()}
             disabled={busy}
             title="Delete the local tag (does not touch the remote)"
             className={cn(
@@ -211,10 +247,10 @@ function TagRow({
             )}
           >
             <Trash2 className="h-3 w-3" />
-            Local
+            Local…
           </button>
           <button
-            onClick={onDeleteRemote}
+            onClick={() => void askDeleteRemote()}
             disabled={busy}
             title="Delete the tag on the remote (`git push origin :refs/tags/<name>`)"
             className={cn(
@@ -223,7 +259,7 @@ function TagRow({
             )}
           >
             <Trash2 className="h-3 w-3" />
-            Remote
+            Remote…
           </button>
         </div>
       </div>

@@ -54,6 +54,20 @@
     --diff-removed-fg: 0 72% 60%;
     --diff-modified-bg: 38 92% 50% / 0.16;
     --diff-modified-fg: 38 92% 60%;
+
+    /* v0.13.23 — branch lane palette. Used by RefsPane (left dot), GraphRow
+       (commit dot + lane lines + curves), and the RefBadges in CommitList.
+       Six hues chosen to be visually distinct under both light and dark
+       themes; index 1..6 maps to the 0..5 lane color slots referenced from
+       graph.ts. Keep these stable: lane → ref-name → palette-slot stability
+       is what makes the History view's main branch stay the same color
+       across launches. */
+    --branch-1: 199 89% 60%; /* cyan / blue   — typical main / master */
+    --branch-2: 280 70% 70%; /* purple        — feature branches */
+    --branch-3: 40 95% 60%; /* gold / yellow — tags */
+    --branch-4: 142 70% 55%; /* green         — HEAD pin */
+    --branch-5: 0 75% 65%; /* red           — release / hotfix */
+    --branch-6: 170 70% 60%; /* teal          — extra fallback */
   }
 
   .dark {
@@ -76,6 +90,16 @@
     --border: 220 13% 18%;
     --input: 220 13% 18%;
     --ring: 220 14% 70%;
+
+    /* v0.13.23 — dark-theme branch lane palette. Slightly higher lightness
+       than the light-theme defaults so the lanes pop against the near-black
+       canvas. Same hue, same slot semantics. */
+    --branch-1: 199 89% 65%;
+    --branch-2: 280 70% 75%;
+    --branch-3: 40 95% 65%;
+    --branch-4: 142 70% 60%;
+    --branch-5: 0 75% 70%;
+    --branch-6: 170 70% 65%;
   }
 }
 
@@ -112,6 +136,20 @@ html,
 body,
 #root {
   height: 100%;
+  /* v0.13.22 — kill macOS / trackpad rubber-band overscroll on the page
+     itself. The app's own scrollers (history list, diff panes, file tree…)
+     are real scroll containers and should bounce internally; the chrome
+     around them must NOT. `overscroll-behavior: none` blocks both rubber-
+     band and the default "scroll chains to parent" behaviour, so reaching
+     the top/bottom of an inner scroller no longer drags the whole window. */
+  overscroll-behavior: none;
+}
+
+html,
+body {
+  /* Belt-and-braces: the app shell is a fixed-size flex layout — nothing
+     should ever scroll the document itself. If it does, that's a layout
+     bug we want to surface visibly rather than mask with a scrollbar. */
   overflow: hidden;
 }
 
