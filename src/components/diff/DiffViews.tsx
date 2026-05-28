@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { useApp } from "@/stores/app";
+import { useApp, WORKING_OID } from "@/stores/app";
 import { DiffLineCell } from "./DiffPrimitives";
 import { pairLines, type PairedLine } from "@/lib/pairLines";
 import { unifiedWordTokens } from "@/lib/unifiedWordTokens";
 import { useHighlight } from "@/lib/useHighlight";
+import { selectionKey } from "@/lib/subsetPatch";
 import { cn } from "@/lib/utils";
 import type { DiffHunk, FileDiff } from "@/ipc/git";
 
@@ -134,6 +135,18 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
   const fileDiff = fdProp !== undefined ? fdProp : fdStore;
   const filename = nameProp ?? fnStore;
 
+  // v0.13.25 — line-level staging is only meaningful for the live
+  // working-tree diff (HEAD diffs are read-only history). Drive the
+  // selection UI off the same store slice that the action buttons in
+  // DiffViewer's toolbar dispatch into. When `fdProp` is provided we're
+  // being rendered as someone else's preview (e.g. the StashPage)
+  // — keep the picker disabled there too.
+  const oid = useApp((s) => s.diff.oid);
+  const selectedLines = useApp((s) => s.diff.selectedLines);
+  const toggleDiffLine = useApp((s) => s.toggleDiffLine);
+  const extendDiffLineRangeTo = useApp((s) => s.extendDiffLineRangeTo);
+  const linePickerActive = oid === WORKING_OID && fdProp === undefined;
+
   const hunks = useMemo(() => fileDiff?.hunks ?? [], [fileDiff]);
   const flatLines = useMemo(() => extractUnifiedSource(hunks), [hunks]);
   const tokens = useHighlight(flatLines, filename);
@@ -157,6 +170,15 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
             <HunkHeader text={h.header} />
             {h.lines.map((ln, i) => {
               const tokRow = tokens?.[cursor++];
+              const key = selectionKey(hi, i);
+              const isSel = linePickerActive && selectedLines.has(key);
+              const onClick =
+                linePickerActive && (ln.origin === "+" || ln.origin === "-")
+                  ? (e: React.MouseEvent<HTMLDivElement>) => {
+                      if (e.shiftKey) extendDiffLineRangeTo(hi, i);
+                      else toggleDiffLine(hi, i);
+                    }
+                  : undefined;
               return (
                 <DiffLineCell
                   key={`U${hi}-${i}`}
@@ -166,6 +188,8 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
                   wordTokens={wt[i]}
                   syntaxTokens={tokRow}
                   showWhitespace={showWhitespace}
+                  selected={isSel}
+                  onClick={onClick}
                 />
               );
             })}

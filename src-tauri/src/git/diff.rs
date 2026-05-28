@@ -17,6 +17,15 @@ fn delta_to_status(d: Delta) -> ChangeStatus {
 /// File-level changes for a commit (vs first parent, or empty tree if root).
 /// Accepts any committish (commit OID, branch, tag — annotated tags are
 /// peeled to their target commit automatically).
+///
+/// Performance note (post-v0.13.19 cleanup): we used to walk the diff once
+/// to collect deltas and then re-materialise each file as a `git2::Patch`
+/// just to read its `line_stats()`. On a big vendoring / cross-package
+/// refactor commit (think 5 000 files), that means 5 000 full myers diffs
+/// re-done after we already had the answers in memory. The new code does
+/// a single `diff.foreach` pass with both file + line callbacks active and
+/// tallies `+` / `-` counts as the lines stream by — O(total lines), one
+/// allocation per file, no re-diff work.
 pub fn commit_files(path: &str, oid: &str) -> Result<Vec<FileChange>, git2::Error> {
     let repo = Repository::discover(path)?;
     let commit = repo
@@ -32,7 +41,11 @@ pub fn commit_files(path: &str, oid: &str) -> Result<Vec<FileChange>, git2::Erro
     let mut opts = DiffOptions::new();
     let diff = repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
 
-    // Collect file deltas first, then enrich with patch line stats.
+    // Single pass: file callback pushes the FileChange entry in delta order;
+    // line callback bumps the counters on the *last* entry. Order matters —
+    // libgit2 emits all lines for a delta before moving to the next one,
+    // and the line callback is only fired between two file callbacks for
+    // the same file, so `last_mut()` always targets the right row.
     let entries = RefCell::new(Vec::<FileChange>::new());
     diff.foreach(
         &mut |delta, _| {
@@ -57,21 +70,20 @@ pub fn commit_files(path: &str, oid: &str) -> Result<Vec<FileChange>, git2::Erro
         },
         None,
         None,
-        None,
+        Some(&mut |_delta, _hunk, line| {
+            let mut e = entries.borrow_mut();
+            if let Some(fc) = e.last_mut() {
+                match line.origin() {
+                    '+' => fc.insertions += 1,
+                    '-' => fc.deletions += 1,
+                    _ => {}
+                }
+            }
+            true
+        }),
     )?;
 
-    // Per-delta line stats via Patch.
-    let mut out = entries.into_inner();
-    for (idx, fc) in out.iter_mut().enumerate() {
-        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
-            if let Ok((_ctx, adds, dels)) = patch.line_stats() {
-                fc.insertions = adds;
-                fc.deletions = dels;
-            }
-        }
-    }
-
-    Ok(out)
+    Ok(entries.into_inner())
 }
 
 fn collect_file_diff(diff: &git2::Diff<'_>, target: &str) -> Result<FileDiff, git2::Error> {

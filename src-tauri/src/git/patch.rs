@@ -23,6 +23,43 @@
 //!   tree. Index is left alone — the user can stage afterwards.
 
 use git2::{ApplyLocation, ApplyOptions, Diff, DiffOptions, Oid, Repository};
+use serde::{Deserialize, Serialize};
+
+/// Where a patch should land. Mirrors `git2::ApplyLocation`, exposed as a
+/// serde-tagged enum so the frontend can pick at the IPC boundary.
+///
+/// - `WorkDir` (default): apply to the working tree only — the index is
+///   left alone; user can stage afterwards with the file-level
+///   `stage_files`. This is what v0.13.9 `apply_patch` did.
+/// - `Index`: apply directly to the index (= `git apply --cached`). Used
+///   by line-level **stage** in v0.13.25: we synthesise a sub-patch from
+///   the selected lines and route it here.
+/// - `Both`: apply to working tree AND index (= `git apply --index`).
+///   Useful for "stage these lines, leave the rest alone in the workdir"
+///   when the patch changes context.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchLocation {
+    WorkDir,
+    Index,
+    Both,
+}
+
+impl Default for PatchLocation {
+    fn default() -> Self {
+        Self::WorkDir
+    }
+}
+
+impl From<PatchLocation> for ApplyLocation {
+    fn from(loc: PatchLocation) -> Self {
+        match loc {
+            PatchLocation::WorkDir => ApplyLocation::WorkDir,
+            PatchLocation::Index => ApplyLocation::Index,
+            PatchLocation::Both => ApplyLocation::Both,
+        }
+    }
+}
 
 /// Format a single file's commit diff (parent[0] → commit) as a
 /// unified-patch string. Returns the text including the standard
@@ -83,26 +120,44 @@ fn diff_to_patch(diff: &Diff<'_>) -> Result<String, git2::Error> {
 }
 
 /// Dry-run apply: returns Ok(()) if `patch_text` would apply cleanly
-/// against the current working tree, otherwise an error whose message
+/// against the chosen location, otherwise an error whose message
 /// surfaces the libgit2 reason (so the toast can show "context line N
 /// does not match" / etc.).
-pub fn apply_patch_check(path: &str, patch_text: &str) -> Result<(), git2::Error> {
+pub fn apply_patch_check(
+    path: &str,
+    patch_text: &str,
+    location: PatchLocation,
+) -> Result<(), git2::Error> {
     let repo = Repository::discover(path)?;
     let diff = Diff::from_buffer(patch_text.as_bytes())?;
     let mut opts = ApplyOptions::new();
     opts.check(true);
-    repo.apply(&diff, ApplyLocation::WorkDir, Some(&mut opts))?;
+    repo.apply(&diff, location.into(), Some(&mut opts))?;
     Ok(())
 }
 
-/// Apply `patch_text` to the working tree (does NOT touch the index).
-/// Caller is expected to have run `apply_patch_check` first if it
-/// cares about previewing failures — but this function will also
-/// surface failures from the real apply, just less gracefully.
-pub fn apply_patch(path: &str, patch_text: &str) -> Result<(), git2::Error> {
+/// Apply `patch_text` to the requested location. v0.13.25 added the
+/// `location` arg so callers can choose:
+/// - `WorkDir` — only the working tree (legacy v0.13.9 behaviour).
+/// - `Index`  — only the index (= `git apply --cached`); used by
+///              line-level staging.
+/// - `Both`   — apply to both, mirroring `git apply --index`.
+///
+/// Reverse application (= `git apply -R`) is **not** done here. Callers
+/// that want to undo a patch should construct the reversed text
+/// themselves (swap +/-, swap a/b headers, invert each hunk header's
+/// old/new ranges) and feed it back through this same function. Doing
+/// reverse on the frontend keeps a single linear apply path on the
+/// backend and dodges libgit2's lack of a `--reverse` option on
+/// `Repository::apply`.
+pub fn apply_patch(
+    path: &str,
+    patch_text: &str,
+    location: PatchLocation,
+) -> Result<(), git2::Error> {
     let repo = Repository::discover(path)?;
     let diff = Diff::from_buffer(patch_text.as_bytes())?;
-    repo.apply(&diff, ApplyLocation::WorkDir, None)?;
+    repo.apply(&diff, location.into(), None)?;
     Ok(())
 }
 
@@ -164,8 +219,8 @@ mod tests {
         // Reset the workdir, re-apply, and verify the file matches.
         fs::write(dir.join("a.txt"), "hello\n").unwrap();
         // dry-run check first
-        apply_patch_check(dir.to_str().unwrap(), &patch).expect("check ok");
-        apply_patch(dir.to_str().unwrap(), &patch).expect("apply ok");
+        apply_patch_check(dir.to_str().unwrap(), &patch, PatchLocation::WorkDir).expect("check ok");
+        apply_patch(dir.to_str().unwrap(), &patch, PatchLocation::WorkDir).expect("apply ok");
         let after = fs::read_to_string(dir.join("a.txt")).unwrap();
         // Normalise CRLF → LF before comparing — Windows libgit2 may
         // honour core.autocrlf on apply, which is fine in production
@@ -178,7 +233,7 @@ mod tests {
         let dir = tmp_repo("bad");
         fs::write(dir.join("a.txt"), "hello\n").unwrap();
         commit_all(&dir, "init");
-        let res = apply_patch_check(dir.to_str().unwrap(), "not a patch at all");
+        let res = apply_patch_check(dir.to_str().unwrap(), "not a patch at all", PatchLocation::WorkDir);
         assert!(res.is_err(), "garbage patch should fail to parse / apply");
     }
 
@@ -204,5 +259,89 @@ mod tests {
         assert!(patch.contains("a/a.txt"));
         assert!(patch.contains("b/a.txt"));
         assert!(patch.contains("+beta"));
+    }
+
+    /// v0.13.25 — apply a patch directly to the index (= `git apply --cached`).
+    /// This is the path line-level staging takes: workdir already has the
+    /// edits, we synthesise a sub-patch and push it into the index without
+    /// touching the working tree.
+    #[test]
+    fn apply_patch_to_index_stages_changes_without_touching_workdir() {
+        let dir = tmp_repo("stage-lines");
+        fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+        commit_all(&dir, "init");
+        // Edit the working tree with two new lines + one removed-ish change.
+        fs::write(dir.join("a.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+        // The full working patch — what we'd send if the user picked every line.
+        let patch = format_working_file_patch(dir.to_str().unwrap(), "a.txt").expect("format ok");
+        assert!(patch.contains("+TWO"));
+        assert!(patch.contains("+four"));
+
+        // Dry-run + real apply, both targeting the index.
+        apply_patch_check(dir.to_str().unwrap(), &patch, PatchLocation::Index).expect("check ok");
+        apply_patch(dir.to_str().unwrap(), &patch, PatchLocation::Index).expect("apply ok");
+
+        // The working tree should be unchanged (still has both edits) —
+        // we asked for Index-only, so the tree shouldn't get clobbered.
+        let after_wd = fs::read_to_string(dir.join("a.txt")).unwrap();
+        assert_eq!(
+            after_wd.replace("\r\n", "\n"),
+            "one\nTWO\nthree\nfour\n",
+            "workdir should be untouched after Index-only apply",
+        );
+
+        // And `git diff --cached` should now show no diff (everything in
+        // the workdir is also in the index).
+        let staged = Command::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let staged_files = String::from_utf8(staged.stdout).unwrap();
+        assert!(
+            staged_files.contains("a.txt"),
+            "expected a.txt to be staged, git diff --cached --name-only said:\n{staged_files}"
+        );
+    }
+
+    /// v0.13.25 — feeding a manually-reversed patch back through Index
+    /// apply un-stages those changes (= `git apply -R --cached`). This is
+    /// the line-level "unstage selected lines" path.
+    #[test]
+    fn reversed_patch_to_index_unstages() {
+        let dir = tmp_repo("unstage-lines");
+        fs::write(dir.join("a.txt"), "one\n").unwrap();
+        commit_all(&dir, "init");
+        fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+        // Stage everything via the file-level helper so we have something
+        // to unstage.
+        Command::new("git")
+            .args(["add", "a.txt"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        // Build a reversed patch by hand. The forward patch reads
+        // "+two"; reversed swaps to "-two" with old/new ranges flipped.
+        let reversed = "diff --git a/a.txt b/a.txt\n\
+            --- a/a.txt\n\
+            +++ b/a.txt\n\
+            @@ -1,2 +1,1 @@\n \
+            one\n\
+            -two\n";
+
+        apply_patch_check(dir.to_str().unwrap(), reversed, PatchLocation::Index).expect("check ok");
+        apply_patch(dir.to_str().unwrap(), reversed, PatchLocation::Index).expect("apply ok");
+
+        // After the reverse-apply, `git diff --cached` should be empty
+        // (the new line is no longer staged, even though it's still in
+        // the working tree).
+        let staged = Command::new("git")
+            .args(["diff", "--cached"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let s = String::from_utf8(staged.stdout).unwrap();
+        assert!(s.trim().is_empty(), "expected empty staged diff, got:\n{s}");
     }
 }

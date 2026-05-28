@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, ClipboardCopy } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCopy, Plus, Minus, Trash2 } from "lucide-react";
 import { useApp, WORKING_OID } from "@/stores/app";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { git } from "@/ipc/git";
@@ -33,6 +33,13 @@ export function DiffViewer() {
   const setEditActive = useApp((s) => s.setEditActive);
   const saveEditBuffer = useApp((s) => s.saveEditBuffer);
   const resetEditBuffer = useApp((s) => s.resetEditBuffer);
+  // v0.13.25 — line-level staging picker state. Buttons only show in
+  // Unified mode on a working-tree diff (HEAD diffs are read-only).
+  const selectedLines = useApp((s) => s.diff.selectedLines);
+  const stageSelectedLines = useApp((s) => s.stageSelectedLines);
+  const unstageSelectedLines = useApp((s) => s.unstageSelectedLines);
+  const discardSelectedLines = useApp((s) => s.discardSelectedLines);
+  const clearDiffLineSelection = useApp((s) => s.clearDiffLineSelection);
 
   const isWorking = oid === WORKING_OID;
   const dirty = isWorking && editBuffer !== null && editSaved !== null && editBuffer !== editSaved;
@@ -96,8 +103,10 @@ export function DiffViewer() {
       p: () => goToHunk(-1),
       "shift+n": () => goToHunk(1),
       "shift+p": () => goToHunk(-1),
+      // v0.13.25 — Esc clears the line-staging selection.
+      escape: () => clearDiffLineSelection(),
     }),
-    [goToHunk],
+    [goToHunk, clearDiffLineSelection],
   );
   useShortcuts(shortcuts, view === "diff");
 
@@ -162,6 +171,70 @@ export function DiffViewer() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* v0.13.25 — line-level staging buttons. Only meaningful for the
+              live working-tree diff in Unified mode (the picker UI lives
+              there). When nothing is selected, the buttons are disabled
+              so the row still acts as a hint that the feature exists. */}
+          {isWorking && mode === "unified" && (
+            <div className="flex items-center gap-1.5 border-r border-border pr-2">
+              <span
+                className={cn(
+                  "text-[10.5px]",
+                  selectedLines.size > 0 ? "text-foreground" : "text-muted-foreground",
+                )}
+                title="Click +/− lines to pick them; shift-click to extend the range"
+              >
+                {selectedLines.size > 0
+                  ? `${selectedLines.size} line${selectedLines.size === 1 ? "" : "s"}`
+                  : "no lines"}
+              </span>
+              <button
+                onClick={() => void stageSelectedLines()}
+                disabled={selectedLines.size === 0}
+                title="Stage only the selected +/− lines (apply sub-patch to the index)"
+                className={cn(
+                  "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
+                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <Plus className="h-3 w-3" />
+                Stage lines
+              </button>
+              <button
+                onClick={() => void unstageSelectedLines()}
+                disabled={selectedLines.size === 0}
+                title="Unstage only the selected +/− lines (apply reversed sub-patch to the index)"
+                className={cn(
+                  "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
+                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <Minus className="h-3 w-3" />
+                Unstage lines
+              </button>
+              <button
+                onClick={() => void discardSelectedLines()}
+                disabled={selectedLines.size === 0}
+                title="Discard the selected +/− lines from the working tree (cannot be undone)"
+                className={cn(
+                  "flex h-7 items-center gap-1 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2 text-[11px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]",
+                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <Trash2 className="h-3 w-3" />
+                Discard lines…
+              </button>
+              {selectedLines.size > 0 && (
+                <button
+                  onClick={clearDiffLineSelection}
+                  title="Clear line selection (Esc)"
+                  className="h-7 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
           {isWorking && mode === "sbs" && (
             <>
               <button
@@ -270,7 +343,7 @@ export function DiffViewer() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {isWorking && editActive && mode === "sbs" ? (
           <WorkingDiffEditor />
         ) : file && isImagePath(file) ? (

@@ -91,6 +91,8 @@ export function DiffLineCell({
   wordTokens,
   syntaxTokens,
   showWhitespace,
+  selected,
+  onClick,
 }: {
   origin: " " | "+" | "-" | null;
   lineno: number | null;
@@ -98,6 +100,14 @@ export function DiffLineCell({
   wordTokens?: WordToken[];
   syntaxTokens?: Token[];
   showWhitespace: boolean;
+  /** v0.13.25 — drives the selected-row tinting in the line-level
+   *  staging picker. Only meaningful for `+` / `−` rows; ignored
+   *  visually on context rows even if accidentally true. */
+  selected?: boolean;
+  /** v0.13.25 — fired with the native event so the caller can detect
+   *  shift-click for range selection. Click is wired by the Unified
+   *  view; SideBySide doesn't (yet) participate in line-level staging. */
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const bg =
     origin === "+"
@@ -114,9 +124,21 @@ export function DiffLineCell({
         ? "text-[hsl(var(--diff-removed-fg))]"
         : "text-muted-foreground";
 
+  // The selection ring sits inside the row so it doesn't disturb the
+  // grid columns. Indicate selection with both a left-edge accent bar
+  // and a slight bg shift, mirroring how IntelliJ marks staged-line
+  // candidates.
+  const isSelectable = onClick !== undefined && (origin === "+" || origin === "-");
   return (
     <div
-      className={cn("grid items-start font-mono leading-[18px]", bg)}
+      onClick={onClick}
+      className={cn(
+        "grid items-start font-mono leading-[18px]",
+        bg,
+        isSelectable && "cursor-pointer",
+        selected &&
+          "ring-1 ring-inset ring-[hsl(var(--branch-1)/.7)] bg-[hsl(var(--branch-1)/.18)]",
+      )}
       style={{ gridTemplateColumns: "50px 14px 1fr", columnGap: 8 }}
     >
       <span
