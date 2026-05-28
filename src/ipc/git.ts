@@ -168,6 +168,22 @@ export interface RefEntry {
   name: string;
   target: string | null;
   is_head: boolean;
+  /**
+   * v0.13.34 — Upstream tracking branch name without the
+   * `refs/remotes/` prefix (e.g. `origin/main`). Only present for local
+   * branches that have a configured upstream.
+   */
+  upstream?: string;
+  /**
+   * v0.13.34 — Number of commits the local branch is ahead of its
+   * upstream. 0 when in sync. Absent when there is no upstream.
+   */
+  ahead?: number;
+  /**
+   * v0.13.34 — Number of commits the local branch is behind its
+   * upstream. 0 when in sync. Absent when there is no upstream.
+   */
+  behind?: number;
 }
 
 /**

@@ -15,6 +15,25 @@ pub struct RefEntry {
     pub name: String,
     pub target: Option<String>,
     pub is_head: bool,
+
+    /// (v0.13.34) Upstream tracking branch name without the
+    /// `refs/remotes/` prefix, e.g. `origin/main`. Only populated for
+    /// local branches that have a configured upstream; `None` everywhere
+    /// else (remote branches, tags, untracked locals).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<String>,
+
+    /// (v0.13.34) Number of commits the local branch is ahead of its
+    /// upstream (commits we have, upstream doesn't). 0 when in sync,
+    /// `None` when there is no upstream or computation failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u32>,
+
+    /// (v0.13.34) Number of commits the local branch is behind its
+    /// upstream (commits upstream has, we don't). 0 when in sync,
+    /// `None` when there is no upstream or computation failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u32>,
 }
 
 /// Detailed view of a single tag, used by the dedicated TagsPage.
@@ -55,13 +74,38 @@ pub fn list_refs(path: &str) -> Result<Vec<RefEntry>, git2::Error> {
     for b in repo.branches(Some(BranchType::Local))?.flatten() {
         let (branch, _) = b;
         if let Ok(Some(name)) = branch.name() {
-            let target = branch.get().target().map(|o| o.to_string());
+            let local_oid = branch.get().target();
+            let target = local_oid.map(|o| o.to_string());
             let is_head = branch.is_head();
+
+            // (v0.13.34) Resolve upstream tracking ref + ahead/behind.
+            //
+            // `branch.upstream()` returns Err when no upstream is configured,
+            // which is a totally normal state (a fresh local branch). We
+            // treat any error here as "no upstream" rather than propagating —
+            // a branch missing its upstream shouldn't break the whole
+            // ref listing.
+            let (upstream, ahead, behind) = match (local_oid, branch.upstream()) {
+                (Some(local), Ok(up)) => {
+                    let up_name = up.name().ok().flatten().map(str::to_string);
+                    let up_oid = up.get().target();
+                    let counts = up_oid.and_then(|u| repo.graph_ahead_behind(local, u).ok());
+                    match counts {
+                        Some((a, b)) => (up_name, Some(a as u32), Some(b as u32)),
+                        None => (up_name, None, None),
+                    }
+                }
+                _ => (None, None, None),
+            };
+
             out.push(RefEntry {
                 kind: RefKind::LocalBranch,
                 name: name.to_string(),
                 target,
                 is_head,
+                upstream,
+                ahead,
+                behind,
             });
         }
     }
@@ -80,6 +124,9 @@ pub fn list_refs(path: &str) -> Result<Vec<RefEntry>, git2::Error> {
                 name: name.to_string(),
                 target,
                 is_head: false,
+                upstream: None,
+                ahead: None,
+                behind: None,
             });
         }
     }
@@ -94,6 +141,9 @@ pub fn list_refs(path: &str) -> Result<Vec<RefEntry>, git2::Error> {
             name: short,
             target: Some(oid.to_string()),
             is_head: false,
+            upstream: None,
+            ahead: None,
+            behind: None,
         });
         true
     })?;

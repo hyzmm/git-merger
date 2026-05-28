@@ -24,14 +24,43 @@ export interface UiSettings {
   tabSize: number;
   /** History graph rendering mode. */
   graphMode: GraphMode;
+  /**
+   * v0.13.34 — HistoryPage left column (RefsPane) width in px.
+   * Resizable by dragging the divider between RefsPane and CommitList.
+   * Clamped to [HISTORY_LEFT_MIN, HISTORY_LEFT_MAX] on load.
+   */
+  historyLeftWidth: number;
+  /**
+   * v0.13.34 — HistoryPage right column (CommitDetails) width in px.
+   * Resizable by dragging the divider between CommitList and CommitDetails.
+   * Clamped to [HISTORY_RIGHT_MIN, HISTORY_RIGHT_MAX] on load.
+   */
+  historyRightWidth: number;
 }
+
+/**
+ * v0.13.34 — Allowed range for the HistoryPage column widths. Floors
+ * keep the panes usable (anything narrower truncates branch names /
+ * commit subjects too aggressively); ceilings keep the centre commit
+ * list from being squeezed below ~400 px on a 1280-wide window.
+ */
+export const HISTORY_LEFT_MIN = 160;
+export const HISTORY_LEFT_MAX = 480;
+export const HISTORY_RIGHT_MIN = 280;
+export const HISTORY_RIGHT_MAX = 720;
 
 const DEFAULT: UiSettings = {
   theme: "dark",
   fontSize: 14,
   tabSize: 4,
   graphMode: "normal",
+  historyLeftWidth: 220,
+  historyRightWidth: 380,
 };
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
 
 function load(): UiSettings {
   try {
@@ -53,6 +82,14 @@ function load(): UiSettings {
       graphMode: (["normal", "compact", "hidden"] as const).includes(parsed.graphMode as GraphMode)
         ? (parsed.graphMode as GraphMode)
         : DEFAULT.graphMode,
+      historyLeftWidth:
+        typeof parsed.historyLeftWidth === "number"
+          ? clamp(parsed.historyLeftWidth, HISTORY_LEFT_MIN, HISTORY_LEFT_MAX)
+          : DEFAULT.historyLeftWidth,
+      historyRightWidth:
+        typeof parsed.historyRightWidth === "number"
+          ? clamp(parsed.historyRightWidth, HISTORY_RIGHT_MIN, HISTORY_RIGHT_MAX)
+          : DEFAULT.historyRightWidth,
     };
   } catch {
     return { ...DEFAULT };
@@ -93,6 +130,8 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       fontSize: next.fontSize,
       tabSize: next.tabSize,
       graphMode: next.graphMode,
+      historyLeftWidth: next.historyLeftWidth,
+      historyRightWidth: next.historyRightWidth,
     });
     applySettings(next);
     set(next);

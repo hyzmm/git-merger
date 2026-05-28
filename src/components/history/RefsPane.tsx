@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { GitBranch, Plus } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, GitBranch, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import { branchColorForName } from "@/lib/branchColors";
@@ -20,6 +20,78 @@ const KIND_LABEL: Record<string, string> = {
 interface MenuState {
   pos: ContextMenuPos;
   items: MenuItem[];
+}
+
+/**
+ * v0.13.34 — IDEA-style tracking-status pills. Reads the optional
+ * upstream/ahead/behind fields backfilled by `list_refs` and renders
+ *   ↙ <behind>   when behind > 0     (blue — pull to catch up)
+ *   ↗ <ahead>    when ahead > 0      (green — push to publish)
+ * Both can show simultaneously when the branch has diverged.
+ *
+ * Renders nothing when:
+ *   - the ref has no upstream (local-only branch, or remote/tag rows)
+ *   - both counts are zero (in sync — no need to clutter the row)
+ *   - the counts couldn't be computed (graph_ahead_behind failed)
+ */
+function TrackingStatus({ r }: { r: RefEntry }) {
+  // Only local branches with upstream have these counts.
+  if (r.kind !== "local_branch") return null;
+  const { ahead, behind } = r;
+  const hasAhead = typeof ahead === "number" && ahead > 0;
+  const hasBehind = typeof behind === "number" && behind > 0;
+  if (!hasAhead && !hasBehind) return null;
+
+  const upstreamLabel = r.upstream ?? "upstream";
+  return (
+    <span
+      className="ml-auto flex shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums"
+      // Tooltip is more informative than the inline counts; users can
+      // hover to see the exact upstream ref + symmetric difference.
+      title={`vs ${upstreamLabel} — behind ${behind ?? 0}, ahead ${ahead ?? 0}`}
+    >
+      {hasBehind && (
+        <span className="flex items-center gap-0.5 text-sky-400">
+          <ArrowDownLeft className="h-3 w-3" />
+          {behind}
+        </span>
+      )}
+      {hasAhead && (
+        <span className="flex items-center gap-0.5 text-emerald-400">
+          <ArrowUpRight className="h-3 w-3" />
+          {ahead}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * v0.13.34 — Renders the remote name slice of an upstream ref as a
+ * dim parenthesised suffix, e.g. `(origin)` or `(teamgaga-client)`.
+ *
+ * Why only the remote name and not the full `origin/main`? In a refs
+ * pane the local branch name (left of the suffix) and the upstream
+ * branch name are almost always identical (`main` ↔ `origin/main`,
+ * `feat/x` ↔ `origin/feat/x`). Echoing the branch name twice on the
+ * same row is noise. The remote *name* is the bit that actually adds
+ * information ("which fork does this track?"), so that's all we show.
+ *
+ * Falls back to the full upstream name when it doesn't fit the usual
+ * `<remote>/<branch>` shape (rare, but possible with custom refspecs).
+ */
+function UpstreamLabel({ upstream }: { upstream: string | undefined }) {
+  if (!upstream) return null;
+  const slash = upstream.indexOf("/");
+  const remote = slash > 0 ? upstream.slice(0, slash) : upstream;
+  return (
+    <span
+      className="shrink-0 truncate text-[11px] text-muted-foreground"
+      title={`tracks ${upstream}`}
+    >
+      ({remote})
+    </span>
+  );
 }
 
 export function RefsPane() {
@@ -232,14 +304,22 @@ export function RefsPane() {
               }
             >
               <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate font-mono">
+              <span className="min-w-0 flex-1 truncate font-mono">
                 {isDetached ? `${headLabel} (detached)` : headLabel}
               </span>
-              {headTarget && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  {headTarget.slice(0, 7)}
-                </span>
-              )}
+              {/* v0.13.34 — show upstream remote + ahead/behind on the
+                  HEAD row too. The HEAD pin is the one users most often
+                  glance at when deciding whether to pull/push, so it
+                  benefits the most from this status. */}
+              <UpstreamLabel upstream={headBranch?.upstream} />
+              {headBranch && <TrackingStatus r={headBranch} />}
+              {headTarget &&
+                !headBranch?.ahead &&
+                !headBranch?.behind && (
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {headTarget.slice(0, 7)}
+                  </span>
+                )}
             </div>
           );
         })()}
@@ -272,7 +352,10 @@ export function RefsPane() {
                     title="Click: jump to tip · right-click: actions"
                   >
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="flex-1 truncate font-mono">{r.name}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono">{r.name}</span>
+                    {/* v0.13.34 — IDEA-style remote suffix + ahead/behind. */}
+                    <UpstreamLabel upstream={r.upstream} />
+                    <TrackingStatus r={r} />
                   </div>
                 );
               })}
