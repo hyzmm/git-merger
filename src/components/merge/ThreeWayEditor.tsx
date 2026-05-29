@@ -208,7 +208,7 @@ export function ThreeWayEditor() {
         }}
       >
         {/* LEFT (ours) */}
-        <div className={cn(COL_BASE, "border-r border-border")}>
+        <div className={cn(COL_BASE, "border-r border-border h-full overflow-hidden")}>
           <div className={cn(HEAD_BASE)} style={{ borderBottomColor: "hsl(199 89% 60% / .35)" }}>
             <span className="font-semibold" style={{ color: "hsl(199 89% 60%)" }}>
               LEFT — ours
@@ -222,7 +222,7 @@ export function ThreeWayEditor() {
 
         {/* BASE (common ancestor) — v0.13.18, optional 4th column */}
         {showBase && hasAncestor && (
-          <div className={cn(COL_BASE, "border-r border-border")}>
+          <div className={cn(COL_BASE, "border-r border-border h-full overflow-hidden")}>
             <div className={cn(HEAD_BASE)} style={{ borderBottomColor: "hsl(0 0% 60% / .35)" }}>
               <span className="font-semibold text-muted-foreground">BASE — common ancestor</span>
               <span className="text-[10.5px] text-muted-foreground">
@@ -236,7 +236,7 @@ export function ThreeWayEditor() {
         )}
 
         {/* CENTER (result) */}
-        <div className={cn(COL_BASE, "border-r border-border")}>
+        <div className={cn(COL_BASE, "border-r border-border h-full overflow-hidden")}>
           <div className={cn(HEAD_BASE)} style={{ borderBottomColor: "hsl(142 70% 55% / .4)" }}>
             <span className="font-semibold" style={{ color: "hsl(142 70% 55%)" }}>
               RESULT
@@ -255,7 +255,7 @@ export function ThreeWayEditor() {
         </div>
 
         {/* RIGHT (theirs) */}
-        <div className={COL_BASE}>
+        <div className={cn(COL_BASE, "h-full overflow-hidden")}>
           <div className={cn(HEAD_BASE)} style={{ borderBottomColor: "hsl(280 70% 70% / .35)" }}>
             <span className="font-semibold" style={{ color: "hsl(280 70% 70%)" }}>
               RIGHT — theirs

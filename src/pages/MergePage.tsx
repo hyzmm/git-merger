@@ -116,7 +116,7 @@ export function MergePage() {
         <div className="min-h-0 border-r border-border">
           <ConflictsList />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 h-full overflow-hidden">
           <ThreeWayEditor />
         </div>
       </div>
