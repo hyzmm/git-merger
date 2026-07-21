@@ -9,6 +9,7 @@ import { isImagePath } from "@/lib/imageMime";
 import { SideBySide, Unified } from "./DiffViews";
 import { ImageDiff } from "./ImageDiff";
 import { WorkingDiffEditor } from "./WorkingDiffEditor";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { DiffSearchBar } from "./DiffSearchBar";
 
 export function DiffViewer() {
@@ -54,7 +55,6 @@ export function DiffViewer() {
   const [copied, setCopied] = useState(false);
   const copyPatch = useCallback(async () => {
     if (!repo || !file) return;
-    try {
       const patch =
         oid === WORKING_OID
           ? await git.formatWorkingFilePatch(repo.path, file)
@@ -65,12 +65,10 @@ export function DiffViewer() {
         toast.warning("No diff content to copy.");
         return;
       }
-      await navigator.clipboard.writeText(patch);
+      await writeText(patch);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
-    } catch (e) {
-      toast.error(`Failed to copy patch: ${String(e)}`);
-    }
+
   }, [repo, file, oid]);
 
   const containerRef = useRef<HTMLDivElement>(null);

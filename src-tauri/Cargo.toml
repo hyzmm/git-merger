@@ -32,6 +32,7 @@ base64 = "0.22"
 # both need a one-shot temp file at runtime (sig file for gpg, message buffer
 # for the hook). Keep the same `3` major to avoid an unnecessary lockfile churn.
 tempfile = "3"
+tauri-plugin-clipboard-manager = "2"
 
 [profile.release]
 opt-level = "s"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { useSettings } from "@/stores/settings";
@@ -34,21 +35,6 @@ interface MenuState {
   items: MenuItem[];
 }
 
-async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Fallback: textarea + execCommand
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-  }
-}
 
 export function CommitList() {
   const commits = useApp((s) => s.history.commits);
@@ -409,11 +395,11 @@ export function CommitList() {
       { separator: true, label: "" },
       {
         label: `Copy SHA (${c.short_oid})`,
-        onClick: () => void copyText(c.oid),
+        onClick: () =>  writeText(c.oid),
       },
       {
         label: "Copy commit message",
-        onClick: () => void copyText(c.summary),
+        onClick: () =>  writeText(c.summary),
       },
     ];
     setMenu({ pos: { x: e.clientX, y: e.clientY }, items });

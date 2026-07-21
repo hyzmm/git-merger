@@ -290,9 +290,16 @@ mod tests {
                 failed_oid,
                 pending,
             } => {
-                assert_eq!(applied, 0, "no commits should have landed before the conflict");
+                assert_eq!(
+                    applied, 0,
+                    "no commits should have landed before the conflict"
+                );
                 assert_eq!(failed_oid, c, "stuck on C, the first commit");
-                assert_eq!(pending, vec![c.clone(), d.clone()], "C and D both still pending");
+                assert_eq!(
+                    pending,
+                    vec![c.clone(), d.clone()],
+                    "C and D both still pending"
+                );
             }
         }
         // Repo state should be CHERRY_PICK so the merge view picks it up.
@@ -354,7 +361,10 @@ mod tests {
         .trim()
         .to_string();
         assert_eq!(before, "1");
-        assert_eq!(after, "2", "single cherry-pick should advance HEAD by 1 commit");
+        assert_eq!(
+            after, "2",
+            "single cherry-pick should advance HEAD by 1 commit"
+        );
         assert!(dir.join("c.txt").exists());
     }
 }

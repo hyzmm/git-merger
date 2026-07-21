@@ -7,23 +7,9 @@ import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { BlameLine } from "@/ipc/git";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 const ROW_HEIGHT = 20;
-
-async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-  }
-}
 
 export function BlamePage() {
   const file = useApp((s) => s.blame.file);
@@ -78,15 +64,15 @@ export function BlamePage() {
       { separator: true, label: "" },
       {
         label: `Copy SHA (${ln.short_oid})`,
-        onClick: () => void copyText(ln.oid),
+        onClick: () => writeText(ln.oid),
       },
       {
         label: "Copy commit summary",
-        onClick: () => void copyText(ln.summary),
+        onClick: () => writeText(ln.summary),
       },
       {
         label: "Copy line content",
-        onClick: () => void copyText(ln.content),
+        onClick: () => writeText(ln.content),
       },
     ];
     setMenu({ pos: { x: e.clientX, y: e.clientY }, items });

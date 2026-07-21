@@ -23,6 +23,7 @@ import {
   type FileChange,
   type VerifyResult,
 } from "@/ipc/git";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 const STATUS_LABEL: Record<FileChange["status"], string> = {
   added: "A",
@@ -44,12 +45,8 @@ const STATUS_COLOR: Record<FileChange["status"], string> = {
 
 /** Copy text to clipboard with a tiny success toast. */
 async function copyText(text: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success(`Copied ${label}`);
-  } catch {
-    // navigator.clipboard fails on insecure contexts; fall back silently.
-  }
+  await writeText(text);
+  toast.success(`Copied ${label}`);
 }
 
 export function CommitDetails() {

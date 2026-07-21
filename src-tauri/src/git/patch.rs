@@ -233,7 +233,11 @@ mod tests {
         let dir = tmp_repo("bad");
         fs::write(dir.join("a.txt"), "hello\n").unwrap();
         commit_all(&dir, "init");
-        let res = apply_patch_check(dir.to_str().unwrap(), "not a patch at all", PatchLocation::WorkDir);
+        let res = apply_patch_check(
+            dir.to_str().unwrap(),
+            "not a patch at all",
+            PatchLocation::WorkDir,
+        );
         assert!(res.is_err(), "garbage patch should fail to parse / apply");
     }
 
