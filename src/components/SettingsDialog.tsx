@@ -26,6 +26,7 @@ export function SettingsDialog({ open, onClose }: Props) {
   const fontSize = useSettings((s) => s.fontSize);
   const tabSize = useSettings((s) => s.tabSize);
   const graphMode = useSettings((s) => s.graphMode);
+  const mergeAuthorsByName = useSettings((s) => s.mergeAuthorsByName);
   const setSetting = useSettings((s) => s.set);
   const reset = useSettings((s) => s.reset);
   const locale = useI18n((s) => s.locale);
@@ -241,6 +242,19 @@ export function SettingsDialog({ open, onClose }: Props) {
                 {t("settings.resetAppearance")}
               </button>
             </div>
+          </Section>
+
+          <Section title={t("settings.stats")} subtitle={t("settings.stats.mergeAuthorsByName.subtitle")}>
+            <Row label={t("settings.stats.mergeAuthorsByName")}>
+              <SegGroup<"on" | "off">
+                value={mergeAuthorsByName ? "on" : "off"}
+                options={[
+                  { v: "off", label: t("settings.signing.off") },
+                  { v: "on", label: t("settings.signing.on") },
+                ]}
+                onChange={(v) => setSetting({ mergeAuthorsByName: v === "on" })}
+              />
+            </Row>
           </Section>
 
           <Section title={t("settings.gitConfig")} subtitle={t("settings.gitConfig.subtitle")}>

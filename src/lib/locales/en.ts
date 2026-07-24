@@ -16,6 +16,7 @@ export const en = {
   "sidebar.tags": "Tags",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
+  "sidebar.stats": "Stats",
 
   // Topbar
   "topbar.openRepo": "Open Repository",
@@ -107,6 +108,12 @@ export const en = {
   "settings.signing.failedRead": "Failed to read signing config",
   "settings.signing.failedSave": "Failed to save",
   "settings.close": "Close",
+
+  // Stats settings
+  "settings.stats": "Statistics",
+  "settings.stats.mergeAuthorsByName": "Merge authors by name",
+  "settings.stats.mergeAuthorsByName.subtitle":
+    "Treat authors with the same name but different emails as the same person.",
 
   // Common buttons / actions
   "common.cancel": "Cancel",

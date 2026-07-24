@@ -14,6 +14,7 @@ export const zh: Dict = {
   "sidebar.tags": "Tag 管理",
   "sidebar.diff": "Diff",
   "sidebar.merge": "合并",
+  "sidebar.stats": "统计",
 
   // Topbar
   "topbar.openRepo": "打开仓库",
@@ -103,6 +104,11 @@ export const zh: Dict = {
   "settings.signing.failedRead": "读取签名配置失败",
   "settings.signing.failedSave": "保存失败",
   "settings.close": "关闭",
+
+  // Stats settings
+  "settings.stats": "统计",
+  "settings.stats.mergeAuthorsByName": "按姓名合并作者",
+  "settings.stats.mergeAuthorsByName.subtitle": "姓名相同但邮箱不同的作者视为同一人。",
 
   // Common
   "common.cancel": "取消",

@@ -23,6 +23,7 @@ import { WorktreesPage } from "@/pages/WorktreesPage";
 import { GitignorePage } from "@/pages/GitignorePage";
 import { SearchPage } from "@/pages/SearchPage";
 import { TagsPage } from "@/pages/TagsPage";
+import { StatsPage } from "@/pages/StatsPage";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { isAppErrorThrown } from "@/ipc/invoke";
@@ -178,6 +179,8 @@ export default function App() {
             <TagsPage />
           ) : view === "fileHistory" ? (
             <FileHistoryPage />
+          ) : view === "stats" ? (
+            <StatsPage />
           ) : (
             <BlamePage />
           )}

@@ -694,3 +694,50 @@ pub fn search_commits(
         max_hits,
     )?)
 }
+
+#[tauri::command]
+pub fn git_stats_overview(
+    path: String,
+    since: Option<i64>,
+    until: Option<i64>,
+    branch: Option<String>,
+    author: Option<String>,
+    merge_by_name: Option<bool>,
+) -> R<git::StatsOverview> {
+    Ok(git::stats::stats_overview(
+        &path,
+        since,
+        until,
+        branch.as_deref(),
+        author.as_deref(),
+        merge_by_name.unwrap_or(false),
+    )?)
+}
+
+#[tauri::command]
+pub fn git_stats_branches(
+    path: String,
+    since: Option<i64>,
+    until: Option<i64>,
+) -> R<git::StatsBranches> {
+    Ok(git::stats::stats_branches(&path, since, until)?)
+}
+
+#[tauri::command]
+pub fn git_stats_churn(
+    path: String,
+    since: Option<i64>,
+    until: Option<i64>,
+    branch: Option<String>,
+    author: Option<String>,
+    merge_by_name: Option<bool>,
+) -> R<git::StatsChurn> {
+    Ok(git::stats::stats_churn(
+        &path,
+        since,
+        until,
+        branch.as_deref(),
+        author.as_deref(),
+        merge_by_name.unwrap_or(false),
+    )?)
+}

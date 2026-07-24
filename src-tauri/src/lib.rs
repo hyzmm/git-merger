@@ -97,6 +97,9 @@ pub fn run() {
             commands::commit_signature_status,
             commands::verify_commit_signature,
             commands::search_commits,
+            commands::git_stats_overview,
+            commands::git_stats_branches,
+            commands::git_stats_churn,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

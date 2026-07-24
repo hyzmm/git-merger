@@ -413,6 +413,86 @@ export interface SearchSummary {
   truncated: boolean;
 }
 
+// ---------- Repository statistics (split into 3 parallel calls) ----------
+
+export interface TimelinePoint {
+  period: string;
+  commits: number;
+}
+
+export interface HeatmapDay {
+  date: string;
+  count: number;
+}
+
+export interface AuthorOverview {
+  name: string;
+  email: string;
+  commits: number;
+  first_commit: number;
+  last_commit: number;
+}
+
+/** Fast metadata-only stats (no tree diffs). */
+export interface StatsOverview {
+  total_commits: number;
+  total_authors: number;
+  active_branches: number;
+  timeline: TimelinePoint[];
+  heatmap: HeatmapDay[];
+  authors: AuthorOverview[];
+  hour_distribution: number[];
+  weekday_distribution: number[];
+}
+
+export interface BranchStats {
+  name: string;
+  commits: number;
+}
+
+export interface BranchLifecycle {
+  name: string;
+  created_at: number | null;
+  last_commit: number;
+  commit_count: number;
+  merged: boolean;
+  ahead_of_main: number;
+}
+
+/** Branch stats + lifecycle (no per-commit diffs). */
+export interface StatsBranches {
+  branches: BranchStats[];
+  branch_lifecycle: BranchLifecycle[];
+}
+
+export interface ChurnPoint {
+  period: string;
+  insertions: number;
+  deletions: number;
+}
+
+export interface FileHotspot {
+  path: string;
+  change_count: number;
+  total_churn: number;
+}
+
+export interface AuthorChurn {
+  name: string;
+  email: string;
+  insertions: number;
+  deletions: number;
+}
+
+/** Diff-based stats (the expensive part, loaded separately). */
+export interface StatsChurn {
+  total_insertions: number;
+  total_deletions: number;
+  churn: ChurnPoint[];
+  file_hotspots: FileHotspot[];
+  author_churn: AuthorChurn[];
+}
+
 // ---------- Commit signing (v0.13.19) ----------
 
 /**
@@ -788,5 +868,43 @@ export const git = {
       pathspec: opts?.pathspec ?? null,
       maxCommits: opts?.maxCommits ?? null,
       maxHits: opts?.maxHits ?? null,
+    }),
+  statsOverview: (
+    path: string,
+    since?: number | null,
+    until?: number | null,
+    branch?: string | null,
+    author?: string | null,
+    mergeByName?: boolean,
+  ) =>
+    invoke<StatsOverview>("git_stats_overview", {
+      path,
+      since: since ?? null,
+      until: until ?? null,
+      branch: branch ?? null,
+      author: author ?? null,
+      mergeByName: mergeByName ?? null,
+    }),
+  statsBranches: (path: string, since?: number | null, until?: number | null) =>
+    invoke<StatsBranches>("git_stats_branches", {
+      path,
+      since: since ?? null,
+      until: until ?? null,
+    }),
+  statsChurn: (
+    path: string,
+    since?: number | null,
+    until?: number | null,
+    branch?: string | null,
+    author?: string | null,
+    mergeByName?: boolean,
+  ) =>
+    invoke<StatsChurn>("git_stats_churn", {
+      path,
+      since: since ?? null,
+      until: until ?? null,
+      branch: branch ?? null,
+      author: author ?? null,
+      mergeByName: mergeByName ?? null,
     }),
 };

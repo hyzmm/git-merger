@@ -89,7 +89,8 @@ export type ViewKey =
   | "gitignore"
   | "search"
   | "tags"
-  | "fileHistory";
+  | "fileHistory"
+  | "stats";
 export type DiffMode = "sbs" | "unified";
 
 interface HistoryState {

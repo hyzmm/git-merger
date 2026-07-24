@@ -36,6 +36,12 @@ export interface UiSettings {
    * Clamped to [HISTORY_RIGHT_MIN, HISTORY_RIGHT_MAX] on load.
    */
   historyRightWidth: number;
+  /**
+   * When true, stats pages group authors by name (case-insensitive)
+   * instead of email, merging different email addresses that share the
+   * same display name into a single author entry.
+   */
+  mergeAuthorsByName: boolean;
 }
 
 /**
@@ -56,6 +62,7 @@ const DEFAULT: UiSettings = {
   graphMode: "normal",
   historyLeftWidth: 220,
   historyRightWidth: 380,
+  mergeAuthorsByName: false,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -90,6 +97,10 @@ function load(): UiSettings {
         typeof parsed.historyRightWidth === "number"
           ? clamp(parsed.historyRightWidth, HISTORY_RIGHT_MIN, HISTORY_RIGHT_MAX)
           : DEFAULT.historyRightWidth,
+      mergeAuthorsByName:
+        typeof parsed.mergeAuthorsByName === "boolean"
+          ? parsed.mergeAuthorsByName
+          : DEFAULT.mergeAuthorsByName,
     };
   } catch {
     return { ...DEFAULT };
@@ -132,6 +143,7 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       graphMode: next.graphMode,
       historyLeftWidth: next.historyLeftWidth,
       historyRightWidth: next.historyRightWidth,
+      mergeAuthorsByName: next.mergeAuthorsByName,
     });
     applySettings(next);
     set(next);

@@ -11,6 +11,7 @@ import {
   FileX,
   Search,
   Tag,
+  BarChart3,
 } from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { useT, type TKey } from "@/lib/i18n";
@@ -29,6 +30,7 @@ const items: { key: ViewKey; labelKey: TKey; Icon: typeof History }[] = [
   { key: "tags", labelKey: "sidebar.tags", Icon: Tag },
   { key: "diff", labelKey: "sidebar.diff", Icon: GitCompare },
   { key: "merge", labelKey: "sidebar.merge", Icon: GitMerge },
+  { key: "stats", labelKey: "sidebar.stats", Icon: BarChart3 },
 ];
 
 export function Sidebar() {
