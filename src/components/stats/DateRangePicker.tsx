@@ -108,11 +108,11 @@ export function DateRangePicker({ value, onChange }: Props) {
 
       {preset === "custom" && (
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
+          <PopoverTrigger render={
             <Button variant="outline" size="icon" className="h-7 w-7 shrink-0">
               <CalendarIcon className="h-3.5 w-3.5" />
             </Button>
-          </PopoverTrigger>
+          } />
           <PopoverContent className="w-auto p-3" align="start">
             <Calendar
               mode="range"
