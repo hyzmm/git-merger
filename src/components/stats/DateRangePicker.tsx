@@ -24,9 +24,9 @@ type Preset = "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
 const PRESET_OPTIONS: { value: Preset; label: string }[] = [
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
-  { value: "thisMonth", label: "This natural month" },
-  { value: "lastMonth", label: "Last natural month" },
-  { value: "custom", label: "自定义" },
+  { value: "thisMonth", label: "This month" },
+  { value: "lastMonth", label: "Last month" },
+  { value: "custom", label: "Custom" },
 ];
 
 const DATE_FMT = "yyyy-MM-dd";

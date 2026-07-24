@@ -20,6 +20,7 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { type AppError, formatAppError, parseAppError } from "../lib/appError";
 import { toast } from "../lib/toast";
+import { ipcLog } from "../lib/ipcLog";
 
 export interface InvokeOptions {
   /** When true, a failure also pushes an `error` toast before rejecting. */
@@ -53,9 +54,15 @@ export function isAppErrorThrown(e: unknown): e is AppErrorThrown {
  * normalises the rejection path to `AppErrorThrown`.
  */
 export async function invoke<T>(cmd: string, args?: InvokeArgs, opts?: InvokeOptions): Promise<T> {
+  const t0 = performance.now();
   try {
-    return await tauriInvoke<T>(cmd, args);
+    const result = await tauriInvoke<T>(cmd, args);
+    const durationMs = Math.round((performance.now() - t0) * 100) / 100;
+    ipcLog.push({ command: cmd, durationMs, timestamp: new Date().toISOString(), ok: true });
+    return result;
   } catch (raw) {
+    const durationMs = Math.round((performance.now() - t0) * 100) / 100;
+    ipcLog.push({ command: cmd, durationMs, timestamp: new Date().toISOString(), ok: false });
     const appError = parseAppError(raw);
     if (opts?.toastOnError) {
       toast.error(opts.toastTitle ?? formatAppError(appError));

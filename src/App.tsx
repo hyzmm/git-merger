@@ -4,7 +4,10 @@ import { useApp } from "@/stores/app";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { RepoTabs } from "@/components/RepoTabs";
+import { StatusBar } from "@/components/StatusBar";
+import { OutputPanel } from "@/components/OutputPanel";
 import { CredentialDialog } from "@/components/CredentialDialog";
+import { useIpcLog } from "@/lib/ipcLog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RecentFilesPalette } from "@/components/RecentFilesPalette";
@@ -44,6 +47,8 @@ export default function App() {
   const activeTabId = useApp((s) => s.activeTabId);
   const tabs = useApp((s) => s.tabs);
   const cycleTab = useApp((s) => s.cycleTab);
+
+  const panelOpen = useIpcLog((s) => s.panelOpen);
 
   const firstPendingIdx = useMemo(() => {
     for (const c of chunks) {
@@ -145,47 +150,55 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <RepoTabs />
-        <Topbar />
-        <main className="min-h-0 flex-1 overflow-hidden">
-          {!repo ? (
-            <WelcomePage />
-          ) : view === "history" ? (
-            <HistoryPage />
-          ) : view === "diff" ? (
-            <DiffPage />
-          ) : view === "merge" ? (
-            <MergePage />
-          ) : view === "changes" ? (
-            <ChangesPage />
-          ) : view === "stash" ? (
-            <StashPage />
-          ) : view === "reflog" ? (
-            <ReflogPage />
-          ) : view === "submodules" ? (
-            <SubmodulesPage />
-          ) : view === "rebase" ? (
-            <RebasePage />
-          ) : view === "worktrees" ? (
-            <WorktreesPage />
-          ) : view === "gitignore" ? (
-            <GitignorePage />
-          ) : view === "search" ? (
-            <SearchPage />
-          ) : view === "tags" ? (
-            <TagsPage />
-          ) : view === "fileHistory" ? (
-            <FileHistoryPage />
-          ) : view === "stats" ? (
-            <StatsPage />
-          ) : (
-            <BlamePage />
-          )}
-        </main>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <RepoTabs />
+          <Topbar />
+          <main className="min-h-0 flex-1 overflow-hidden">
+            {!repo ? (
+              <WelcomePage />
+            ) : view === "history" ? (
+              <HistoryPage />
+            ) : view === "diff" ? (
+              <DiffPage />
+            ) : view === "merge" ? (
+              <MergePage />
+            ) : view === "changes" ? (
+              <ChangesPage />
+            ) : view === "stash" ? (
+              <StashPage />
+            ) : view === "reflog" ? (
+              <ReflogPage />
+            ) : view === "submodules" ? (
+              <SubmodulesPage />
+            ) : view === "rebase" ? (
+              <RebasePage />
+            ) : view === "worktrees" ? (
+              <WorktreesPage />
+            ) : view === "gitignore" ? (
+              <GitignorePage />
+            ) : view === "search" ? (
+              <SearchPage />
+            ) : view === "tags" ? (
+              <TagsPage />
+            ) : view === "fileHistory" ? (
+              <FileHistoryPage />
+            ) : view === "stats" ? (
+              <StatsPage />
+            ) : (
+              <BlamePage />
+            )}
+          </main>
+        </div>
       </div>
+      {panelOpen && (
+        <div className="h-48 shrink-0">
+          <OutputPanel />
+        </div>
+      )}
+      <StatusBar />
       <CredentialDialog />
       <CommandPalette />
       <RecentFilesPalette />
