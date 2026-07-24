@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { useApp } from "@/stores/app";
 import { git } from "@/ipc/git";
@@ -265,37 +266,34 @@ export function ChangesPage() {
               className="inline-flex cursor-pointer select-none items-center gap-1.5"
               title="git commit --amend — replace the current HEAD with this commit instead of chaining onto it. Pre-fills the message with HEAD's message; toggle off to restore your previous draft."
             >
-              <input
-                type="checkbox"
-                checked={amend}
-                onChange={(e) => void setAmend(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <span>Amend last commit</span>
+              <Checkbox
+              checked={amend}
+              onCheckedChange={(checked) => void setAmend(checked)}
+              className="h-3.5 w-3.5"
+            />
+            <span>Amend last commit</span>
             </label>
             <label
               className="inline-flex cursor-pointer select-none items-center gap-1.5"
               title="Append a Signed-off-by: trailer using user.name and user.email (DCO compliance)."
             >
-              <input
-                type="checkbox"
-                checked={signoff}
-                onChange={(e) => setSignoff(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <span>Sign off</span>
+              <Checkbox
+              checked={signoff}
+              onCheckedChange={(checked) => void setSignoff(checked)}
+              className="h-3.5 w-3.5"
+            />
+            <span>Sign off</span>
             </label>
             <label
               className="inline-flex cursor-pointer select-none items-center gap-1.5"
               title="git commit --no-verify — skip pre-commit, commit-msg, and post-commit hooks for THIS commit only."
             >
-              <input
-                type="checkbox"
-                checked={skipHooks}
-                onChange={(e) => setSkipHooks(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <span>Skip hooks</span>
+              <Checkbox
+              checked={skipHooks}
+              onCheckedChange={(checked) => void setSkipHooks(checked)}
+              className="h-3.5 w-3.5"
+            />
+            <span>Skip hooks</span>
             </label>
           </div>
 
@@ -416,10 +414,9 @@ function Section({
               isSelected && "bg-accent/60",
             )}
           >
-            <input
-              type="checkbox"
+            <Checkbox
               checked={isSelected}
-              onChange={() => toggle(f.path)}
+              onCheckedChange={() => toggle(f.path)}
               className="accent-[hsl(var(--branch-1))]"
               aria-label={`Select ${f.path}`}
             />

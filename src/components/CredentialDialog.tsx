@@ -4,6 +4,7 @@
  * `submit_credentials` (or `cancel_credentials`) command, which unblocks
  * libgit2's credential callback waiting on the other side.
  */
+import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { KeyRound, X } from "lucide-react";
@@ -86,11 +87,11 @@ export function CredentialDialog() {
             <span className="mb-1 block text-xs font-medium text-muted-foreground">
               {t("creds.username")}
             </span>
-            <input
+            <Input
               autoFocus={!username}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary"
+              className="w-full"
             />
           </label>
 
@@ -98,12 +99,12 @@ export function CredentialDialog() {
             <span className="mb-1 block text-xs font-medium text-muted-foreground">
               {t("creds.password")}
             </span>
-            <input
+            <Input
               autoFocus={!!username}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary"
+              className="w-full"
             />
             <span className="mt-1 block text-[10.5px] text-muted-foreground">
               {t("creds.tokenHint")}

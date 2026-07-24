@@ -1,3 +1,10 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useState, useCallback, useMemo } from "react";
 import { format, startOfMonth, endOfMonth, subMonths, subDays } from "date-fns";
 import { CalendarIcon } from "lucide-react";
@@ -94,17 +101,21 @@ export function DateRangePicker({ value, onChange }: Props) {
 
   return (
     <div className="flex items-center gap-1.5">
-      <select
+      <Select
         value={preset}
-        onChange={(e) => handlePresetChange(e.target.value as Preset)}
-        className="h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+        onValueChange={(v) => handlePresetChange(v as Preset)}
       >
-        {PRESET_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-7 px-2 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PRESET_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {preset === "custom" && (
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>

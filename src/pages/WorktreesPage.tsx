@@ -3,6 +3,7 @@
  * current repository. The main checkout is always shown at the top with
  * a "main" badge. Linked worktrees show their branch + HEAD short oid.
  */
+import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import { GitBranch, Plus, Trash2, Lock, AlertTriangle, Trees } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -205,11 +206,11 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
     <div className="flex flex-col gap-2 border-b border-border bg-secondary/40 px-3 py-2 text-xs">
       <div className="flex items-center gap-2">
         <label className="w-24 text-muted-foreground">{t("worktrees.formPath")}</label>
-        <input
+        <Input
           value={path}
           onChange={(e) => setPath(e.target.value)}
           placeholder={t("worktrees.formPathPh")}
-          className="h-7 flex-1 rounded-md border border-border bg-background px-2 font-mono text-[11px] focus:border-primary focus:outline-none"
+          className="h-7 flex-1 font-mono text-[11px]"
         />
         <button
           onClick={() => void pickFolder()}
@@ -220,20 +221,20 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
       </div>
       <div className="flex items-center gap-2">
         <label className="w-24 text-muted-foreground">{t("worktrees.formName")}</label>
-        <input
+        <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t("worktrees.formNamePh")}
-          className="h-7 flex-1 rounded-md border border-border bg-background px-2 font-mono text-[11px] focus:border-primary focus:outline-none"
+          className="h-7 flex-1 font-mono text-[11px]"
         />
       </div>
       <div className="flex items-center gap-2">
         <label className="w-24 text-muted-foreground">{t("worktrees.formBranch")}</label>
-        <input
+        <Input
           value={branch}
           onChange={(e) => setBranch(e.target.value)}
           placeholder={t("worktrees.formBranchPh")}
-          className="h-7 flex-1 rounded-md border border-border bg-background px-2 font-mono text-[11px] focus:border-primary focus:outline-none"
+          className="h-7 flex-1 font-mono text-[11px]"
         />
       </div>
       <div className="flex justify-end gap-1.5">

@@ -1,3 +1,11 @@
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMemo, useState } from "react";
 import { Filter, X, GitBranch, Eye, EyeOff } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -75,11 +83,11 @@ export function HistoryFilterBar() {
   return (
     <div className="flex flex-col gap-1.5 border-b border-border bg-card px-3 py-1.5">
       <div className="flex items-center gap-2">
-        <input
+        <Input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter commits (message, author, oid, ref)..."
-          className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring"
+          className="h-7 flex-1 text-xs"
         />
         <button
           onClick={() => setAdvOpen((v) => !v)}
@@ -120,36 +128,37 @@ export function HistoryFilterBar() {
       {advOpen && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <Label>Author</Label>
-          <select
-            value={author ?? ""}
-            onChange={(e) => setAuthor(e.target.value || null)}
-            className="h-7 min-w-[160px] rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
-          >
-            <option value="">All authors</option>
-            {authorList.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+          <Select value={author ?? ""} onValueChange={(v) => setAuthor(v || null)}>
+            <SelectTrigger className="h-7 min-w-[160px] px-1.5 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All authors</SelectItem>
+              {authorList.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Label>From</Label>
-          <input
+          <Input
             type="date"
             value={sinceInput}
             onChange={(e) => onSinceChange(e.target.value)}
-            className="h-7 rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
+            className="h-7 text-xs"
           />
           <Label>To</Label>
-          <input
+          <Input
             type="date"
             value={untilInput}
             onChange={(e) => onUntilChange(e.target.value)}
-            className="h-7 rounded-md border border-input bg-background px-1.5 text-xs outline-none focus:border-ring"
+            className="h-7 text-xs"
           />
 
           <Label>Path</Label>
-          <input
+          <Input
             value={pathInput}
             onChange={(e) => setPathInput(e.target.value)}
             onBlur={commitPath}
@@ -161,7 +170,7 @@ export function HistoryFilterBar() {
             }}
             placeholder="src/git/  ·  README.md"
             title="Only show commits that touch this path (file or directory). Press Enter to apply."
-            className="h-7 w-56 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+            className="h-7 w-56 font-mono text-xs"
           />
         </div>
       )}

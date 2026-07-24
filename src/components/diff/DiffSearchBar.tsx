@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Regex, X, CaseSensitive } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -92,7 +93,7 @@ export function DiffSearchBar() {
       // dismiss any popovers above us.
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <input
+      <Input
         ref={inputRef}
         type="text"
         value={query}

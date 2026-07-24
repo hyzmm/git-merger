@@ -11,6 +11,7 @@
  * Tracked files open in Blame; commits select-and-jump in History; refs
  * checkout (for local branches) or jump to their commit; views switch.
  */
+import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -232,7 +233,7 @@ export function CommandPalette() {
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <input
+          <Input
             ref={inputRef}
             value={query}
             onChange={(e) => {

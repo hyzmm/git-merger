@@ -5,6 +5,14 @@ import { useSettings, type GraphMode, type ThemeMode } from "@/stores/settings";
 import { useI18n, useT, type Locale } from "@/lib/i18n";
 import { git } from "@/ipc/git";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   open: boolean;
@@ -265,17 +273,18 @@ export function SettingsDialog({ open, onClose }: Props) {
             ) : (
               <>
                 <Row label="core.autocrlf">
-                  <select
-                    value={autocrlf}
-                    onChange={(e) => setAutocrlf(e.target.value)}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring"
-                  >
-                    {AUTOCRLF_VALUES.map((o) => (
-                      <option key={o.v} value={o.v}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={autocrlf} onValueChange={(v) => setAutocrlf(v ?? "")}>
+                    <SelectTrigger className="h-8 w-full px-2 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUTOCRLF_VALUES.map((o) => (
+                        <SelectItem key={o.v} value={o.v}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Row>
                 <Row label={t("settings.gitConfig.scope")}>
                   <SegGroup<"local" | "global">
@@ -343,7 +352,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                   />
                 </Row>
                 <Row label={t("settings.signing.signingKey")}>
-                  <input
+                  <Input
                     type="text"
                     value={signKey}
                     onChange={(e) => setSignKey(e.target.value)}
@@ -352,7 +361,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                         ? t("settings.signing.signingKey.placeholderSsh")
                         : t("settings.signing.signingKey.placeholderGpg")
                     }
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+                    className="h-8 font-mono text-xs"
                     spellCheck={false}
                   />
                 </Row>
@@ -363,7 +372,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                       : t("settings.signing.gpgProgram")
                   }
                 >
-                  <input
+                  <Input
                     type="text"
                     value={signFormat === "ssh" ? signSshProgram : signGpgProgram}
                     onChange={(e) =>
@@ -372,7 +381,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                         : setSignGpgProgram(e.target.value)
                     }
                     placeholder={signFormat === "ssh" ? "ssh-keygen" : "gpg"}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring"
+                    className="h-8 font-mono text-xs"
                     spellCheck={false}
                   />
                 </Row>

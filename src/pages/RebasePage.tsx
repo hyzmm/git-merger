@@ -7,6 +7,13 @@
  *   - executing: backend has begun replaying. We show a progress bar and the
  *     remaining steps; on conflict we route the user to the Merge view.
  */
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useEffect } from "react";
 import { ArrowDown, ArrowUp, GitMerge, RotateCcw } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -258,22 +265,28 @@ function PlanRow({
           </button>
         </div>
 
-        <select
+        <Select
           value={step.action}
           disabled={disabled}
-          onChange={(e) => onChange({ action: e.target.value as RebaseAction })}
-          className={cn(
-            "h-6 rounded border border-border px-1.5 text-[10.5px] font-medium uppercase tracking-wider outline-none",
-            ACTION_TONES[step.action],
-            disabled && "cursor-not-allowed opacity-70",
-          )}
+          onValueChange={(v) => onChange({ action: v as RebaseAction })}
         >
-          {ALL_ACTIONS.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className={cn(
+              "h-6 border border-border px-1.5 text-[10.5px] font-medium uppercase tracking-wider outline-none",
+              ACTION_TONES[step.action],
+              disabled && "cursor-not-allowed opacity-70",
+            )}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ALL_ACTIONS.map((a) => (
+              <SelectItem key={a} value={a}>
+                {a}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <span className="font-mono text-[11px] text-[hsl(var(--branch-1))]">{step.short_oid}</span>
         <span

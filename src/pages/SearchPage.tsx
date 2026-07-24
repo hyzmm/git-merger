@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   ArrowRight,
@@ -127,14 +128,14 @@ export function SearchPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="relative flex-1" ref={recentsAnchorRef}>
-              <input
+              <Input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={submitOnEnter}
                 placeholder={t("search.placeholder")}
-                className="h-8 w-full rounded border border-border bg-background pl-2 pr-8 font-mono text-[12.5px] outline-none focus:border-primary"
+                className="h-8 w-full pl-2 pr-8 font-mono text-[12.5px]"
               />
               {recents.length > 0 && (
                 <button
@@ -244,12 +245,12 @@ export function SearchPage() {
 
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">{t("search.path")}:</span>
-              <input
+              <Input
                 type="text"
                 value={pathspec}
                 onChange={(e) => setSearchPathspec(e.target.value)}
                 placeholder={t("search.pathPlaceholder")}
-                className="h-6 w-44 rounded border border-border bg-background px-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                className="h-6 w-44 font-mono text-[11px]"
               />
             </div>
 

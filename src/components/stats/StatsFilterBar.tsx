@@ -1,3 +1,10 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DateRangePicker, type DateRange } from "./DateRangePicker";
 
 interface Props {
@@ -41,32 +48,43 @@ export function StatsFilterBar({
       <DateRangePicker value={dateRange} onChange={onDateRangeChange} />
 
       {/* Branch selector */}
-      <select
+      <Select
         value={branch ?? ""}
-        onChange={(e) => onBranchChange(e.target.value || null)}
-        className="h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+        onValueChange={(v) => onBranchChange(v || null)}
       >
-        <option value="">All Branches</option>
-        {branches.map((b) => (
-          <option key={b} value={b}>
-            {b}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-7 px-2 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All Branches</SelectItem>
+          {branches.map((b) => (
+            <SelectItem key={b} value={b}>
+              {b}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Author selector */}
-      <select
+      <Select
         value={author ?? ""}
-        onChange={(e) => onAuthorChange(e.target.value || null)}
-        className="h-7 max-w-44 rounded-md border border-border bg-card px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+        onValueChange={(v) => onAuthorChange(v || null)}
       >
-        <option value="">All Authors</option>
-        {uniqueAuthors.map((a) => (
-          <option key={mergeByName ? a.name.toLowerCase() : a.email} value={mergeByName ? a.name.toLowerCase() : a.email}>
-            {a.name || a.email}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-7 max-w-44 px-2 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All Authors</SelectItem>
+          {uniqueAuthors.map((a) => (
+            <SelectItem
+              key={mergeByName ? a.name.toLowerCase() : a.email}
+              value={mergeByName ? a.name.toLowerCase() : a.email}
+            >
+              {a.name || a.email}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { useMemo, useState, type DragEvent } from "react";
 import { X, Plus, Pin, PinOff } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -178,7 +179,7 @@ export function RepoTabs() {
               )}
               {tab.pinned && <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />}
               {isEditing ? (
-                <input
+                <Input
                   autoFocus
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -191,7 +192,7 @@ export function RepoTabs() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="h-5 w-32 rounded border border-border bg-background px-1 text-[11.5px] outline-none focus:border-primary"
+                  className="h-5 w-32 px-1 text-[11.5px]"
                 />
               ) : (
                 <span className="max-w-[200px] truncate font-mono">{tab.label}</span>
