@@ -19,7 +19,6 @@ import { confirm } from "@/lib/confirm";
 import { Button } from "@/components/ui/button";
 import { AppMenu } from "@/components/AppMenu";
 import { UndoButton } from "@/components/UndoButton";
-import { SettingsDialog } from "@/components/SettingsDialog";
 import { UpdateBadge } from "@/components/UpdateBadge";
 
 type RemoteOp = "fetch" | "pull" | "push";
@@ -504,7 +503,6 @@ export function Topbar() {
           {loading && !progress && <span>{t("topbar.loading")}</span>}
           {error && <span className="text-destructive">{error}</span>}
           <UpdateBadge />
-          <SettingsDialog />
         </div>
       </header>
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useApp } from "@/stores/app";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { RepoTabs } from "@/components/RepoTabs";
@@ -149,12 +151,13 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1">
+    <TooltipProvider>
+      <SidebarProvider>
         <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
+        <SidebarInset>
           <RepoTabs />
           <Topbar />
+
           <main className="min-h-0 flex-1 overflow-hidden">
             {!repo ? (
               <WelcomePage />
@@ -190,8 +193,8 @@ export default function App() {
               <BlamePage />
             )}
           </main>
-        </div>
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
       {panelOpen && (
         <div className="h-48 shrink-0">
           <OutputPanel />
@@ -202,6 +205,6 @@ export default function App() {
       <CommandPalette />
       <RecentFilesPalette />
       <ToastContainer />
-    </div>
+    </TooltipProvider>
   );
 }

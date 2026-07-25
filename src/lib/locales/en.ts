@@ -5,17 +5,18 @@
 export const en = {
   // Sidebar
   "sidebar.history": "History",
-  "sidebar.changes": "Changes (working tree)",
+  "sidebar.changes": "Changes",
   "sidebar.stash": "Stash",
-  "sidebar.reflog": "Reflog (HEAD history)",
+  "sidebar.reflog": "Reflog",
   "sidebar.submodules": "Submodules",
-  "sidebar.rebase": "Interactive Rebase",
+  "sidebar.rebase": "Rebase",
   "sidebar.worktrees": "Worktrees",
-  "sidebar.gitignore": ".gitignore editor",
-  "sidebar.search": "Search history",
+  "sidebar.gitignore": ".gitignore",
+  "sidebar.search": "Search",
   "sidebar.tags": "Tags",
   "sidebar.diff": "Diff",
   "sidebar.merge": "Merge",
+  "sidebar.toggle": "Toggle Sidebar",
   "sidebar.stats": "Stats",
 
   // Topbar

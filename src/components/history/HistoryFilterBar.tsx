@@ -1,11 +1,5 @@
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useMemo, useState } from "react";
 import { Filter, X, GitBranch, Eye, EyeOff } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -123,19 +117,14 @@ export function HistoryFilterBar() {
       {advOpen && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <Label>Author</Label>
-          <Select value={author ?? ""} onValueChange={(v) => setAuthor(v || null)}>
-            <SelectTrigger className="h-7 min-w-[160px] px-1.5 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All authors</SelectItem>
-              {authorList.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NativeSelect value={author ?? ""} onChange={(e) => setAuthor(e.target.value || null)}>
+            <NativeSelectOption value="">All authors</NativeSelectOption>
+            {authorList.map((a) => (
+              <NativeSelectOption key={a} value={a}>
+                {a}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
 
           <Label>From</Label>
           <Input

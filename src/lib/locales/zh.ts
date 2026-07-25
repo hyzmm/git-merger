@@ -14,6 +14,7 @@ export const zh: Dict = {
   "sidebar.tags": "Tag 管理",
   "sidebar.diff": "Diff",
   "sidebar.merge": "合并",
+  "sidebar.toggle": "切换侧边栏",
   "sidebar.stats": "统计",
 
   // Topbar

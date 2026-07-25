@@ -8,13 +8,7 @@
  *     remaining steps; on conflict we route the user to the Merge view.
  */
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useEffect } from "react";
 import { ArrowDown, ArrowUp, GitMerge, RotateCcw } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -273,28 +267,23 @@ function PlanRow({
           </Button>
         </div>
 
-        <Select
+        <NativeSelect
           value={step.action}
           disabled={disabled}
-          onValueChange={(v) => onChange({ action: v as RebaseAction })}
+          onChange={(e) => onChange({ action: e.target.value as RebaseAction })}
+          size="sm"
+          selectClassName={cn(
+            "h-6 border-border px-1.5 text-[10.5px] font-medium uppercase tracking-wider",
+            ACTION_TONES[step.action],
+            disabled && "cursor-not-allowed opacity-70",
+          )}
         >
-          <SelectTrigger
-            className={cn(
-              "h-6 border border-border px-1.5 text-[10.5px] font-medium uppercase tracking-wider outline-none",
-              ACTION_TONES[step.action],
-              disabled && "cursor-not-allowed opacity-70",
-            )}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ALL_ACTIONS.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {ALL_ACTIONS.map((a) => (
+            <NativeSelectOption key={a} value={a}>
+              {a}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
 
         <span className="font-mono text-[11px] text-[hsl(var(--branch-1))]">{step.short_oid}</span>
         <span

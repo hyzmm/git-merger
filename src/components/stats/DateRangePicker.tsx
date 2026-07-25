@@ -1,10 +1,4 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useState, useCallback, useMemo } from "react";
 import { format, startOfMonth, endOfMonth, subMonths, subDays } from "date-fns";
 import { CalendarIcon } from "lucide-react";
@@ -101,21 +95,17 @@ export function DateRangePicker({ value, onChange }: Props) {
 
   return (
     <div className="flex items-center gap-1.5">
-      <Select
+      <NativeSelect
+        size="sm"
         value={preset}
-        onValueChange={(v) => handlePresetChange(v as Preset)}
+        onChange={(e) => handlePresetChange(e.target.value as Preset)}
       >
-        <SelectTrigger className="h-7 px-2 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {PRESET_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        {PRESET_OPTIONS.map((opt) => (
+          <NativeSelectOption key={opt.value} value={opt.value}>
+            {opt.label}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
 
       {preset === "custom" && (
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>

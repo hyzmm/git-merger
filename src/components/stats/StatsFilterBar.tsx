@@ -1,10 +1,4 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { DateRangePicker, type DateRange } from "./DateRangePicker";
 
 interface Props {
@@ -48,43 +42,35 @@ export function StatsFilterBar({
       <DateRangePicker value={dateRange} onChange={onDateRangeChange} />
 
       {/* Branch selector */}
-      <Select
+      <NativeSelect
+        size="sm"
         value={branch ?? ""}
-        onValueChange={(v) => onBranchChange(v || null)}
+        onChange={(e) => onBranchChange(e.target.value || null)}
       >
-        <SelectTrigger className="h-7 px-2 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">All Branches</SelectItem>
-          {branches.map((b) => (
-            <SelectItem key={b} value={b}>
-              {b}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <NativeSelectOption value="">All Branches</NativeSelectOption>
+        {branches.map((b) => (
+          <NativeSelectOption key={b} value={b}>
+            {b}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
 
       {/* Author selector */}
-      <Select
+      <NativeSelect
+        size="sm"
         value={author ?? ""}
-        onValueChange={(v) => onAuthorChange(v || null)}
+        onChange={(e) => onAuthorChange(e.target.value || null)}
       >
-        <SelectTrigger className="h-7 max-w-44 px-2 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">All Authors</SelectItem>
-          {uniqueAuthors.map((a) => (
-            <SelectItem
-              key={mergeByName ? a.name.toLowerCase() : a.email}
-              value={mergeByName ? a.name.toLowerCase() : a.email}
-            >
-              {a.name || a.email}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <NativeSelectOption value="">All Authors</NativeSelectOption>
+        {uniqueAuthors.map((a) => (
+          <NativeSelectOption
+            key={mergeByName ? a.name.toLowerCase() : a.email}
+            value={mergeByName ? a.name.toLowerCase() : a.email}
+          >
+            {a.name || a.email}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
     </div>
   );
 }

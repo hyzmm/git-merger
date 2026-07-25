@@ -8,13 +8,6 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -218,17 +211,10 @@ export function SettingsDialog() {
             </Row>
 
             <Row label={t("settings.language")}>
-              <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
-                <SelectTrigger className="h-8 w-full px-2 text-xs">
-                  <SelectValue>
-                    {t(locale === "en" ? "settings.language.en" : "settings.language.zh")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="en">{t("settings.language.en")}</SelectItem>
-                  <SelectItem value="zh">{t("settings.language.zh")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <NativeSelect value={locale} onChange={(e) => setLocale(e.target.value as Locale)} className="w-full">
+                <NativeSelectOption value="en">{t("settings.language.en")}</NativeSelectOption>
+                <NativeSelectOption value="zh">{t("settings.language.zh")}</NativeSelectOption>
+              </NativeSelect>
             </Row>
 
             <Row label={t("settings.graphMode")}>
