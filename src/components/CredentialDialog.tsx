@@ -3,14 +3,24 @@
  * user for a username/password. The reply is delivered back via the
  * `submit_credentials` (or `cancel_credentials`) command, which unblocks
  * libgit2's credential callback waiting on the other side.
+ *
+ * v0.14 — Migrated to shadcn Dialog.
  */
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { KeyRound, X } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { git, type CredRequest } from "@/ipc/git";
 import { useT } from "@/lib/i18n";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function CredentialDialog() {
   const [req, setReq] = useState<CredRequest | null>(null);
@@ -29,8 +39,6 @@ export function CredentialDialog() {
       void un.then((f) => f());
     };
   }, []);
-
-  if (!req) return null;
 
   async function submit() {
     if (!req || busy) return;
@@ -57,32 +65,39 @@ export function CredentialDialog() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative w-full max-w-md rounded-lg border border-border bg-card text-card-foreground shadow-xl">
-        <header className="flex items-center justify-between border-b border-border px-4 py-3">
+    <Dialog
+      open={!!req}
+      onOpenChange={(open) => {
+        if (!open) void cancel();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={false}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            void cancel();
+          }
+        }}
+      >
+        <DialogHeader>
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">{t("creds.title")}</h2>
+            <DialogTitle>{t("creds.title")}</DialogTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={cancel}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
+          <DialogDescription>{t("creds.subtitle")}</DialogDescription>
+        </DialogHeader>
 
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void submit();
           }}
-          className="space-y-3 px-4 py-3"
+          className="space-y-3"
         >
-          <p className="text-xs text-muted-foreground">{t("creds.subtitle")}</p>
           <div className="rounded border border-border bg-secondary px-2 py-1.5 font-mono text-[11px] break-all">
-            {req.url}
+            {req?.url}
           </div>
 
           <label className="block">
@@ -113,12 +128,12 @@ export function CredentialDialog() {
             </span>
           </label>
 
-          <div className="flex justify-end gap-2 pt-1">
+          <DialogFooter showCloseButton={false}>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               type="button"
-              onClick={cancel}
+              onClick={() => void cancel()}
               disabled={busy}
             >
               {t("common.cancel")}
@@ -131,9 +146,9 @@ export function CredentialDialog() {
             >
               {busy ? t("creds.signingIn") : t("creds.signIn")}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

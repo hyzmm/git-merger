@@ -16,7 +16,7 @@ export type ThemeMode = "auto" | "light" | "dark";
  */
 export type GraphMode = "normal" | "compact" | "hidden";
 
-export interface UiSettings {
+interface UiSettings {
   theme: ThemeMode;
   /** Base font size in px. Applied to <html> root. */
   fontSize: number;

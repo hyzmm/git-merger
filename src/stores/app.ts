@@ -66,6 +66,7 @@ import {
 import { toast } from "@/lib/toast";
 import { buildSubsetPatch, reversePatch, selectionKey } from "@/lib/subsetPatch";
 import { searchDiff, type DiffMatch } from "@/lib/diffSearch";
+import { confirm } from "@/lib/confirm";
 
 /**
  * Module-scoped scratch buffer for the v0.13.20 amend toggle: when the
@@ -409,38 +410,6 @@ interface PaletteState {
   filesLoadedFor: string | null;
 }
 
-/**
- * v0.13.15 — Generic confirmation prompt routed through the central
- * ConfirmDialog component. Created via `confirm({ ... })`, which
- * returns a `Promise<boolean>` resolved by the dialog's OK / Cancel
- * (or ESC / Enter) handlers.
- */
-export interface ConfirmRequest {
-  /** Severity tone: red destructive vs neutral primary button. */
-  level: "danger" | "warning";
-  /** Short headline ("Discard 5 file(s)?"). */
-  title: string;
-  /** One-line subtitle / consequence summary. May be ReactNode in callers; we only need string here. */
-  message: string;
-  /**
-   * Optional verbatim block (refspecs, oid, file list…) shown in a
-   * monospace card under the message. Useful for "is this really the
-   * thing you mean?" reassurance.
-   */
-  detail?: string;
-  /** Confirm-button label; defaults to "OK" / "Delete" by level. */
-  confirmLabel?: string;
-  /** Cancel-button label; defaults to "Cancel". */
-  cancelLabel?: string;
-}
-
-interface ConfirmState extends ConfirmRequest {
-  /** Frame-id to disambiguate stale requests after fast-fire dismissals. */
-  id: number;
-  /** Resolver injected by `confirm()`; ConfirmDialog calls one of them. */
-  resolve: (ok: boolean) => void;
-}
-
 interface FileHistoryView {
   /** Path the user originally asked for; UI shows this in the toolbar. */
   startPath: string | null;
@@ -471,8 +440,6 @@ interface AppState {
   tags: TagsView;
   rebase: RebaseView;
   palette: PaletteState;
-  /** Pending confirm prompt; null when no dialog is up. (v0.13.15) */
-  confirmRequest: ConfirmState | null;
   fileHistory: FileHistoryView;
   worktrees: WorktreesView;
   gitignore: GitignoreView;
@@ -766,12 +733,6 @@ interface AppState {
   openPalette: () => void;
   closePalette: () => void;
   ensureTrackedFiles: () => Promise<void>;
-
-  // confirm prompts (v0.13.15)
-  /** Pop a confirmation dialog and await OK/Cancel. Resolves to `true` on confirm, `false` on dismiss/ESC/Cancel. */
-  confirm: (req: ConfirmRequest) => Promise<boolean>;
-  /** Programmatic close (used by the ConfirmDialog component itself; not normally called from app code). */
-  closeConfirm: (ok: boolean) => void;
 
   // file history
   openFileHistory: (file: string) => Promise<void>;
@@ -1101,7 +1062,6 @@ export const useApp = create<AppState>((set, get) => ({
   tags: { ...emptyTags },
   rebase: { ...emptyRebase },
   palette: { ...emptyPalette },
-  confirmRequest: null,
   fileHistory: { ...emptyFileHistory },
   worktrees: { ...emptyWorktrees },
   gitignore: { ...emptyGitignore },
@@ -2349,7 +2309,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!repo || diff.oid !== WORKING_OID || !diff.fileDiff) return;
     if (diff.selectedLines.size === 0) return;
     // v0.13.22 policy — destructive op must confirm.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Discard ${diff.selectedLines.size} line${diff.selectedLines.size === 1 ? "" : "s"}?`,
       message:
@@ -2637,7 +2597,7 @@ export const useApp = create<AppState>((set, get) => ({
   abortMerge: async () => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: "Abort merge?",
       message:
@@ -2877,7 +2837,7 @@ export const useApp = create<AppState>((set, get) => ({
     const { changes } = get();
     if (!repo || changes.selected.size === 0) return;
     const list = Array.from(changes.selected);
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Discard ${list.length} file${list.length === 1 ? "" : "s"}?`,
       message:
@@ -3039,7 +2999,7 @@ export const useApp = create<AppState>((set, get) => ({
     // v0.13.22 — apply is destructive (working-tree merge with possible
     // conflicts) so it must never happen on a single click. Same dialog
     // shape as the rest of the unified ConfirmDialog usage.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Apply stash@{${index}}?`,
       message:
@@ -3064,7 +3024,7 @@ export const useApp = create<AppState>((set, get) => ({
     // v0.13.22 — pop both *applies* (destructive: conflicts possible) AND
     // *removes* the stash entry. The combined nature is what makes a "did
     // you mean apply?" mistake painful; force a confirmation.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Pop stash@{${index}}?`,
       message:
@@ -3087,7 +3047,7 @@ export const useApp = create<AppState>((set, get) => ({
   dropStash: async (index) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Drop stash@{${index}}?`,
       message: "The stashed changes will be deleted permanently. This cannot be undone.",
@@ -3231,7 +3191,7 @@ export const useApp = create<AppState>((set, get) => ({
   checkoutCommit: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Checkout ${oid.slice(0, 7)} (detached HEAD)?`,
       message:
@@ -3251,7 +3211,7 @@ export const useApp = create<AppState>((set, get) => ({
   deleteBranch: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Delete branch '${name}'?`,
       message:
@@ -3295,7 +3255,7 @@ export const useApp = create<AppState>((set, get) => ({
   deleteTag: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Delete tag '${name}'?`,
       message:
@@ -3347,7 +3307,7 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     if (!repo) return;
     const tagCount = get().tags.entries.length;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Push all ${tagCount} tag${tagCount === 1 ? "" : "s"}?`,
       message:
@@ -3370,7 +3330,7 @@ export const useApp = create<AppState>((set, get) => ({
   deleteRemoteTag: async (tagName, opts) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: `Delete remote tag '${tagName}'?`,
       message:
@@ -3398,7 +3358,7 @@ export const useApp = create<AppState>((set, get) => ({
   cherryPick: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Cherry-pick ${oid.slice(0, 7)} onto HEAD?`,
       message:
@@ -3446,7 +3406,7 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
 
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Cherry-pick ${ordered.length} commits onto HEAD?`,
       message: `Each commit will be replayed in turn (oldest first). The first conflict pauses the sequence and routes you to the Merge view; remaining commits stay queued.`,
@@ -3490,7 +3450,7 @@ export const useApp = create<AppState>((set, get) => ({
   revertCommit: async (oid) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Revert ${oid.slice(0, 7)}?`,
       message:
@@ -3518,7 +3478,7 @@ export const useApp = create<AppState>((set, get) => ({
       mixed: "Mixed reset: HEAD and index move; working tree is kept.",
       hard: "HARD reset: HEAD, index AND working tree all reset. Uncommitted changes will be LOST.",
     };
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: mode === "hard" ? "danger" : "warning",
       title: `Reset to ${oid.slice(0, 7)} (${mode})?`,
       message: warnings[mode],
@@ -3567,7 +3527,7 @@ export const useApp = create<AppState>((set, get) => ({
     // v0.13.22 — uniform "any write op confirms" policy. Init only writes
     // .git/config so the blast radius is small, but a single click should
     // still never silently mutate the user's repo.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Initialize submodule '${name}'?`,
       message:
@@ -3589,7 +3549,7 @@ export const useApp = create<AppState>((set, get) => ({
   updateSubmodule: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Update submodule '${name}'?`,
       message:
@@ -3610,7 +3570,7 @@ export const useApp = create<AppState>((set, get) => ({
   updateSubmoduleRecursive: async (name) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Recursively update '${name}'?`,
       message:
@@ -3634,7 +3594,7 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     if (!repo) return;
     // v0.13.22 — same policy: any write op confirms.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Sync submodule URL for '${name}'?`,
       message:
@@ -3686,7 +3646,7 @@ export const useApp = create<AppState>((set, get) => ({
   removeWorktree: async (name, force = false) => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: force ? "danger" : "warning",
       title: force ? `Force-remove worktree '${name}'?` : `Remove worktree '${name}'?`,
       message: force
@@ -3712,7 +3672,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!repo) return;
     // v0.13.22 — prune is destructive: removes the .git/worktrees/<name>
     // metadata for every worktree libgit2 considers stale. Always confirm.
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: "Prune stale worktrees?",
       message:
@@ -4013,7 +3973,7 @@ export const useApp = create<AppState>((set, get) => ({
     // commit-rewriting still needs a final go/no-go acknowledgement.
     const stepCount = rebase.plan.filter((p) => p.action !== "drop").length;
     const dropCount = rebase.plan.length - stepCount;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "warning",
       title: `Start rebase: ${rebase.plan.length} step${rebase.plan.length === 1 ? "" : "s"}?`,
       message:
@@ -4068,7 +4028,7 @@ export const useApp = create<AppState>((set, get) => ({
   rebaseAbort: async () => {
     const repo = get().repo;
     if (!repo) return;
-    const ok = await get().confirm({
+    const ok = await confirm({
       level: "danger",
       title: "Abort rebase?",
       message:
@@ -4115,24 +4075,6 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   closePalette: () => set((s) => ({ palette: { ...s.palette, open: false } })),
-
-  // ---------- Confirm prompts (v0.13.15) ----------
-  confirm: (req) =>
-    new Promise<boolean>((resolve) => {
-      // If a previous prompt is still up (rapid double-trigger), settle it
-      // as a cancel before we replace it — never strand the awaiting caller.
-      const prev = get().confirmRequest;
-      if (prev) prev.resolve(false);
-      const id = (get().confirmRequest?.id ?? 0) + 1;
-      set({ confirmRequest: { ...req, id, resolve } });
-    }),
-
-  closeConfirm: (ok) => {
-    const cur = get().confirmRequest;
-    if (!cur) return;
-    cur.resolve(ok);
-    set({ confirmRequest: null });
-  },
 
   ensureTrackedFiles: async () => {
     const repo = get().repo;

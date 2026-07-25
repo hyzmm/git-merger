@@ -9,7 +9,6 @@ import { OutputPanel } from "@/components/OutputPanel";
 import { CredentialDialog } from "@/components/CredentialDialog";
 import { useIpcLog } from "@/lib/ipcLog";
 import { CommandPalette } from "@/components/CommandPalette";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RecentFilesPalette } from "@/components/RecentFilesPalette";
 import { ToastContainer } from "@/components/ToastContainer";
 import { HistoryPage } from "@/pages/HistoryPage";
@@ -202,7 +201,6 @@ export default function App() {
       <CredentialDialog />
       <CommandPalette />
       <RecentFilesPalette />
-      <ConfirmDialog />
       <ToastContainer />
     </div>
   );

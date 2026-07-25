@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, GitBranch, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import { branchColorForName } from "@/lib/branchColors";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
 import type { RefEntry } from "@/ipc/git";
@@ -103,7 +104,6 @@ export function RefsPane() {
   const renameBranch = useApp((s) => s.renameBranch);
   const createBranchAct = useApp((s) => s.createBranch);
   const deleteTagAct = useApp((s) => s.deleteTag);
-  const confirm = useApp((s) => s.confirm);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 

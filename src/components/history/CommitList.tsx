@@ -14,6 +14,7 @@ import {
 import { computeTrunkOids } from "@/lib/trunkOids";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import { GraphRow, GRAPH_LANE_WIDTH } from "./GraphRow";
 import { GraphSkeleton } from "./GraphSkeleton";
 import { HistoryFilterBar } from "./HistoryFilterBar";
@@ -73,7 +74,6 @@ export function CommitList() {
   const openRebasePlan = useApp((s) => s.openRebasePlan);
   const createBranch = useApp((s) => s.createBranch);
   const createTag = useApp((s) => s.createTag);
-  const confirm = useApp((s) => s.confirm);
   // v0.13.16 — graph reachability highlight.
   const highlightOid = useApp((s) => s.history.highlightOid);
   const highlightMode = useApp((s) => s.history.highlightMode);

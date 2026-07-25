@@ -3,6 +3,7 @@ import { Archive, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import { Unified } from "@/components/diff/DiffViews";
 import type { FileChange } from "@/ipc/git";
 
@@ -55,7 +56,6 @@ export function StashPage() {
   const dropStash = useApp((s) => s.dropStash);
   const selectStashEntry = useApp((s) => s.selectStashEntry);
   const selectStashFile = useApp((s) => s.selectStashFile);
-  const confirm = useApp((s) => s.confirm);
 
   useEffect(() => {
     if (repo) void loadStash();

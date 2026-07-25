@@ -8,7 +8,6 @@ import {
   GitBranch,
   RefreshCw,
   Search,
-  Settings,
   X,
 } from "lucide-react";
 import { useApp } from "@/stores/app";
@@ -16,6 +15,7 @@ import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
 import { isAppErrorThrown } from "@/ipc/invoke";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import { Button } from "@/components/ui/button";
 import { AppMenu } from "@/components/AppMenu";
 import { UndoButton } from "@/components/UndoButton";
@@ -72,7 +72,6 @@ export function Topbar() {
   const loading = useApp((s) => s.loading);
   const error = useApp((s) => s.error);
   const openPalette = useApp((s) => s.openPalette);
-  const confirm = useApp((s) => s.confirm);
   const t = useT();
 
   const [running, setRunning] = useState<RemoteOp | null>(null);
@@ -88,7 +87,6 @@ export function Topbar() {
   } | null>(null);
   const [progress, setProgress] = useState<OpProgress | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [pushMenuOpen, setPushMenuOpen] = useState(false);
   const pushMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -506,14 +504,7 @@ export function Topbar() {
           {loading && !progress && <span>{t("topbar.loading")}</span>}
           {error && <span className="text-destructive">{error}</span>}
           <UpdateBadge />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSettingsOpen(true)}
-            title={t("topbar.settings")}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <SettingsDialog />
         </div>
       </header>
 
@@ -529,8 +520,6 @@ export function Topbar() {
           t={t}
         />
       )}
-
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

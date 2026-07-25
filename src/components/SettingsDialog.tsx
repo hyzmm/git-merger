@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
-import { pick } from "lodash-es";
-import { X } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useApp } from "@/stores/app";
-import {
-  type UiSettings,
-  useSettings,
-  type GraphMode,
-  type ThemeMode,
-  SettingsStore,
-} from "@/stores/settings";
+import { useSettings, type GraphMode, type ThemeMode, SettingsStore } from "@/stores/settings";
 import { useI18n, useT, type Locale } from "@/lib/i18n";
 import { git } from "@/ipc/git";
 import { cn } from "@/lib/utils";
@@ -22,25 +15,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useShallow } from "zustand/react/shallow";
 import { createPicker } from "@/stores/helpers";
-import { Switch } from "./ui/switch";
-
-interface Props {
-  open: boolean;
-  onClose: () => void;
-}
+import { NativeSelect, NativeSelectOption } from "./ui/native-select";
 
 const FONT_SIZES = [12, 13, 14, 15, 16, 18];
 const TAB_SIZES = [2, 4, 8];
 const AUTOCRLF_VALUES = [
-  { v: "", label: "(unset / inherit)" },
-  { v: "false", label: "false — keep line endings as-is" },
-  { v: "input", label: "input — convert CRLF→LF on commit (recommended on macOS/Linux)" },
-  { v: "true", label: "true — convert CRLF↔LF (recommended on Windows)" },
+  { value: "", label: "(unset / inherit)" },
+  { value: "false", label: "false — keep line endings as-is" },
+  { value: "input", label: "input — convert CRLF→LF on commit (recommended on macOS/Linux)" },
+  { value: "true", label: "true — convert CRLF↔LF (recommended on Windows)" },
 ];
 
-export function SettingsDialog({ open, onClose }: Props) {
+export function SettingsDialog() {
   const repo = useApp((s) => s.repo);
   const { theme, fontSize, tabSize, graphMode, mergeAuthorsByName } = useSettings(
     useShallow(
@@ -58,6 +54,7 @@ export function SettingsDialog({ open, onClose }: Props) {
   );
   const [locale, setLocale] = useI18n(useShallow((s) => [s.locale, s.setLocale]));
   const t = useT();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const [autocrlf, setAutocrlf] = useState<string>("");
   const [autocrlfScope, setAutocrlfScope] = useState<"local" | "global">("global");
@@ -79,7 +76,7 @@ export function SettingsDialog({ open, onClose }: Props) {
 
   // Re-load core.autocrlf each time the dialog opens.
   useEffect(() => {
-    if (!open || !repo) return;
+    if (!dialogOpen || !repo) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -92,13 +89,13 @@ export function SettingsDialog({ open, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, repo]);
+  }, [dialogOpen, repo]);
 
   // Re-load commit-signing config (v0.13.19) on dialog open.
   // We pull the merged view (local overrides global) for each of the five
   // keys; missing keys come back as null and surface as the field default.
   useEffect(() => {
-    if (!open || !repo) return;
+    if (!dialogOpen || !repo) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -124,19 +121,7 @@ export function SettingsDialog({ open, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, repo, t]);
-
-  // ESC closes
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [dialogOpen, repo, t]);
 
   const onSaveAutocrlf = async () => {
     if (!repo) return;
@@ -189,21 +174,20 @@ export function SettingsDialog({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("settings.title")}
-        className="max-h-[88vh] w-[560px] max-w-[92vw] overflow-auto rounded-lg border border-border bg-card shadow-2xl"
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <h2 className="text-sm font-semibold">{t("settings.title")}</h2>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("settings.close")}>
-            <X className="h-4 w-4" />
+    <Dialog onOpenChange={setDialogOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="ghost" size="icon" title={t("topbar.settings")}>
+            <Settings className="h-4 w-4" />
           </Button>
-        </div>
+        }
+      />
+      <DialogContent className={"min-w-fit"}>
+        <DialogHeader>
+          <DialogTitle>{t("settings.title")}</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-5 p-4">
+        <div className="space-y-5 overflow-y-auto max-h-[90vh]">
           <Section title={t("settings.appearance")}>
             <Row label={t("settings.theme")}>
               <SegGroup<ThemeMode>
@@ -234,14 +218,17 @@ export function SettingsDialog({ open, onClose }: Props) {
             </Row>
 
             <Row label={t("settings.language")}>
-              <SegGroup<Locale>
-                value={locale}
-                options={[
-                  { v: "en", label: t("settings.language.en") },
-                  { v: "zh", label: t("settings.language.zh") },
-                ]}
-                onChange={setLocale}
-              />
+              <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
+                <SelectTrigger className="h-8 w-full px-2 text-xs">
+                  <SelectValue>
+                    {t(locale === "en" ? "settings.language.en" : "settings.language.zh")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{t("settings.language.en")}</SelectItem>
+                  <SelectItem value="zh">{t("settings.language.zh")}</SelectItem>
+                </SelectContent>
+              </Select>
             </Row>
 
             <Row label={t("settings.graphMode")}>
@@ -268,13 +255,9 @@ export function SettingsDialog({ open, onClose }: Props) {
             subtitle={t("settings.stats.mergeAuthorsByName.subtitle")}
           >
             <Row label={t("settings.stats.mergeAuthorsByName")}>
-              <SegGroup<"on" | "off">
-                value={mergeAuthorsByName ? "on" : "off"}
-                options={[
-                  { v: "off", label: t("settings.signing.off") },
-                  { v: "on", label: t("settings.signing.on") },
-                ]}
-                onChange={(v) => setSetting({ mergeAuthorsByName: v === "on" })}
+              <Switch
+                checked={mergeAuthorsByName}
+                onCheckedChange={(v) => setSetting({ mergeAuthorsByName: v })}
               />
             </Row>
           </Section>
@@ -287,18 +270,17 @@ export function SettingsDialog({ open, onClose }: Props) {
             ) : (
               <>
                 <Row label="core.autocrlf">
-                  <Select value={autocrlf} onValueChange={(v) => setAutocrlf(v ?? "")}>
-                    <SelectTrigger className="h-8 w-full px-2 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
+                  <NativeSelect
+                      value={autocrlf}
+                      onChange={(e) => setAutocrlf(e.target.value ?? "")}
+                  >
+
                       {AUTOCRLF_VALUES.map((o) => (
-                        <SelectItem key={o.v} value={o.v}>
+                        <NativeSelectOption key={o.value} value={o.value}>
                           {o.label}
-                        </SelectItem>
+                        </NativeSelectOption>
                       ))}
-                    </SelectContent>
-                  </Select>
+                  </NativeSelect>
                 </Row>
                 <Row label={t("settings.gitConfig.scope")}>
                   <SegGroup<"local" | "global">
@@ -344,14 +326,7 @@ export function SettingsDialog({ open, onClose }: Props) {
             ) : (
               <>
                 <Row label={t("settings.signing.enabled")}>
-                  <SegGroup<"on" | "off">
-                    value={signEnabled ? "on" : "off"}
-                    options={[
-                      { v: "off", label: t("settings.signing.off") },
-                      { v: "on", label: t("settings.signing.on") },
-                    ]}
-                    onChange={(v) => setSignEnabled(v === "on")}
-                  />
+                  <Switch checked={signEnabled} onCheckedChange={setSignEnabled} />
                 </Row>
                 <Row label={t("settings.signing.format")}>
                   <SegGroup<"openpgp" | "ssh">
@@ -431,8 +406,8 @@ export function SettingsDialog({ open, onClose }: Props) {
             )}
           </Section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

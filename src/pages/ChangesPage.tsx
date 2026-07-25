@@ -1,10 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState } from "react";
 import { useApp } from "@/stores/app";
 import { git } from "@/ipc/git";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import type { WorkingFile } from "@/ipc/git";
 
 const STATUS_LABEL: Record<WorkingFile["status"], string> = {
@@ -57,7 +66,6 @@ export function ChangesPage() {
   const saveStash = useApp((s) => s.saveStash);
   const openWorkingDiff = useApp((s) => s.openWorkingDiff);
   const repo = useApp((s) => s.repo);
-  const confirm = useApp((s) => s.confirm);
   const loadChanges = useApp((s) => s.loadChanges);
 
   // v0.13.9 — Apply patch dialog state. The flow is: open dialog → user
@@ -307,62 +315,59 @@ export function ChangesPage() {
         </div>
       </aside>
 
-      {applyOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[10vh]"
-          onClick={() => !applyBusy && setApplyOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative flex w-full max-w-2xl flex-col rounded-lg border border-border bg-card text-card-foreground shadow-2xl"
-            role="dialog"
-            aria-label="Apply patch"
-          >
-            <div className="border-b border-border px-4 py-2.5">
-              <h2 className="text-sm font-semibold">Apply patch</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Paste unified-patch text (the format produced by{" "}
-                <code className="font-mono">git diff</code> /{" "}
-                <code className="font-mono">git format-patch</code>) below, then Apply. The patch
-                will be applied to your working tree only — the index is left untouched.
-              </p>
+      <Dialog
+        open={applyOpen}
+        onOpenChange={(open) => {
+          if (!applyBusy) setApplyOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Apply patch</DialogTitle>
+            <DialogDescription>
+              Paste unified-patch text (the format produced by{" "}
+              <code className="font-mono">git diff</code> /{" "}
+              <code className="font-mono">git format-patch</code>) below, then Apply. The patch
+              will be applied to your working tree only — the index is left untouched.
+            </DialogDescription>
+          </DialogHeader>
+
+          <textarea
+            value={patchDraft}
+            onChange={(e) => setPatchDraft(e.target.value)}
+            autoFocus
+            spellCheck={false}
+            placeholder={
+              "diff --git a/foo.ts b/foo.ts\nindex abc1234..def5678 100644\n--- a/foo.ts\n+++ b/foo.ts\n@@ -1,3 +1,4 @@\n …"
+            }
+            className="m-0 h-72 resize-none rounded-md border border-input bg-background px-3 py-2 font-mono text-[12px] outline-none focus:border-ring"
+          />
+          {applyError && (
+            <div className="rounded border border-[hsl(var(--destructive)/.30)] bg-[hsl(var(--destructive)/.10)] px-3 py-2 font-mono text-[11px] text-[hsl(var(--destructive))]">
+              {applyError}
             </div>
-            <textarea
-              value={patchDraft}
-              onChange={(e) => setPatchDraft(e.target.value)}
-              autoFocus
-              spellCheck={false}
-              placeholder={
-                "diff --git a/foo.ts b/foo.ts\nindex abc1234..def5678 100644\n--- a/foo.ts\n+++ b/foo.ts\n@@ -1,3 +1,4 @@\n …"
-              }
-              className="m-0 h-72 resize-none border-0 bg-background px-4 py-2 font-mono text-[12px] outline-none"
-            />
-            {applyError && (
-              <div className="border-t border-border bg-[hsl(var(--destructive)/.10)] px-4 py-2 font-mono text-[11px] text-[hsl(var(--destructive))]">
-                {applyError}
-              </div>
-            )}
-            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
-              <Button
-                onClick={() => setApplyOpen(false)}
-                disabled={applyBusy}
-                variant="secondary"
-                size="sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => void submitApplyPatch()}
-                disabled={applyBusy || !patchDraft.trim()}
-                variant="default"
-                size="sm"
-              >
-                {applyBusy ? "Applying…" : "Apply"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+
+          <DialogFooter>
+            <Button
+              onClick={() => setApplyOpen(false)}
+              disabled={applyBusy}
+              variant="outline"
+              size="sm"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void submitApplyPatch()}
+              disabled={applyBusy || !patchDraft.trim()}
+              variant="default"
+              size="sm"
+            >
+              {applyBusy ? "Applying…" : "Apply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

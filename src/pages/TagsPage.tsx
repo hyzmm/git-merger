@@ -18,6 +18,7 @@ import { ChevronDown, ChevronRight, Tag, Trash2, Upload, UploadCloud } from "luc
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
+import { confirm } from "@/lib/confirm";
 import type { TagInfo } from "@/ipc/git";
 
 function fmtTime(t: number): string {
@@ -124,7 +125,6 @@ function TagRow({
   onDeleteRemote: () => void;
 }) {
   const annotated = tag.is_annotated;
-  const confirm = useApp((s) => s.confirm);
   // v0.13.22 — every "git" button below funnels through ConfirmDialog so a
   // mis-click can't push, delete on remote, or wipe the local ref. Force-push
   // already had this dialog from v0.13.12; the rest get their own copy here.
