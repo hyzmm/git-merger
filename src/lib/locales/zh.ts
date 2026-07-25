@@ -190,6 +190,7 @@ export const zh: Dict = {
   "menu.recent": "最近打开",
   "menu.recent.remove": "从最近列表中移除",
   "menu.closeRepo": "关闭仓库",
+  "menu.settings": "设置…",
   "menu.about": "关于 Git Tools",
   "menu.quit": "退出",
   "about.repo": "源码",

@@ -31,6 +31,9 @@ const AUTOCRLF_VALUES = [
 
 export function SettingsDialog() {
   const repo = useApp((s) => s.repo);
+  const settingsOpen = useApp((s) => s.settingsOpen);
+  const openSettings = useApp((s) => s.openSettings);
+  const closeSettings = useApp((s) => s.closeSettings);
   const { theme, fontSize, tabSize, graphMode, mergeAuthorsByName } = useSettings(
     useShallow(
       createPicker<SettingsStore>()(
@@ -47,7 +50,6 @@ export function SettingsDialog() {
   );
   const [locale, setLocale] = useI18n(useShallow((s) => [s.locale, s.setLocale]));
   const t = useT();
-  const [dialogOpen, setDialogOpen] = useState(false);
 
   const [autocrlf, setAutocrlf] = useState<string>("");
   const [autocrlfScope, setAutocrlfScope] = useState<"local" | "global">("global");
@@ -69,7 +71,7 @@ export function SettingsDialog() {
 
   // Re-load core.autocrlf each time the dialog opens.
   useEffect(() => {
-    if (!dialogOpen || !repo) return;
+    if (!settingsOpen || !repo) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -82,13 +84,13 @@ export function SettingsDialog() {
     return () => {
       cancelled = true;
     };
-  }, [dialogOpen, repo]);
+  }, [settingsOpen, repo]);
 
   // Re-load commit-signing config (v0.13.19) on dialog open.
   // We pull the merged view (local overrides global) for each of the five
   // keys; missing keys come back as null and surface as the field default.
   useEffect(() => {
-    if (!dialogOpen || !repo) return;
+    if (!settingsOpen || !repo) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -114,7 +116,7 @@ export function SettingsDialog() {
     return () => {
       cancelled = true;
     };
-  }, [dialogOpen, repo, t]);
+  }, [settingsOpen, repo, t]);
 
   const onSaveAutocrlf = async () => {
     if (!repo) return;
@@ -167,7 +169,13 @@ export function SettingsDialog() {
   };
 
   return (
-    <Dialog onOpenChange={setDialogOpen}>
+    <Dialog
+      open={settingsOpen}
+      onOpenChange={(open) => {
+        if (open) openSettings();
+        else closeSettings();
+      }}
+    >
       <DialogTrigger
         render={
           <Button variant="ghost" size="icon" title={t("topbar.settings")}>
@@ -211,7 +219,11 @@ export function SettingsDialog() {
             </Row>
 
             <Row label={t("settings.language")}>
-              <NativeSelect value={locale} onChange={(e) => setLocale(e.target.value as Locale)} className="w-full">
+              <NativeSelect
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as Locale)}
+                className="w-full"
+              >
                 <NativeSelectOption value="en">{t("settings.language.en")}</NativeSelectOption>
                 <NativeSelectOption value="zh">{t("settings.language.zh")}</NativeSelectOption>
               </NativeSelect>
@@ -257,15 +269,14 @@ export function SettingsDialog() {
               <>
                 <Row label="core.autocrlf">
                   <NativeSelect
-                      value={autocrlf}
-                      onChange={(e) => setAutocrlf(e.target.value ?? "")}
+                    value={autocrlf}
+                    onChange={(e) => setAutocrlf(e.target.value ?? "")}
                   >
-
-                      {AUTOCRLF_VALUES.map((o) => (
-                        <NativeSelectOption key={o.value} value={o.value}>
-                          {o.label}
-                        </NativeSelectOption>
-                      ))}
+                    {AUTOCRLF_VALUES.map((o) => (
+                      <NativeSelectOption key={o.value} value={o.value}>
+                        {o.label}
+                      </NativeSelectOption>
+                    ))}
                   </NativeSelect>
                 </Row>
                 <Row label={t("settings.gitConfig.scope")}>

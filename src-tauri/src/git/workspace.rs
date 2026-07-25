@@ -216,6 +216,10 @@ pub struct CommitOptions {
     /// logged but non-fatal.
     #[serde(default = "default_run_hooks")]
     pub run_hooks: bool,
+    /// Override commit author in "Name <email>" format.
+    /// Parsed into a git2::Signature with the current time.
+    #[serde(default)]
+    pub author: Option<String>,
 }
 
 fn default_run_hooks() -> bool {
@@ -268,6 +272,11 @@ pub fn commit_changes(
     let head_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
     let cfg_sig = repo.signature()?;
 
+    // Resolve author override: parse "Name <email>" into a Signature.
+    let author_override = opts.author.as_deref().and_then(parse_author);
+    // Default author is either the override or the configured signature.
+    let default_author = author_override.clone().unwrap_or_else(|| cfg_sig.clone());
+
     // Author / committer / parent layout depends on amend.
     let (author, committer, parents_owned, amended): (
         git2::Signature<'_>,
@@ -284,7 +293,9 @@ pub fn commit_changes(
             .map(|i| head.parent(i))
             .collect::<Result<_, _>>()?;
         let author = if opts.reset_author {
-            cfg_sig.clone()
+            default_author.clone()
+        } else if author_override.is_some() {
+            default_author.clone()
         } else {
             head.author().to_owned()
         };
@@ -292,7 +303,7 @@ pub fn commit_changes(
         (author, cfg_sig.clone(), parents, true)
     } else {
         let parents: Vec<git2::Commit<'_>> = head_commit.into_iter().collect();
-        (cfg_sig.clone(), cfg_sig.clone(), parents, false)
+        (default_author.clone(), cfg_sig.clone(), parents, false)
     };
 
     // ---- 3. apply sign-off trailer (idempotent) ----
@@ -570,4 +581,25 @@ pub fn write_working_file(path: &str, file: &str, content: &str) -> Result<(), g
     }
     std::fs::rename(&tmp, &abs).map_err(|e| git2::Error::from_str(&format!("rename: {e}")))?;
     Ok(())
+}
+
+/// Parse a "Name <email>" string into a `git2::Signature` with the current time.
+/// Returns `None` if the string is empty or doesn't match the expected format.
+fn parse_author(raw: &str) -> Option<git2::Signature<'static>> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // Try parsing "Name <email>" format.
+    if let Some(lt) = raw.rfind('<') {
+        let name = raw[..lt].trim();
+        let email_part = &raw[lt..];
+        if let Some(gt) = email_part.find('>') {
+            let email = &email_part[1..gt];
+            let name = if name.is_empty() { email } else { name };
+            return git2::Signature::now(name, email).ok();
+        }
+    }
+    // Fallback: treat the whole string as both name and email.
+    git2::Signature::now(raw, raw).ok()
 }

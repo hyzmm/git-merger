@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exit } from "@tauri-apps/plugin-process";
-import { Folder, FolderOpen, Info, LogOut, Menu, Square, X, Plus } from "lucide-react";
+import { Folder, FolderOpen, Info, LogOut, Menu, Settings, Square, X, Plus } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ export function AppMenu() {
   const newBlankTab = useApp((s) => s.newBlankTab);
   const recentRepos = useApp((s) => s.recentRepos);
   const removeRecent = useApp((s) => s.removeRecentRepo);
+  const openSettings = useApp((s) => s.openSettings);
   const t = useT();
 
   const [open_, setOpen] = useState(false);
@@ -159,6 +160,16 @@ export function AppMenu() {
 
             <Divider />
             <Item
+              icon={<Settings className="h-3.5 w-3.5" />}
+              label={t("menu.settings")}
+              shortcut="Ctrl+,"
+              onClick={() => {
+                setOpen(false);
+                openSettings();
+              }}
+            />
+            <Divider />
+            <Item
               icon={<Info className="h-3.5 w-3.5" />}
               label={t("menu.about")}
               onClick={() => {
@@ -249,11 +260,7 @@ function AboutDialog({ version, onClose }: { version: string; onClose: () => voi
             <Info className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">{t("menu.about")}</h2>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-          >
+          <Button variant="ghost" size="icon-sm" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </header>
@@ -284,11 +291,7 @@ function AboutDialog({ version, onClose }: { version: string; onClose: () => voi
           </dl>
         </div>
         <div className="flex justify-end border-t border-border px-4 py-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onClose}
-          >
+          <Button variant="default" size="sm" onClick={onClose}>
             {t("common.dismiss")}
           </Button>
         </div>

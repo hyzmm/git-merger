@@ -553,6 +553,8 @@ export interface CommitOptions {
   reset_author?: boolean;
   /** Run pre-commit / commit-msg / post-commit hooks. Default true. */
   run_hooks?: boolean;
+  /** Override commit author in "Name <email>" format. */
+  author?: string;
 }
 
 /** Result of a successful `commitChanges` invocation. */

@@ -280,6 +280,31 @@ interface ChangesView {
   /** v0.13.20 — bypass pre-commit / commit-msg / post-commit hooks
    *  (`git commit --no-verify`). Off by default, opt-in per commit. */
   skipHooks: boolean;
+
+  // ---- Phase 1: file tree ----
+  /** Group by "directory" (tree) or "status" (staged/unstaged/conflicts). */
+  groupBy: "directory" | "status";
+  /** Set of directory paths currently expanded in the tree. */
+  expandedDirs: Set<string>;
+  /** Live filter string for the file list (matches against path). */
+  fileFilter: string;
+
+  // ---- Phase 2: inline diff preview ----
+  /** Path of the file currently previewed in the inline diff pane. */
+  previewFile: string | null;
+  /** Working-diff result for `previewFile`. */
+  previewDiff: import("@/ipc/git").FileDiff | null;
+  /** True while the preview diff is loading. */
+  previewLoading: boolean;
+  previewError: string | null;
+
+  // ---- Phase 3: commit enhancements ----
+  /** Recent commit messages, newest first. Persisted to localStorage. */
+  messageHistory: string[];
+  /** Override commit author in "Name <email>" format. */
+  authorOverride: string | null;
+  /** Whether the advanced-options panel is expanded. */
+  showAdvancedOptions: boolean;
 }
 
 interface StashView {
@@ -457,6 +482,9 @@ interface AppState {
   /** v0.13.8 — Recent Files palette open/closed state. */
   recentFilesOpen: boolean;
 
+  /** Settings dialog open/closed state. */
+  settingsOpen: boolean;
+
   // Multi-tab session model. The active tab's state is mirrored at the top
   // level of this store (so existing selectors keep working); inactive tabs
   // have their state parked in `sessionsById`. See snapshotSession /
@@ -475,6 +503,11 @@ interface AppState {
   /** v0.13.8 — open / close the Recent Files palette (`Ctrl+E`). */
   openRecentFiles: () => void;
   closeRecentFiles: () => void;
+
+  /** Open / close the Settings dialog. */
+  openSettings: () => void;
+  closeSettings: () => void;
+
   /** v0.13.8 — drop a single entry, e.g. via the palette's row-hover X button. */
   forgetRecentFile: (path: string) => void;
 
@@ -627,6 +660,25 @@ interface AppState {
   /** v0.13.20 — `git commit --no-verify` toggle; opt-in per commit. */
   setSkipHooks: (on: boolean) => void;
   commitWorking: () => Promise<void>;
+
+  // ---- Phase 1: file tree actions ----
+  setChangesGroupBy: (mode: "directory" | "status") => void;
+  toggleDirExpand: (dir: string) => void;
+  expandAllDirs: () => void;
+  collapseAllDirs: () => void;
+  setChangesFileFilter: (query: string) => void;
+  /** Select/deselect all files currently visible (respects filter). */
+  selectFilteredChanges: () => void;
+
+  // ---- Phase 2: inline diff preview ----
+  previewChangesFile: (file: string) => Promise<void>;
+  clearChangesPreview: () => void;
+
+  // ---- Phase 3: commit enhancements ----
+  /** Add a message to history (called after successful commit). */
+  pushCommitMessage: (msg: string) => void;
+  setAuthorOverride: (author: string | null) => void;
+  setShowAdvancedOptions: (show: boolean) => void;
 
   // stash
   loadStash: () => Promise<void>;
@@ -845,6 +897,16 @@ const emptyChanges: ChangesView = {
   amend: false,
   signoff: false,
   skipHooks: false,
+  groupBy: "directory",
+  expandedDirs: new Set(),
+  fileFilter: "",
+  previewFile: null,
+  previewDiff: null,
+  previewLoading: false,
+  previewError: null,
+  messageHistory: [],
+  authorOverride: null,
+  showAdvancedOptions: false,
 };
 
 const emptyStash: StashView = {
@@ -1083,6 +1145,8 @@ export const useApp = create<AppState>((set, get) => ({
   // newly active repo).
   recentFiles: [],
   recentFilesOpen: false,
+
+  settingsOpen: false,
 
   // v0.13.5 — restore the list of open tabs from localStorage at start-up.
   // Sessions are NOT persisted; each restored tab starts in the "lazy" state
@@ -1511,6 +1575,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   closeRecentFiles: () => set({ recentFilesOpen: false }),
+
+  openSettings: () => set({ settingsOpen: true }),
+
+  closeSettings: () => set({ settingsOpen: false }),
 
   forgetRecentFile: (path) => {
     const repo = get().repo;
@@ -2914,12 +2982,15 @@ export const useApp = create<AppState>((set, get) => ({
         amend: changes.amend,
         signoff: changes.signoff,
         run_hooks: !changes.skipHooks,
+        author: changes.authorOverride ?? undefined,
       });
       // Surface a small toast when the post-commit hook ran, so users
       // wiring up notification scripts get feedback.
       if (outcome.post_commit_ran) {
         toast.info("post-commit hook ran");
       }
+      // Push message to history so it's available for reuse.
+      get().pushCommitMessage(changes.message);
       // Clear amend draft snapshot after a successful commit.
       draftBeforeAmend.delete(repo.path);
       set((s) => ({
@@ -2929,6 +3000,7 @@ export const useApp = create<AppState>((set, get) => ({
           selected: new Set(),
           committing: false,
           amend: false,
+          authorOverride: null,
         },
       }));
       void get().loadChanges();
@@ -2939,6 +3011,93 @@ export const useApp = create<AppState>((set, get) => ({
       }));
     }
   },
+
+  // ---- Phase 1: file tree actions ----
+  setChangesGroupBy: (mode) =>
+    set((s) => ({ changes: { ...s.changes, groupBy: mode } })),
+
+  toggleDirExpand: (dir) =>
+    set((s) => {
+      const next = new Set(s.changes.expandedDirs);
+      if (next.has(dir)) next.delete(dir);
+      else next.add(dir);
+      return { changes: { ...s.changes, expandedDirs: next } };
+    }),
+
+  expandAllDirs: () =>
+    set((s) => {
+      const dirs = new Set<string>();
+      for (const f of s.changes.files) {
+        const parts = f.path.split("/");
+        for (let i = 1; i < parts.length; i++) {
+          dirs.add(parts.slice(0, i).join("/"));
+        }
+      }
+      return { changes: { ...s.changes, expandedDirs: dirs } };
+    }),
+
+  collapseAllDirs: () =>
+    set((s) => ({ changes: { ...s.changes, expandedDirs: new Set() } })),
+
+  setChangesFileFilter: (query) =>
+    set((s) => ({ changes: { ...s.changes, fileFilter: query } })),
+
+  selectFilteredChanges: () =>
+    set((s) => {
+      const { files, fileFilter } = s.changes;
+      const q = fileFilter.toLowerCase();
+      const matching = files.filter((f) => !q || f.path.toLowerCase().includes(q));
+      return {
+        changes: { ...s.changes, selected: new Set(matching.map((f) => f.path)) },
+      };
+    }),
+
+  // ---- Phase 2: inline diff preview ----
+  previewChangesFile: async (file) => {
+    const repo = get().repo;
+    if (!repo) return;
+    set((s) => ({
+      changes: { ...s.changes, previewFile: file, previewLoading: true, previewError: null },
+    }));
+    try {
+      const fd = await git.workingDiff(repo.path, file);
+      set((s) =>
+        s.changes.previewFile === file
+          ? { changes: { ...s.changes, previewDiff: fd, previewLoading: false } }
+          : s,
+      );
+    } catch (e) {
+      set((s) =>
+        s.changes.previewFile === file
+          ? { changes: { ...s.changes, previewLoading: false, previewError: String(e) } }
+          : s,
+      );
+    }
+  },
+
+  clearChangesPreview: () =>
+    set((s) => ({
+      changes: { ...s.changes, previewFile: null, previewDiff: null, previewError: null },
+    })),
+
+  // ---- Phase 3: commit enhancements ----
+  pushCommitMessage: (msg) =>
+    set((s) => {
+      const prev = s.changes.messageHistory;
+      const deduped = [msg, ...prev.filter((m) => m !== msg)].slice(0, 20);
+      try {
+        localStorage.setItem("gittools.commit-msg-history", JSON.stringify(deduped));
+      } catch {
+        /* quota exceeded – silently drop */
+      }
+      return { changes: { ...s.changes, messageHistory: deduped } };
+    }),
+
+  setAuthorOverride: (author) =>
+    set((s) => ({ changes: { ...s.changes, authorOverride: author } })),
+
+  setShowAdvancedOptions: (show) =>
+    set((s) => ({ changes: { ...s.changes, showAdvancedOptions: show } })),
 
   // ---------- Stash ----------
   loadStash: async () => {

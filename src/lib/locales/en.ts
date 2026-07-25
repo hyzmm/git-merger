@@ -197,6 +197,7 @@ export const en = {
   "menu.recent": "Recent repositories",
   "menu.recent.remove": "Remove from recent list",
   "menu.closeRepo": "Close repository",
+  "menu.settings": "Settings…",
   "menu.about": "About Git Tools",
   "menu.quit": "Quit",
   "about.repo": "Source",

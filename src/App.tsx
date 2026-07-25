@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/stores/app";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -43,6 +44,7 @@ export default function App() {
   const openPalette = useApp((s) => s.openPalette);
   const openRecentFiles = useApp((s) => s.openRecentFiles);
   const openRepo = useApp((s) => s.openRepo);
+  const openSettings = useApp((s) => s.openSettings);
   const newBlankTab = useApp((s) => s.newBlankTab);
   const closeTab = useApp((s) => s.closeTab);
   const activeTabId = useApp((s) => s.activeTabId);
@@ -94,6 +96,7 @@ export default function App() {
         const dir = await open({ directory: true, multiple: false });
         if (typeof dir === "string") await openRepo(dir);
       },
+      "ctrl+,": () => openSettings(),
       f5: () => void refresh(),
       "ctrl+r": () => void refresh(),
       "alt+1": () => firstPendingIdx !== null && applyResolution(firstPendingIdx, "left"),
@@ -109,6 +112,7 @@ export default function App() {
       openPalette,
       openRecentFiles,
       openRepo,
+      openSettings,
       newBlankTab,
       closeTab,
       activeTabId,
@@ -118,6 +122,16 @@ export default function App() {
   );
 
   useShortcuts(shortcutMap);
+
+  // Listen for native system menu events (e.g. macOS Cmd+, → Settings…)
+  useEffect(() => {
+    const unlisten = listen("menu-open-settings", () => {
+      openSettings();
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [openSettings]);
 
   // Bottom-line safety net: any backend rejection that nobody else handled
   // pops a toast so users get *some* feedback. Local catch blocks that already
