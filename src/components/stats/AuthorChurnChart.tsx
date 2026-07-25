@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useECharts } from "@/lib/useECharts";
+import { Button } from "@/components/ui/button";
 import type { AuthorChurn, AuthorOverview } from "@/ipc/git";
 import type { EChartsCoreOption } from "echarts/core";
 
@@ -213,30 +214,34 @@ export function AuthorChurnChart({
           const name = nameMap.get(key) ?? a.email.split("@")[0];
           const isHidden = hidden.has(key);
           return (
-            <button
+            <Button
               key={key}
               onClick={() => toggle(key)}
-              className={`rounded-full border px-2 py-0.5 text-[10px] leading-tight transition-colors ${
+              variant="outline"
+              size="xs"
+              className={`rounded-full ${
                 isHidden
                   ? "border-border/40 text-muted-foreground/40 line-through"
-                  : "border-border bg-muted/60 text-foreground"
+                  : "bg-muted/60"
               }`}
               title={a.email}
             >
               {name}
-            </button>
+            </Button>
           );
         })}
-        <button
+        <Button
           onClick={() => setStacked((v) => !v)}
-          className={`rounded-full border px-2 py-0.5 text-[10px] leading-tight transition-colors ${
+          variant="outline"
+          size="xs"
+          className={`rounded-full ${
             stacked
               ? "border-primary bg-primary/20 text-primary"
-              : "border-border text-muted-foreground"
+              : "text-muted-foreground"
           }`}
         >
           Stack
-        </button>
+        </Button>
       </div>
       {/* Chart area with dynamic height */}
       <div className="min-h-0 flex-1 overflow-y-auto">

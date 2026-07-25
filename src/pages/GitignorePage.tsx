@@ -11,9 +11,9 @@
  */
 import { useEffect } from "react";
 import { Save, Eye, RotateCcw, FileText, Plus, AlertTriangle, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import type { IgnorePreview } from "@/ipc/git";
 
 export function GitignorePage() {
@@ -51,42 +51,36 @@ export function GitignorePage() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-1.5">
-          <button
+          <Button
             onClick={() => void preview()}
             disabled={!repo || view.busy}
+            variant="secondary"
+            size="sm"
             title={t("gitignore.previewTitle")}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-              (!repo || view.busy) && "cursor-not-allowed opacity-60",
-            )}
           >
             <Eye className="h-3 w-3" />
             {t("gitignore.preview")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setDraft(view.saved)}
             disabled={!repo || !dirty || view.busy}
+            variant="secondary"
+            size="sm"
             title={t("gitignore.resetTitle")}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-              (!repo || !dirty || view.busy) && "cursor-not-allowed opacity-60",
-            )}
           >
             <RotateCcw className="h-3 w-3" />
             {t("gitignore.reset")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void save()}
             disabled={!repo || !dirty || view.busy}
+            variant="default"
+            size="sm"
             title={t("gitignore.saveTitle")}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-              (!repo || !dirty || view.busy) && "cursor-not-allowed opacity-60",
-            )}
           >
             <Save className="h-3 w-3" />
             {t("gitignore.save")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -104,19 +98,18 @@ export function GitignorePage() {
           </div>
           <div className="min-h-0 flex-1 overflow-auto py-1">
             {view.templates.map((tpl) => (
-              <button
+              <Button
                 key={tpl.id}
                 onClick={() => append(tpl.id)}
                 disabled={view.busy}
+                variant="ghost"
+                size="sm"
+                className="flex w-full"
                 title={t("gitignore.appendTitle").replace("{name}", tpl.label)}
-                className={cn(
-                  "flex w-full items-center gap-1.5 px-3 py-1 text-left text-[11px] text-foreground hover:bg-accent",
-                  view.busy && "cursor-not-allowed opacity-60",
-                )}
               >
                 <Plus className="h-3 w-3 text-muted-foreground" />
                 {tpl.label}
-              </button>
+              </Button>
             ))}
           </div>
         </aside>

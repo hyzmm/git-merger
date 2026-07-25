@@ -13,6 +13,7 @@ import { Folder, FolderOpen, Info, LogOut, Menu, Square, X, Plus } from "lucide-
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const MAX_RECENT = 8;
 const APP_VERSION = __APP_VERSION__;
@@ -71,16 +72,14 @@ export function AppMenu() {
   return (
     <>
       <div ref={ref} className="relative">
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setOpen((v) => !v)}
           title={t("topbar.menu")}
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-            open_ && "bg-accent text-accent-foreground",
-          )}
         >
           <Menu className="h-4 w-4" />
-        </button>
+        </Button>
 
         {open_ && (
           <div className="absolute left-0 top-9 z-50 w-72 rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-lg">
@@ -116,7 +115,9 @@ export function AppMenu() {
                           isCurrent && "bg-accent/40",
                         )}
                       >
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => void openPath(r.path)}
                           className="flex min-w-0 flex-1 items-center gap-2 text-left"
                           title={r.path}
@@ -126,17 +127,18 @@ export function AppMenu() {
                           <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
                             {shortPath(r.path)}
                           </span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             removeRecent(r.path);
                           }}
                           title={t("menu.recent.remove")}
-                          className="opacity-0 transition group-hover:opacity-100"
                         >
-                          <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                        </button>
+                          <X className="h-3 w-3" />
+                        </Button>
                       </div>
                     );
                   })}
@@ -193,17 +195,16 @@ function Item({
   danger?: boolean;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-accent",
-        danger && "text-destructive",
-      )}
+      className={cn("w-full text-left", danger && "text-destructive")}
     >
       {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
       <span className="flex-1 truncate">{label}</span>
       {shortcut && <kbd className="font-mono text-[10px] text-muted-foreground">{shortcut}</kbd>}
-    </button>
+    </Button>
   );
 }
 
@@ -248,12 +249,13 @@ function AboutDialog({ version, onClose }: { version: string; onClose: () => voi
             <Info className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">{t("menu.about")}</h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </header>
         <div className="space-y-2 px-4 py-4 text-xs">
           <div className="flex items-baseline gap-2">
@@ -282,12 +284,13 @@ function AboutDialog({ version, onClose }: { version: string; onClose: () => voi
           </dl>
         </div>
         <div className="flex justify-end border-t border-border px-4 py-2">
-          <button
+          <Button
+            variant="default"
+            size="sm"
             onClick={onClose}
-            className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90"
           >
             {t("common.dismiss")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

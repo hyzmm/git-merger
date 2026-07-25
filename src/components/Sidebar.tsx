@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { useT, type TKey } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const items: { key: ViewKey; labelKey: TKey; Icon: typeof History }[] = [
@@ -41,20 +42,19 @@ export function Sidebar() {
       {items.map(({ key, labelKey, Icon }) => {
         const active = view === key;
         return (
-          <button
+          <Button
             key={key}
+            variant="ghost"
+            size="icon"
             onClick={() => setView(key)}
             disabled={!repo}
             title={t(labelKey)}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
-              "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              "disabled:cursor-not-allowed disabled:opacity-40",
               active && "bg-accent text-accent-foreground",
             )}
           >
             <Icon className="h-5 w-5" />
-          </button>
+          </Button>
         );
       })}
     </aside>

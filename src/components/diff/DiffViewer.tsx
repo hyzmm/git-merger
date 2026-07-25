@@ -5,6 +5,7 @@ import { useShortcuts } from "@/lib/useShortcuts";
 import { git } from "@/ipc/git";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { isImagePath } from "@/lib/imageMime";
 import { SideBySide, Unified } from "./DiffViews";
 import { ImageDiff } from "./ImageDiff";
@@ -158,28 +159,26 @@ export function DiffViewer() {
 
         {/* Hunk navigation */}
         <div className="ml-2 inline-flex overflow-hidden rounded-md border border-border">
-          <button
+          <Button
             onClick={() => goToHunk(-1)}
             disabled={hunkCount === 0}
             title="Previous change (P)"
-            className={cn(
-              "flex h-[26px] items-center px-2 text-muted-foreground hover:bg-accent",
-              hunkCount === 0 && "cursor-not-allowed opacity-40",
-            )}
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-none"
           >
             <ChevronUp className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => goToHunk(1)}
             disabled={hunkCount === 0}
             title="Next change (N)"
-            className={cn(
-              "flex h-[26px] items-center px-2 text-muted-foreground hover:bg-accent",
-              hunkCount === 0 && "cursor-not-allowed opacity-40",
-            )}
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-none"
           >
             <ChevronDown className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -200,164 +199,143 @@ export function DiffViewer() {
                   ? `${selectedLines.size} line${selectedLines.size === 1 ? "" : "s"}`
                   : "no lines"}
               </span>
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => void stageSelectedLines()}
                 disabled={selectedLines.size === 0}
                 title="Stage only the selected +/− lines (apply sub-patch to the index)"
-                className={cn(
-                  "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
-                )}
               >
                 <Plus className="h-3 w-3" />
                 Stage lines
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => void unstageSelectedLines()}
                 disabled={selectedLines.size === 0}
                 title="Unstage only the selected +/− lines (apply reversed sub-patch to the index)"
-                className={cn(
-                  "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
-                )}
               >
                 <Minus className="h-3 w-3" />
                 Unstage lines
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={() => void discardSelectedLines()}
                 disabled={selectedLines.size === 0}
                 title="Discard the selected +/− lines from the working tree (cannot be undone)"
-                className={cn(
-                  "flex h-7 items-center gap-1 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2 text-[11px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]",
-                  selectedLines.size === 0 && "cursor-not-allowed opacity-50",
-                )}
               >
                 <Trash2 className="h-3 w-3" />
                 Discard lines…
-              </button>
+              </Button>
               {selectedLines.size > 0 && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={clearDiffLineSelection}
                   title="Clear line selection (Esc)"
-                  className="h-7 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent"
                 >
                   ✕
-                </button>
+                </Button>
               )}
             </div>
           )}
           {isWorking && mode === "sbs" && (
             <>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => void setEditActive(!editActive)}
                 disabled={editBusy}
-                className={cn(
-                  "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-                  editActive && "border-border bg-secondary text-foreground",
-                  editBusy && "cursor-not-allowed opacity-50",
-                )}
+                className={cn(editActive && "border-border bg-secondary text-foreground")}
                 title="Toggle bidirectional editing of the working-tree file"
               >
                 ✎ Edit
-              </button>
+              </Button>
               {editActive && (
                 <>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => void saveEditBuffer()}
                     disabled={editBusy || !dirty}
-                    className={cn(
-                      "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-                      dirty && !editBusy && "text-foreground",
-                      (editBusy || !dirty) && "cursor-not-allowed opacity-50",
-                    )}
+                    className={cn(dirty && !editBusy && "text-foreground")}
                     title="Save the buffer to the working tree"
                   >
                     Save
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => void resetEditBuffer()}
                     disabled={editBusy || !dirty}
-                    className={cn(
-                      "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-                      (editBusy || !dirty) && "cursor-not-allowed opacity-50",
-                    )}
                     title="Discard buffer edits and reload from disk"
                   >
                     Reset
-                  </button>
+                  </Button>
                 </>
               )}
             </>
           )}
-          <button
+          <Button
+            variant={searchOpen ? "outline" : "ghost"}
+            size="sm"
             onClick={() => (searchOpen ? closeDiffSearch() : openDiffSearch())}
             disabled={!fileDiff}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              !fileDiff && "cursor-not-allowed opacity-50",
-              searchOpen && "border-border bg-secondary text-foreground",
-            )}
+            className={cn(searchOpen && "border-border bg-secondary text-foreground")}
             title="Find in diff (Ctrl+F)"
           >
             <Search className="h-3 w-3" />
             Find
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void copyPatch()}
             disabled={!file || loading}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              (!file || loading) && "cursor-not-allowed opacity-50",
-              copied && "text-[hsl(var(--branch-4))]",
-            )}
+            className={cn(copied && "text-[hsl(var(--branch-4))]")}
             title="Copy this file's diff as a unified-patch string (the format git apply / git am consume)"
           >
             <ClipboardCopy className="h-3 w-3" />
             {copied ? "Copied!" : "Copy patch"}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => file && void openFileHistory(file)}
             disabled={!file}
-            className={cn(
-              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              !file && "cursor-not-allowed opacity-50",
-            )}
             title="Show this file's history (follows renames)"
           >
             History
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => file && openBlame(file)}
             disabled={!file}
-            className={cn(
-              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              !file && "cursor-not-allowed opacity-50",
-            )}
             title="Show git blame for this file"
           >
             Blame
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={ignoreWhitespace ? "outline" : "ghost"}
+            size="sm"
             onClick={toggleIgnoreWhitespace}
-            className={cn(
-              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              ignoreWhitespace && "border-border bg-secondary text-foreground",
-            )}
+            className={cn(ignoreWhitespace && "border-border bg-secondary text-foreground")}
             title="Ignore whitespace changes (recompute diff)"
           >
             Ignore WS
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={showWhitespace ? "outline" : "ghost"}
+            size="sm"
             onClick={toggleWhitespace}
-            className={cn(
-              "h-7 rounded-md border border-transparent px-2 text-xs text-muted-foreground hover:bg-accent",
-              showWhitespace && "border-border bg-secondary text-foreground",
-            )}
+            className={cn(showWhitespace && "border-border bg-secondary text-foreground")}
             title="Show whitespace (· for space, → for tab)"
           >
             ⌫ Whitespace
-          </button>
+          </Button>
           {fileDiff && (
             <span className="text-[10.5px] text-muted-foreground">
               {hunkCount} hunk{hunkCount === 1 ? "" : "s"}
@@ -408,14 +386,13 @@ function SegBtn({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
+      variant={active ? "default" : "outline"}
+      size="sm"
       onClick={onClick}
-      className={cn(
-        "h-[26px] cursor-pointer border-none bg-transparent px-2.5 text-xs",
-        active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/50",
-      )}
+      className="rounded-none border-none"
     >
       {children}
-    </button>
+    </Button>
   );
 }

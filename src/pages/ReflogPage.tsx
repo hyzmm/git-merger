@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { History as HistoryIcon, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import type { ReflogEntry } from "@/ipc/git";
@@ -102,21 +103,23 @@ function ReflogRow({
       </span>
       <span className="shrink-0 text-[10.5px] text-muted-foreground">{fmtTime(entry.time)}</span>
       <div className="flex shrink-0 items-center gap-1.5">
-        <button
+        <Button
           onClick={() => onReset(entry.new_oid, "mixed")}
+          variant="secondary"
+          size="xs"
           title={`Reset HEAD to this state (mixed). Useful to UNDO whatever happened AFTER this entry.`}
-          className="flex h-6 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent"
         >
           <RotateCcw className="h-3 w-3" />
           Restore
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => onReset(entry.new_oid, "hard")}
+          variant="destructive"
+          size="xs"
           title="Reset HARD — discard everything after this entry. DESTRUCTIVE."
-          className="h-6 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2 text-[10.5px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]"
         >
           Hard
-        </button>
+        </Button>
       </div>
     </div>
   );

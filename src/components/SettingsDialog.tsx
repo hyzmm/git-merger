@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
+import { pick } from "lodash-es";
 import { X } from "lucide-react";
 import { useApp } from "@/stores/app";
-import { useSettings, type GraphMode, type ThemeMode } from "@/stores/settings";
+import {
+  type UiSettings,
+  useSettings,
+  type GraphMode,
+  type ThemeMode,
+  SettingsStore,
+} from "@/stores/settings";
 import { useI18n, useT, type Locale } from "@/lib/i18n";
 import { git } from "@/ipc/git";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
@@ -13,6 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useShallow } from "zustand/react/shallow";
+import { createPicker } from "@/stores/helpers";
+import { Switch } from "./ui/switch";
 
 interface Props {
   open: boolean;
@@ -30,15 +42,21 @@ const AUTOCRLF_VALUES = [
 
 export function SettingsDialog({ open, onClose }: Props) {
   const repo = useApp((s) => s.repo);
-  const theme = useSettings((s) => s.theme);
-  const fontSize = useSettings((s) => s.fontSize);
-  const tabSize = useSettings((s) => s.tabSize);
-  const graphMode = useSettings((s) => s.graphMode);
-  const mergeAuthorsByName = useSettings((s) => s.mergeAuthorsByName);
-  const setSetting = useSettings((s) => s.set);
-  const reset = useSettings((s) => s.reset);
-  const locale = useI18n((s) => s.locale);
-  const setLocale = useI18n((s) => s.setLocale);
+  const { theme, fontSize, tabSize, graphMode, mergeAuthorsByName } = useSettings(
+    useShallow(
+      createPicker<SettingsStore>()(
+        "theme",
+        "fontSize",
+        "tabSize",
+        "graphMode",
+        "mergeAuthorsByName",
+      ),
+    ),
+  );
+  const { reset, set: setSetting } = useSettings(
+    useShallow(createPicker<SettingsStore>()("reset", "set")),
+  );
+  const [locale, setLocale] = useI18n(useShallow((s) => [s.locale, s.setLocale]));
   const t = useT();
 
   const [autocrlf, setAutocrlf] = useState<string>("");
@@ -180,13 +198,9 @@ export function SettingsDialog({ open, onClose }: Props) {
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <h2 className="text-sm font-semibold">{t("settings.title")}</h2>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label={t("settings.close")}
-          >
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("settings.close")}>
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-5 p-4">
@@ -243,16 +257,16 @@ export function SettingsDialog({ open, onClose }: Props) {
             </Row>
 
             <div className="text-right">
-              <button
-                onClick={reset}
-                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-              >
+              <Button variant="link" size="sm" onClick={reset}>
                 {t("settings.resetAppearance")}
-              </button>
+              </Button>
             </div>
           </Section>
 
-          <Section title={t("settings.stats")} subtitle={t("settings.stats.mergeAuthorsByName.subtitle")}>
+          <Section
+            title={t("settings.stats")}
+            subtitle={t("settings.stats.mergeAuthorsByName.subtitle")}
+          >
             <Row label={t("settings.stats.mergeAuthorsByName")}>
               <SegGroup<"on" | "off">
                 value={mergeAuthorsByName ? "on" : "off"}
@@ -309,16 +323,14 @@ export function SettingsDialog({ open, onClose }: Props) {
                       {autocrlfStatus}
                     </span>
                   )}
-                  <button
+                  <Button
+                    variant="default"
+                    size="sm"
                     onClick={onSaveAutocrlf}
                     disabled={autocrlfBusy}
-                    className={cn(
-                      "h-7 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-                      autocrlfBusy && "cursor-not-allowed opacity-60",
-                    )}
                   >
                     {autocrlfBusy ? t("settings.gitConfig.saving") : t("settings.gitConfig.save")}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -411,16 +423,9 @@ export function SettingsDialog({ open, onClose }: Props) {
                       {signStatus}
                     </span>
                   )}
-                  <button
-                    onClick={onSaveSigning}
-                    disabled={signBusy}
-                    className={cn(
-                      "h-7 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-                      signBusy && "cursor-not-allowed opacity-60",
-                    )}
-                  >
+                  <Button variant="default" size="sm" onClick={onSaveSigning} disabled={signBusy}>
                     {signBusy ? t("settings.gitConfig.saving") : t("settings.gitConfig.save")}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -471,22 +476,23 @@ function SegGroup<T extends string | number>({
   options: { v: T; label: string }[];
   onChange: (v: T) => void;
 }) {
+  const stringValue = String(value);
   return (
-    <div className="inline-flex overflow-hidden rounded-md border border-border">
+    <ToggleGroup
+      multiple={false}
+      variant="outline"
+      size="sm"
+      spacing={0}
+      value={[stringValue]}
+      onValueChange={(v) => {
+        if (v.length > 0) onChange(v[0] as T);
+      }}
+    >
       {options.map((o) => (
-        <button
-          key={String(o.v)}
-          onClick={() => onChange(o.v)}
-          className={cn(
-            "h-7 px-2.5 text-[11px]",
-            o.v === value
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50",
-          )}
-        >
+        <ToggleGroupItem key={String(o.v)} value={String(o.v)}>
           {o.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }

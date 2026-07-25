@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useMemo, useState, type DragEvent } from "react";
 import { X, Plus, Pin, PinOff } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -198,38 +199,36 @@ export function RepoTabs() {
                 <span className="max-w-[200px] truncate font-mono">{tab.label}</span>
               )}
               {!tab.pinned ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeTab(tab.id);
                   }}
                   title={t("tabs.close")}
-                  className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-destructive/20 hover:text-destructive",
-                    active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70",
-                  )}
+                  className={active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70"}
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               ) : (
                 // For pinned tabs, swap X for an "unpin" affordance so the
                 // user can still get it off-screen without diving into the
                 // context menu. Same slot, different glyph.
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     togglePinTab(tab.id);
                   }}
                   title={t("tabs.unpin")}
-                  className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
-                    active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70",
-                  )}
+                  className={active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70"}
                 >
                   <PinOff className="h-3 w-3" />
-                </button>
+                </Button>
               )}
             </div>
           );
@@ -241,14 +240,15 @@ export function RepoTabs() {
             <div className="pointer-events-none absolute left-0 top-0 h-full w-0.5 bg-primary" />
           </div>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
           type="button"
           onClick={onAdd}
           title={t("tabs.add")}
-          className="flex shrink-0 items-center justify-center px-2 text-muted-foreground hover:bg-accent/40 hover:text-foreground"
         >
           <Plus className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
       <ContextMenu pos={menu?.pos ?? null} items={menuItems} onClose={() => setMenu(null)} />
     </>

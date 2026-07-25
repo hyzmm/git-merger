@@ -3,6 +3,7 @@ import { ArrowRight, Eye, FilePlus2, GitBranch, History, Trash2 } from "lucide-r
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { RecentAction, RecentFile } from "@/lib/recentFiles";
 
 /**
@@ -220,20 +221,19 @@ function RecentRow({
         <span className="font-mono text-[12.5px]">{file}</span>
         {dir && <span className="ml-2 font-mono text-[11px] text-muted-foreground">{dir}</span>}
       </span>
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onForget();
         }}
         title="Remove from recent files"
-        className={cn(
-          "flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive",
-          active ? "opacity-70" : "opacity-0 group-hover:opacity-70",
-        )}
+        className={active ? "opacity-70" : "opacity-0 group-hover:opacity-70"}
       >
         <Trash2 className="h-3 w-3" />
-      </button>
+      </Button>
       {active && <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
     </div>
   );

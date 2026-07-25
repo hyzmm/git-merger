@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowUpCircle, CheckCircle, Loader2, RefreshCw } from "lucide-react";
 import { useUpdater } from "@/lib/useUpdater";
 import { useT } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /** Tiny badge that appears in the Topbar when an update is available.
  *  In dev / unsigned builds the underlying check() throws — we just hide
@@ -25,11 +25,10 @@ export function UpdateBadge() {
 
   return (
     <div className="relative">
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex h-8 items-center gap-1.5 rounded-md border border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.10)] px-2 text-xs text-[hsl(var(--branch-1))] hover:bg-[hsl(var(--branch-1)/.18)]",
-        )}
         title={t("updater.title")}
       >
         {ready ? (
@@ -46,7 +45,7 @@ export function UpdateBadge() {
               ? t("updater.downloading", { pct: pct ?? 0 })
               : t("updater.available", { version: state.available?.version ?? "?" })}
         </span>
-      </button>
+      </Button>
 
       {open && state.available && (
         <div className="absolute right-0 top-9 z-50 w-80 rounded-md border border-border bg-popover p-3 text-xs shadow-lg">
@@ -74,31 +73,31 @@ export function UpdateBadge() {
           )}
 
           <div className="flex justify-end gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setOpen(false)}
-              className="h-7 rounded-md border border-border bg-secondary px-3 text-[11px] hover:bg-accent"
             >
               {t("updater.later")}
-            </button>
+            </Button>
             {ready ? (
-              <button
+              <Button
+                variant="default"
+                size="sm"
                 onClick={() => void apply()}
-                className="flex h-7 items-center gap-1 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90"
               >
                 <RefreshCw className="h-3 w-3" />
                 {t("updater.restart")}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="default"
+                size="sm"
                 onClick={() => void downloadAndInstall()}
                 disabled={downloading}
-                className={cn(
-                  "h-7 rounded-md bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-                  downloading && "cursor-not-allowed opacity-60",
-                )}
               >
                 {downloading ? t("common.loading") : t("updater.download")}
-              </button>
+              </Button>
             )}
           </div>
         </div>

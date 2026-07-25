@@ -5,6 +5,7 @@
  * libgit2's credential callback waiting on the other side.
  */
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { KeyRound, X } from "lucide-react";
@@ -63,12 +64,13 @@ export function CredentialDialog() {
             <KeyRound className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">{t("creds.title")}</h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={cancel}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </header>
 
         <form
@@ -112,21 +114,23 @@ export function CredentialDialog() {
           </label>
 
           <div className="flex justify-end gap-2 pt-1">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               type="button"
               onClick={cancel}
               disabled={busy}
-              className="rounded border border-border bg-secondary px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
             >
               {t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
               type="submit"
               disabled={busy || !username || !password}
-              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {busy ? t("creds.signingIn") : t("creds.signIn")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

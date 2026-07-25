@@ -16,6 +16,7 @@ import { git, type ProgressEvent, type RemoteOpResult } from "@/ipc/git";
 import { isAppErrorThrown } from "@/ipc/invoke";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { AppMenu } from "@/components/AppMenu";
 import { UndoButton } from "@/components/UndoButton";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -383,17 +384,16 @@ export function Topbar() {
 
         {repo && (
           <>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => refresh()}
               disabled={loading}
               title={t("topbar.refresh")}
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                loading && "animate-spin",
-              )}
+              className={cn(loading && "animate-spin")}
             >
               <RefreshCw className="h-4 w-4" />
-            </button>
+            </Button>
 
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <GitBranch className="h-4 w-4" />
@@ -426,19 +426,20 @@ export function Topbar() {
                   onClick={() => runRemote("push", "plain")}
                   title={t("topbar.push")}
                 />
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   type="button"
                   onClick={() => setPushMenuOpen((v) => !v)}
                   disabled={running !== null}
                   title={t("topbar.push.menu")}
                   className={cn(
-                    "inline-flex h-8 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     running !== null && "cursor-not-allowed opacity-50",
                     pushMenuOpen && "bg-accent text-accent-foreground",
                   )}
                 >
                   <ChevronDown className="h-3 w-3" />
-                </button>
+                </Button>
                 {pushMenuOpen && (
                   <div
                     className="absolute left-0 top-9 z-50 w-72 rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
@@ -480,17 +481,19 @@ export function Topbar() {
 
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           {repo && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={openPalette}
               title={t("topbar.search")}
-              className="hidden h-7 items-center gap-2 rounded-md border border-border bg-secondary px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground sm:flex"
+              className="hidden sm:flex items-center gap-2"
             >
               <Search className="h-3 w-3" />
               <span>{t("topbar.search")}</span>
               <kbd className="ml-2 rounded border border-border bg-background px-1 font-mono text-[10px]">
                 Ctrl+K
               </kbd>
-            </button>
+            </Button>
           )}
           {progress && (
             <ProgressIndicator
@@ -503,13 +506,14 @@ export function Topbar() {
           {loading && !progress && <span>{t("topbar.loading")}</span>}
           {error && <span className="text-destructive">{error}</span>}
           <UpdateBadge />
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSettingsOpen(true)}
             title={t("topbar.settings")}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Settings className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -547,19 +551,20 @@ function RemoteBtn({
   const isRunning = running === op;
   const disabled = running !== null;
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-        disabled && !isRunning && "opacity-50",
-        isRunning && "bg-accent text-accent-foreground",
-      )}
-    >
-      <Icon className={cn("h-3.5 w-3.5", isRunning && "animate-pulse")} />
-      <span className="capitalize">{op}</span>
-    </button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onClick}
+        disabled={disabled}
+        title={title}
+        className={cn(
+          disabled && !isRunning && "opacity-50",
+          isRunning && "bg-accent text-accent-foreground",
+        )}
+      >
+        <Icon className={cn("h-3.5 w-3.5", isRunning && "animate-pulse")} />
+        <span className="capitalize">{op}</span>
+      </Button>
   );
 }
 
@@ -613,20 +618,21 @@ function ProgressIndicator({
       <span className="hidden max-w-[180px] truncate font-mono text-[11px] text-foreground/70 lg:inline">
         {progress.detail}
       </span>
-      <button
+      <Button
+        variant="ghost"
+        size="xs"
         type="button"
         onClick={onCancel}
         disabled={cancelling}
         title={t("topbar.cancelTitle")}
         className={cn(
-          "flex h-5 items-center gap-0.5 rounded border border-border px-1.5 text-[10.5px]",
-          "text-muted-foreground hover:bg-destructive/15 hover:text-destructive",
+          "border border-border",
           cancelling && "cursor-wait opacity-60",
         )}
       >
         <X className="h-3 w-3" />
         {cancelling ? t("topbar.cancelling") : t("topbar.cancel")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -678,20 +684,23 @@ function RemoteResultBanner({
         )}
       </div>
       {onFetchAndRetry && (
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           type="button"
           onClick={onFetchAndRetry}
-          className="shrink-0 rounded border border-border bg-background/40 px-2 py-0.5 text-[10.5px] text-foreground hover:bg-accent"
+          className="border border-border"
         >
           {t("topbar.push.staleLease.fetch")}
-        </button>
+        </Button>
       )}
-      <button
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={onDismiss}
-        className="shrink-0 rounded px-2 py-0.5 text-[10.5px] text-muted-foreground hover:bg-accent"
       >
         Dismiss
-      </button>
+      </Button>
     </div>
   );
 }
@@ -708,17 +717,19 @@ function PushMenuItem({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       type="button"
       onClick={onClick}
       role="menuitem"
       className={cn(
-        "flex w-full flex-col items-start gap-0.5 px-2.5 py-1.5 text-left hover:bg-accent",
+        "w-full flex-col items-start gap-0.5",
         danger && "text-destructive",
       )}
     >
       <span className="text-xs">{label}</span>
       {hint && <span className="text-[10.5px] text-muted-foreground">{hint}</span>}
-    </button>
+    </Button>
   );
 }

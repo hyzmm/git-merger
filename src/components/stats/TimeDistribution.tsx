@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useECharts } from "@/lib/useECharts";
 import type { EChartsCoreOption } from "echarts/core";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOURS = Array.from({ length: 24 }, (_, i) => `${i}:00`);
@@ -95,18 +96,19 @@ export function TimeDistribution({ hourDist, weekdayDist }: Props) {
     <div className="flex h-full flex-col">
       <div className="flex gap-1 px-1 pb-1">
         {(["hour", "weekday"] as const).map((m) => (
-          <button
+          <Button
             key={m}
             onClick={() => setMode(m)}
+            variant="outline"
+            size="sm"
             className={cn(
-              "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
               mode === m
                 ? "bg-primary/20 text-primary"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
             {m === "hour" ? "By Hour" : "By Weekday"}
-          </button>
+          </Button>
         ))}
       </div>
       <div ref={ref} className="min-h-0 flex-1" />

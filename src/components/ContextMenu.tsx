@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export interface MenuItem {
   label: string;
@@ -73,8 +74,10 @@ export function ContextMenu({ pos, items, onClose }: Props) {
             </div>
           );
         return (
-          <button
+          <Button
             key={i}
+            variant="ghost"
+            size="sm"
             type="button"
             disabled={it.disabled}
             onClick={() => {
@@ -83,14 +86,13 @@ export function ContextMenu({ pos, items, onClose }: Props) {
               it.onClick?.();
             }}
             className={cn(
-              "block w-full px-3 py-1.5 text-left",
-              !it.disabled && "hover:bg-accent",
-              it.disabled && "cursor-not-allowed text-muted-foreground opacity-60",
+              "w-full text-left",
+              it.disabled && "cursor-not-allowed opacity-60",
               it.danger && !it.disabled && "text-[hsl(var(--destructive))]",
             )}
           >
             {it.label}
-          </button>
+          </Button>
         );
       })}
     </div>

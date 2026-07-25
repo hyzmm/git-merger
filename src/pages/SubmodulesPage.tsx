@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Box, Download, RefreshCw, Plug, FolderTree } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import type { SubmoduleInfo } from "@/ipc/git";
@@ -85,55 +86,47 @@ function Row({
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {!sm.initialized && (
-            <button
+            <Button
               onClick={onInit}
               disabled={busy}
+              variant="secondary"
+              size="sm"
               title="Submodule init — write entries from .gitmodules into .git/config"
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-                busy && "cursor-not-allowed opacity-60",
-              )}
             >
               <Plug className="h-3 w-3" />
               Init
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={onUpdate}
             disabled={busy}
+            variant="default"
+            size="sm"
             title="Submodule update — clone (if needed) and check out the recorded commit"
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             <Download className="h-3 w-3" />
             Update
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onUpdateRecursive}
             disabled={busy}
+            variant="ghost"
+            size="icon-sm"
             title="Submodule update --recursive — also descend into the submodule's own submodules"
-            className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
-              busy && "cursor-not-allowed opacity-60",
-            )}
             aria-label="Update recursively"
           >
             <FolderTree className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onSync}
             disabled={busy}
+            variant="secondary"
+            size="sm"
             title="Submodule sync — copy URL from .gitmodules to local config"
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             <RefreshCw className="h-3 w-3" />
             Sync
-          </button>
+          </Button>
         </div>
       </div>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[10.5px] text-muted-foreground">

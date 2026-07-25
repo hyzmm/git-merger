@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   ArrowRight,
@@ -138,14 +139,15 @@ export function SearchPage() {
                 className="h-8 w-full pl-2 pr-8 font-mono text-[12.5px]"
               />
               {recents.length > 0 && (
-                <button
+                <Button
                   type="button"
                   onClick={() => setRecentsOpen((v) => !v)}
+                  variant="ghost"
+                  size="icon-sm"
                   title={t("search.recents")}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <HistoryIcon className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
               {recentsOpen && (
                 <RecentsPanel
@@ -160,23 +162,21 @@ export function SearchPage() {
               )}
             </div>
             {query && (
-              <button
+              <Button
                 type="button"
                 onClick={clearSearch}
+                variant="ghost"
+                size="icon-sm"
                 title={t("search.clear")}
-                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               onClick={() => void runSearch()}
               disabled={busy || !query.trim()}
-              className={cn(
-                "h-8 rounded bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
+              variant="default"
             >
               {busy ? (
                 <span className="inline-flex items-center gap-1.5">
@@ -186,7 +186,7 @@ export function SearchPage() {
               ) : (
                 t("search.run")
               )}
-            </button>
+            </Button>
           </div>
 
           {/* Options row */}
@@ -194,54 +194,42 @@ export function SearchPage() {
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">{t("search.mode")}:</span>
               {(["both", "message", "diff"] as const).map((m) => (
-                <button
+                <Button
                   key={m}
                   type="button"
                   onClick={() => setSearchMode(m)}
-                  className={cn(
-                    "rounded border px-2 py-0.5",
-                    mode === m
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-accent",
-                  )}
+                  variant={mode === m ? "default" : "outline"}
+                  size="sm"
                 >
                   {t(`search.mode.${m}` as never)}
-                </button>
+                </Button>
               ))}
             </div>
 
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">{t("search.kind")}:</span>
               {(["literal", "regex"] as const).map((k) => (
-                <button
+                <Button
                   key={k}
                   type="button"
                   onClick={() => setSearchPatternKind(k)}
-                  className={cn(
-                    "rounded border px-2 py-0.5",
-                    patternKind === k
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-accent",
-                  )}
+                  variant={patternKind === k ? "default" : "outline"}
+                  size="sm"
                 >
                   {t(`search.kind.${k}` as never)}
-                </button>
+                </Button>
               ))}
             </div>
 
-            <button
+            <Button
               type="button"
               onClick={toggleSearchCase}
+              variant={caseSensitive ? "default" : "outline"}
+              size="sm"
               title={t("search.caseTitle")}
-              className={cn(
-                "rounded border px-2 py-0.5",
-                caseSensitive
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent",
-              )}
             >
               Aa
-            </button>
+            </Button>
 
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">{t("search.path")}:</span>
@@ -258,52 +246,45 @@ export function SearchPage() {
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">{t("search.groupBy")}:</span>
               {(["commit", "file"] as const).map((g) => (
-                <button
+                <Button
                   key={g}
                   type="button"
                   onClick={() => setSearchGroupBy(g)}
-                  className={cn(
-                    "rounded border px-2 py-0.5",
-                    groupBy === g
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-accent",
-                  )}
+                  variant={groupBy === g ? "default" : "outline"}
+                  size="sm"
                 >
                   {t(`search.groupBy.${g}` as never)}
-                </button>
+                </Button>
               ))}
             </div>
 
             {/* v0.13.4 — Save / Saved-searches dropdown */}
             <div className="ml-auto flex items-center gap-1" ref={savedAnchorRef}>
-              <button
+              <Button
                 type="button"
                 onClick={onSaveCurrent}
                 disabled={!query.trim()}
+                variant="secondary"
+                size="sm"
                 title={t("search.saveCurrentTitle")}
-                className={cn(
-                  "rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent",
-                  !query.trim() && "cursor-not-allowed opacity-50",
-                )}
               >
                 <span className="inline-flex items-center gap-1">
                   <Star className="h-3 w-3" />
                   {t("search.save")}
                 </span>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setSavedOpen((v) => !v)}
+                variant="secondary"
+                size="sm"
                 title={t("search.savedTitle")}
-                className={cn(
-                  "rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-accent",
-                )}
               >
                 <span className="inline-flex items-center gap-1">
                   {saved.length > 0 ? saved.length : 0}
                   <ChevronDown className="h-3 w-3" />
                 </span>
-              </button>
+              </Button>
               {savedOpen && (
                 <SavedPanel
                   saved={saved}
@@ -392,15 +373,16 @@ export function SearchPage() {
                 </div>
                 <div className="mt-1 break-words text-sm text-foreground">{selected.summary}</div>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={() => jumpToHistory(selected.oid)}
+                variant="secondary"
+                size="sm"
                 title={t("search.openInHistory")}
-                className="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[11px] hover:bg-accent"
               >
                 {t("search.open")}
                 <ArrowRight className="h-3 w-3" />
-              </button>
+              </Button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-2 text-[11.5px]">
@@ -509,7 +491,7 @@ function FileRollup({
         const open = openSet.has(g.file);
         return (
           <li key={g.file}>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setOpenSet((prev) => {
@@ -519,9 +501,9 @@ function FileRollup({
                   return next;
                 });
               }}
-              className={cn(
-                "flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-accent/40",
-              )}
+              variant="ghost"
+              size="sm"
+              className="flex w-full"
             >
               <ChevronDown
                 className={cn(
@@ -538,7 +520,7 @@ function FileRollup({
               <span className="shrink-0 rounded bg-secondary px-1.5 text-[10.5px] text-muted-foreground">
                 +/− {g.totalLines}
               </span>
-            </button>
+            </Button>
             {open && (
               <ul className="border-l-2 border-border/40 bg-background/60">
                 {g.commits.map((c) => (
@@ -652,21 +634,25 @@ function RecentsPanel({
       <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
         <HistoryIcon className="h-3 w-3" />
         <span>{t("search.recents")}</span>
-        <button
+        <Button
           type="button"
           onClick={onClear}
-          className="ml-auto rounded px-1 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          variant="ghost"
+          size="xs"
+          className="ml-auto"
         >
           {t("search.clearAll")}
-        </button>
+        </Button>
       </div>
       <ul className="max-h-[280px] overflow-auto py-1">
         {recents.map((r, i) => (
           <li key={i}>
-            <button
+            <Button
               type="button"
               onClick={() => onPick(r, true)}
-              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-accent/40"
+              variant="ghost"
+              size="sm"
+              className="flex w-full"
               title={t("search.applyAndRun")}
             >
               <span className="min-w-0 flex-1 truncate font-mono">{r.query}</span>
@@ -675,7 +661,7 @@ function RecentsPanel({
                 {r.caseSensitive ? " · Aa" : ""}
                 {r.pathspec ? ` · ${r.pathspec}` : ""}
               </span>
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -708,24 +694,28 @@ function SavedPanel({
         <ul className="max-h-[280px] overflow-auto py-1">
           {saved.map((s) => (
             <li key={s.name} className="group flex items-center gap-2 hover:bg-accent/40">
-              <button
+              <Button
                 type="button"
                 onClick={() => onApply(s)}
-                className="flex min-w-0 flex-1 items-baseline gap-2 px-3 py-1.5 text-left text-[12px]"
+                variant="ghost"
+                size="sm"
+                className="flex min-w-0 flex-1"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
                 <span className="shrink-0 truncate font-mono text-[10.5px] text-muted-foreground">
                   "{s.query}"
                 </span>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => onDelete(s.name)}
+                variant="ghost"
+                size="icon-xs"
+                className="mr-2 hidden group-hover:block"
                 title={t("search.delete")}
-                className="mr-2 hidden rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:block"
               >
                 <Trash2 className="h-3 w-3" />
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

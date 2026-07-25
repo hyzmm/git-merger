@@ -1,5 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 
@@ -21,13 +22,13 @@ export function WelcomePage() {
         <div className="flex flex-col items-start gap-4">
           <h1 className="text-2xl font-semibold">{t("welcome.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("welcome.subtitle")}</p>
-          <button
+          <Button
             onClick={pick}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+            variant="default"
           >
             <FolderOpen className="h-4 w-4" />
             {t("welcome.openButton")}
-          </button>
+          </Button>
           <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
             <ShortcutLine combo="Ctrl+1 .. 7" desc="Switch view" />
             <ShortcutLine combo="F5 or Ctrl+R" desc="Refresh current view" />
@@ -52,23 +53,27 @@ export function WelcomePage() {
                 key={r.path}
                 className="group flex items-center gap-2 rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-accent/40"
               >
-                <button
+                <Button
                   onClick={() => openRepo(r.path)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  variant="ghost"
+                  size="sm"
+                  className="flex min-w-0 flex-1"
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
                     <div className="truncate font-mono text-sm">{basename(r.path)}</div>
                     <div className="truncate text-[11px] text-muted-foreground">{r.path}</div>
                   </div>
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => removeRecent(r.path)}
-                  className="invisible h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent group-hover:inline-flex"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="invisible group-hover:inline-flex"
                   title="Remove from list"
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             ))}
           </div>

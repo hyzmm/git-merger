@@ -7,6 +7,8 @@
  */
 
 import { useIpcLog } from "@/lib/ipcLog";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export function StatusBar() {
   const entries = useIpcLog((s) => s.entries);
@@ -20,17 +22,19 @@ export function StatusBar() {
   return (
     <div className="flex h-6 shrink-0 select-none items-center gap-2 border-t border-border bg-muted/50 px-2 text-[11px] leading-none text-muted-foreground">
       {/* Output toggle — always visible */}
-      <button
+      <Button
+        variant="ghost"
+        size="xs"
         type="button"
         onClick={togglePanel}
         title={panelOpen ? "Hide Output panel" : "Show Output panel"}
-        className={`flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-accent hover:text-foreground ${
-          panelOpen ? "bg-accent/60 text-foreground" : ""
-        }`}
+        className={cn(
+          panelOpen ? "bg-accent/60 text-foreground" : "",
+        )}
       >
         <span className="text-xs">⎙</span>
         <span>Output</span>
-      </button>
+      </Button>
 
       {/* Spacer */}
       <div className="flex-1" />

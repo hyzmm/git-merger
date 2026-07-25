@@ -126,7 +126,7 @@ export function applySettings(s: UiSettings) {
   html.style.setProperty("--tab-size", String(s.tabSize));
 }
 
-interface SettingsStore extends UiSettings {
+export interface SettingsStore extends UiSettings {
   set: (patch: Partial<UiSettings>) => void;
   reset: () => void;
 }

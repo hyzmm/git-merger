@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIpcLog, type IpcLogEntry } from "@/lib/ipcLog";
 import { ContextMenu, type MenuItem, type ContextMenuPos } from "@/components/ContextMenu";
+import { Button } from "@/components/ui/button";
 
 function durationClass(ms: number): string {
   if (ms < 100) return "text-muted-foreground/70";
@@ -146,25 +147,27 @@ export function OutputPanel() {
         )}
 
         {/* Clear */}
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           type="button"
           onClick={clear}
           title="Clear output (⌘K / Ctrl+K)"
-          className="select-none rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           Clear
-        </button>
+        </Button>
 
         {/* Auto-scroll indicator */}
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           type="button"
           onClick={() => setAutoScroll((v) => !v)}
           title={autoScroll ? "Auto-scroll ON — click to lock" : "Auto-scroll OFF — scrolled up"}
-          className={`select-none rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-accent ${autoScroll ? "text-muted-foreground/60" : "text-amber-400"
-            }`}
+          className={autoScroll ? "text-muted-foreground/60" : "text-amber-400"}
         >
           {autoScroll ? "↡ Auto" : "↟ Locked"}
-        </button>
+        </Button>
       </div>
 
       {/* Log list */}

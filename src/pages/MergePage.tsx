@@ -1,7 +1,7 @@
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { ConflictsList } from "@/components/merge/ConflictsList";
 import { ThreeWayEditor } from "@/components/merge/ThreeWayEditor";
-import { cn } from "@/lib/utils";
 
 const STATE_LABEL: Record<string, string> = {
   clean: "Clean — no merge in progress",
@@ -86,30 +86,24 @@ export function MergePage() {
         {loading && <span className="text-muted-foreground">· loading...</span>}
         <div className="ml-auto flex items-center gap-2">
           {error && <span className="text-destructive">{error}</span>}
-          <button
+          <Button
             onClick={onAbort}
             disabled={loading || state === "clean"}
-            className={cn(
-              "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
-              (loading || state === "clean") && "cursor-not-allowed opacity-60",
-            )}
+            variant="secondary"
+            size="sm"
             title="Abort merge — reset working tree to HEAD and clear MERGE_HEAD"
           >
             Abort merge
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onCommit}
             disabled={loading || !allResolved}
-            className={cn(
-              "h-7 rounded-md px-3 text-xs font-medium",
-              allResolved && !loading
-                ? "bg-primary text-primary-foreground hover:opacity-90"
-                : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
-            )}
+            variant="default"
+            size="sm"
             title="Commit the merge using HEAD + MERGE_HEAD as parents"
           >
             Commit merge
-          </button>
+          </Button>
         </div>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr]">

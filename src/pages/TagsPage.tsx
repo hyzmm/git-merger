@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Tag, Trash2, Upload, UploadCloud } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import type { TagInfo } from "@/ipc/git";
@@ -62,18 +63,16 @@ export function TagsPage() {
         {busy && <span className="text-muted-foreground">· working…</span>}
         {status && <span className="text-[hsl(var(--branch-1))]">· {status}</span>}
         <div className="ml-auto flex items-center gap-2">
-          <button
+          <Button
             onClick={() => void pushAllTags()}
             disabled={busy || entries.length === 0}
+            variant="secondary"
+            size="sm"
             title="git push --tags (every local tag → origin)"
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2.5 text-[11px] hover:bg-accent",
-              (busy || entries.length === 0) && "cursor-not-allowed opacity-60",
-            )}
           >
             <UploadCloud className="h-3.5 w-3.5" />
             Push all tags
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -165,17 +164,18 @@ function TagRow({
   return (
     <div className="border-b border-border/40">
       <div className="flex items-center gap-3 px-3 py-2 hover:bg-accent/30">
-        <button
+        <Button
           onClick={onToggle}
           aria-label={expanded ? "Collapse" : "Expand"}
-          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+          variant="ghost"
+          size="icon-xs"
         >
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5" />
           ) : (
             <ChevronRight className="h-3.5 w-3.5" />
           )}
-        </button>
+        </Button>
         <span
           className={cn(
             "min-w-[2.5rem] shrink-0 rounded px-1.5 text-center text-[10px] uppercase tracking-wider",
@@ -201,19 +201,17 @@ function TagRow({
         </span>
         <span className="shrink-0 text-[10.5px] text-muted-foreground">{fmtTime(tag.time)}</span>
         <div className="flex shrink-0 items-center gap-1.5">
-          <button
+          <Button
             onClick={() => void askPush()}
             disabled={busy}
+            variant="secondary"
+            size="xs"
             title={`git push origin ${tag.name}`}
-            className={cn(
-              "flex h-6 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             <Upload className="h-3 w-3" />
             Push…
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               void (async () => {
                 const ok = await confirm({
@@ -228,39 +226,33 @@ function TagRow({
               })();
             }}
             disabled={busy}
+            variant="outline"
+            size="xs"
             title="Force push (overwrites a moved/recreated tag on the remote)"
-            className={cn(
-              "h-6 rounded-md border border-[hsl(var(--branch-3)/.4)] bg-[hsl(var(--branch-3)/.10)] px-2 text-[10.5px] text-[hsl(var(--branch-3))] hover:bg-[hsl(var(--branch-3)/.18)]",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             Force…
-          </button>
+          </Button>
           <span className="mx-0.5 h-3 w-px bg-border" aria-hidden />
-          <button
+          <Button
             onClick={() => void askDeleteLocal()}
             disabled={busy}
+            variant="secondary"
+            size="xs"
             title="Delete the local tag (does not touch the remote)"
-            className={cn(
-              "flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[10.5px] hover:bg-accent",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             <Trash2 className="h-3 w-3" />
             Local…
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void askDeleteRemote()}
             disabled={busy}
+            variant="destructive"
+            size="xs"
             title="Delete the tag on the remote (`git push origin :refs/tags/<name>`)"
-            className={cn(
-              "flex h-6 items-center gap-1 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2 text-[10.5px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]",
-              busy && "cursor-not-allowed opacity-60",
-            )}
           >
             <Trash2 className="h-3 w-3" />
             Remote…
-          </button>
+          </Button>
         </div>
       </div>
 

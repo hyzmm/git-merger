@@ -7,6 +7,7 @@
  */
 import { useEffect } from "react";
 import { useToasts, type Toast, type ToastVariant } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
   info: "border-sky-500/60 bg-sky-500/10 text-sky-100",
@@ -46,14 +47,15 @@ function ToastItem({ toast }: { toast: Toast }) {
           <div className="mt-0.5 break-words text-xs opacity-70">{toast.detail}</div>
         ) : null}
       </div>
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         type="button"
         onClick={() => dismiss(toast.id)}
         aria-label="Dismiss"
-        className="-mr-1 ml-1 rounded px-1 text-xs opacity-60 hover:opacity-100"
       >
         ×
-      </button>
+      </Button>
     </div>
   );
 }

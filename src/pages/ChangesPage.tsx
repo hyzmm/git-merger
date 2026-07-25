@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { useApp } from "@/stores/app";
@@ -135,75 +136,65 @@ export function ChangesPage() {
           )}
           {loading && <span className="text-muted-foreground">· loading...</span>}
           <div className="ml-auto flex items-center gap-2">
-            <button
+            <Button
               onClick={() => {
                 setApplyError(null);
                 setApplyOpen(true);
               }}
-              className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+              variant="secondary"
+              size="sm"
               title="Apply a unified-patch text from the clipboard onto the working tree"
             >
               Apply patch…
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={selectAll}
-              className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+              variant="secondary"
+              size="sm"
             >
               Select all
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={clearSel}
               disabled={!hasSelection}
-              className={cn(
-                "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
-                !hasSelection && "cursor-not-allowed opacity-60",
-              )}
+              variant="secondary"
+              size="sm"
             >
               Clear
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={stageSel}
               disabled={!hasSelection}
-              className={cn(
-                "h-7 rounded-md px-3 text-xs font-medium",
-                hasSelection
-                  ? "bg-primary text-primary-foreground hover:opacity-90"
-                  : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
-              )}
+              variant="default"
+              size="sm"
             >
               Stage
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={unstageSel}
               disabled={!hasSelection}
-              className={cn(
-                "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
-                !hasSelection && "cursor-not-allowed opacity-60",
-              )}
+              variant="secondary"
+              size="sm"
             >
               Unstage
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={discardSel}
               disabled={!hasSelection}
-              className={cn(
-                "h-7 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-3 text-xs text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]",
-                !hasSelection && "cursor-not-allowed opacity-60",
-              )}
+              variant="destructive"
+              size="sm"
             >
               Discard
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={onStashAll}
               disabled={!hasAnyChange || stashBusy}
+              variant="secondary"
+              size="sm"
               title="git stash — save all working changes for later"
-              className={cn(
-                "h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent",
-                (!hasAnyChange || stashBusy) && "cursor-not-allowed opacity-60",
-              )}
             >
               Stash…
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -298,15 +289,10 @@ export function ChangesPage() {
           </div>
 
           <div className="mt-2 flex items-center gap-2">
-            <button
+            <Button
               onClick={commit}
               disabled={committing || (!amend && stagedCount === 0) || !message.trim()}
-              className={cn(
-                "h-8 flex-1 rounded-md text-xs font-medium",
-                (amend || stagedCount > 0) && message.trim() && !committing
-                  ? "bg-primary text-primary-foreground hover:opacity-90"
-                  : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
-              )}
+              variant="default"
             >
               {committing
                 ? amend
@@ -315,7 +301,7 @@ export function ChangesPage() {
                 : amend
                   ? "Amend commit"
                   : `Commit ${stagedCount} file${stagedCount === 1 ? "" : "s"}`}
-            </button>
+            </Button>
           </div>
           {error && <div className="mt-2 text-[11px] text-destructive">{error}</div>}
         </div>
@@ -357,25 +343,22 @@ export function ChangesPage() {
               </div>
             )}
             <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
-              <button
+              <Button
                 onClick={() => setApplyOpen(false)}
                 disabled={applyBusy}
-                className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent disabled:opacity-60"
+                variant="secondary"
+                size="sm"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => void submitApplyPatch()}
                 disabled={applyBusy || !patchDraft.trim()}
-                className={cn(
-                  "h-7 rounded-md px-3 text-xs font-medium",
-                  applyBusy || !patchDraft.trim()
-                    ? "cursor-not-allowed bg-secondary text-muted-foreground opacity-60"
-                    : "bg-primary text-primary-foreground hover:opacity-90",
-                )}
+                variant="default"
+                size="sm"
               >
                 {applyBusy ? "Applying…" : "Apply"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -428,14 +411,15 @@ function Section({
             >
               {STATUS_LABEL[f.status]}
             </span>
-            <button
-              type="button"
+            <Button
               onClick={() => void openDiff(f.path)}
-              className="flex-1 cursor-pointer truncate text-left font-mono hover:underline"
+              variant="link"
+              size="sm"
+              className="flex-1 truncate text-left font-mono"
               title="Open in Diff view (click for editable working-tree diff)"
             >
               {f.path}
-            </button>
+            </Button>
             <span className="text-[10.5px] text-muted-foreground">{f.flag}</span>
           </div>
         );

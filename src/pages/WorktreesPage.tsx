@@ -4,6 +4,7 @@
  * a "main" badge. Linked worktrees show their branch + HEAD short oid.
  */
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { GitBranch, Plus, Trash2, Lock, AlertTriangle, Trees } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -41,29 +42,26 @@ export function WorktreesPage() {
         {busy && <span className="text-muted-foreground">· {t("worktrees.working")}</span>}
         {status && <span className="text-[hsl(var(--branch-1))]">· {status}</span>}
         <div className="ml-auto flex items-center gap-1.5">
-          <button
+          <Button
             onClick={() => setShowAdd((v) => !v)}
             disabled={!repo || busy}
+            variant="default"
+            size="sm"
             title={t("worktrees.addBtn")}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-              (!repo || busy) && "cursor-not-allowed opacity-60",
-            )}
           >
             <Plus className="h-3 w-3" />
             {t("worktrees.add")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void pruneAll()}
             disabled={!repo || busy}
+            variant="secondary"
+            size="sm"
             title={t("worktrees.pruneTitle")}
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-              (!repo || busy) && "cursor-not-allowed opacity-60",
-            )}
           >
+            <Trash2 className="h-3 w-3" />
             {t("worktrees.prune")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -135,29 +133,25 @@ function Row({
         )}
         {!wt.is_main && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <button
+            <Button
               onClick={() => onRemove(false)}
               disabled={busy}
+              variant="secondary"
+              size="sm"
               title={t("worktrees.removeTitle")}
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent",
-                busy && "cursor-not-allowed opacity-60",
-              )}
             >
               <Trash2 className="h-3 w-3" />
               {t("worktrees.remove")}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => onRemove(true)}
               disabled={busy}
+              variant="destructive"
+              size="sm"
               title={t("worktrees.forceRemoveTitle")}
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-[11px] text-destructive hover:bg-destructive/20",
-                busy && "cursor-not-allowed opacity-60",
-              )}
             >
               {t("worktrees.forceRemove")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -212,12 +206,13 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
           placeholder={t("worktrees.formPathPh")}
           className="h-7 flex-1 font-mono text-[11px]"
         />
-        <button
+        <Button
           onClick={() => void pickFolder()}
-          className="h-7 rounded-md border border-border bg-secondary px-2 text-[11px] hover:bg-accent"
+          variant="secondary"
+          size="sm"
         >
           {t("worktrees.formBrowse")}
-        </button>
+        </Button>
       </div>
       <div className="flex items-center gap-2">
         <label className="w-24 text-muted-foreground">{t("worktrees.formName")}</label>
@@ -238,23 +233,22 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
         />
       </div>
       <div className="flex justify-end gap-1.5">
-        <button
+        <Button
           onClick={onCancel}
           disabled={busy}
-          className="h-7 rounded-md border border-border bg-secondary px-2.5 text-[11px] hover:bg-accent"
+          variant="secondary"
+          size="sm"
         >
           {t("worktrees.cancel")}
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => void submit()}
           disabled={busy || !path.trim()}
-          className={cn(
-            "h-7 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-            (busy || !path.trim()) && "cursor-not-allowed opacity-60",
-          )}
+          variant="default"
+          size="sm"
         >
           {t("worktrees.create")}
-        </button>
+        </Button>
       </div>
     </div>
   );

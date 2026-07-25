@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Archive, Check, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import { Unified } from "@/components/diff/DiffViews";
@@ -97,16 +98,14 @@ export function StashPage() {
         {busy && <span className="text-muted-foreground">· working...</span>}
         {status && <span className="text-[hsl(var(--branch-1))]">· {status}</span>}
         <div className="ml-auto flex items-center gap-2">
-          <button
+          <Button
             onClick={onNewStash}
             disabled={busy}
-            className={cn(
-              "h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90",
-              busy && "cursor-not-allowed opacity-60",
-            )}
+            variant="default"
+            size="sm"
           >
             Stash working changes…
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -158,41 +157,35 @@ export function StashPage() {
                   // confirm dialog handles the whole flow on its own.
                   onClick={(ev) => ev.stopPropagation()}
                 >
-                  <button
+                  <Button
                     onClick={() => void applyStash(e.index)}
                     disabled={busy}
+                    variant="secondary"
+                    size="sm"
                     title="Apply (keep on stack)"
-                    className={cn(
-                      "h-7 rounded-md border border-border bg-secondary px-2.5 text-[11px] hover:bg-accent",
-                      busy && "cursor-not-allowed opacity-60",
-                    )}
                   >
                     Apply…
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => void popStash(e.index)}
                     disabled={busy}
+                    variant="default"
+                    size="sm"
                     title="Apply and remove from stack"
-                    className={cn(
-                      "flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:opacity-90",
-                      busy && "cursor-not-allowed opacity-60",
-                    )}
                   >
                     <Check className="h-3 w-3" />
                     Pop…
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => void dropStash(e.index)}
                     disabled={busy}
+                    variant="destructive"
+                    size="sm"
                     title="Drop without applying"
-                    className={cn(
-                      "flex h-7 items-center gap-1 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2.5 text-[11px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)]",
-                      busy && "cursor-not-allowed opacity-60",
-                    )}
                   >
                     <Trash2 className="h-3 w-3" />
                     Drop…
-                  </button>
+                  </Button>
                 </div>
               </div>
             );

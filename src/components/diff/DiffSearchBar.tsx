@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Regex, X, CaseSensitive } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * v0.13.34 — Find-in-diff floating bar.
@@ -135,62 +136,57 @@ export function DiffSearchBar() {
       </span>
 
       {/* Prev / Next */}
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={() => step(-1)}
         disabled={total === 0}
         title="Previous match (Shift+Enter)"
-        className={cn(
-          "flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent",
-          total === 0 && "cursor-not-allowed opacity-40 hover:bg-transparent",
-        )}
       >
         <ChevronUp className="h-3.5 w-3.5" />
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={() => step(1)}
         disabled={total === 0}
         title="Next match (Enter)"
-        className={cn(
-          "flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent",
-          total === 0 && "cursor-not-allowed opacity-40 hover:bg-transparent",
-        )}
       >
         <ChevronDown className="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
       {/* Case-sensitivity toggle. Subtle but discoverable — same idiom
           as VS Code's "Aa" pill. We use a lucide icon to stay
           consistent with the rest of the toolbar. */}
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={toggleCase}
         title="Match case"
-        className={cn(
-          "flex h-6 w-6 items-center justify-center rounded border border-transparent text-muted-foreground hover:bg-accent",
-          caseSensitive && "border-border bg-secondary text-foreground",
-        )}
+        className={cn(caseSensitive && "border-border bg-secondary text-foreground")}
       >
         <CaseSensitive className="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
       {/* Regex toggle */}
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={toggleRegex}
         title="Use regular expression"
-        className={cn(
-          "flex h-6 w-6 items-center justify-center rounded border border-transparent text-muted-foreground hover:bg-accent",
-          regex && "border-border bg-secondary text-foreground",
-        )}
+        className={cn(regex && "border-border bg-secondary text-foreground")}
       >
         <Regex className="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={close}
         title="Close (Esc)"
-        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent"
       >
         <X className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { Undo2, ChevronDown } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { findQuickUndo, listUndoables } from "@/lib/reflogActions";
 
 export function UndoButton() {
@@ -70,30 +71,29 @@ export function UndoButton() {
 
   return (
     <div ref={popoverRef} className="relative flex items-center">
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => void doUndo(top.targetOid, top.index)}
         disabled={pending !== null}
         title={tooltip}
-        className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-l-md border border-border bg-secondary px-2 text-xs text-foreground hover:bg-accent",
-          pending !== null && "cursor-not-allowed opacity-60",
-        )}
+        className={cn(pending !== null && "cursor-not-allowed opacity-60")}
       >
         <Undo2 className="h-3.5 w-3.5" />
         <span className="hidden capitalize lg:inline">
           {t("undo.label").replace("{verb}", top.action.verb)}
         </span>
         <span className="lg:hidden">{t("undo.shortLabel")}</span>
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
         onClick={() => setOpen((v) => !v)}
         title={t("undo.moreTitle")}
-        className={cn(
-          "inline-flex h-8 items-center justify-center rounded-r-md border border-l-0 border-border bg-secondary px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
+        className={cn("rounded-l-none border-l-0")}
       >
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 top-9 z-30 w-[360px] overflow-hidden rounded-md border border-border bg-popover shadow-lg">
@@ -107,12 +107,14 @@ export function UndoButton() {
               </div>
             )}
             {list.map((c) => (
-              <button
+              <Button
                 key={c.index}
+                variant="ghost"
+                size="sm"
                 disabled={pending !== null}
                 onClick={() => void doUndo(c.targetOid, c.index)}
                 className={cn(
-                  "flex w-full items-center gap-2 border-b border-border/40 px-3 py-1.5 text-left hover:bg-accent",
+                  "w-full border-b border-border/40 text-left",
                   pending?.index === c.index && "opacity-60",
                 )}
               >
@@ -128,7 +130,7 @@ export function UndoButton() {
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                   {c.shortTargetOid}
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
           <div className="border-t border-border bg-secondary/40 px-3 py-1 text-[10px] text-muted-foreground">

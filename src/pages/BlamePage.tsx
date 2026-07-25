@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, GitBranch } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "@/stores/app";
 import { useHighlight } from "@/lib/useHighlight";
@@ -91,14 +92,15 @@ export function BlamePage() {
     <section className="flex h-full min-w-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
         {stack.length > 0 && (
-          <button
+          <Button
             onClick={() => void blameBack()}
+            variant="secondary"
+            size="sm"
             title="Go back to the previous blame view"
-            className="flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 hover:bg-accent"
           >
             <ArrowLeft className="h-3 w-3" />
             Back
-          </button>
+          </Button>
         )}
         <span className="truncate font-mono">{file}</span>
         {revision && (
@@ -116,29 +118,32 @@ export function BlamePage() {
         {error && <span className="ml-2 text-[10.5px] text-destructive">{error}</span>}
         <div className="ml-auto flex items-center gap-2">
           {prev && (
-            <button
+            <Button
               onClick={() => void followRename()}
+              variant="secondary"
+              size="sm"
               title={`Annotate previous revision (${prev.revision.slice(0, 7)} — ${prev.file})`}
-              className="flex h-7 items-center gap-1 rounded-md border border-border bg-secondary px-2 hover:bg-accent"
             >
               <GitBranch className="h-3 w-3" />
               Annotate previous {prev.file !== file ? `(${prev.file.split("/").pop()})` : ""}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={() => file && void openFileHistory(file)}
             disabled={!file}
+            variant="secondary"
+            size="sm"
             title="Show this file's history (follows renames)"
-            className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent disabled:opacity-50"
           >
             File history
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setView("diff")}
-            className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+            variant="secondary"
+            size="sm"
           >
             Back to Diff
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -194,19 +199,21 @@ export function BlamePage() {
                 </div>
 
                 {/* Short oid (clickable) */}
-                <button
+                <Button
                   onClick={() => {
                     void selectCommit(ln.oid);
                     setView("history");
                   }}
+                  variant="link"
+                  size="sm"
                   className={cn(
-                    "truncate text-left text-[11px] text-[hsl(var(--branch-1))] hover:underline",
+                    "truncate text-left font-mono",
                     !groupHead && "opacity-0",
                   )}
                   title={`${ln.oid}\n${ln.summary}\n\nClick: open in History · Right-click: more`}
                 >
                   {ln.short_oid}
-                </button>
+                </Button>
 
                 {/* Line number */}
                 <div className="select-none bg-[hsl(var(--diff-gutter,220_13%_13%))] pr-2 text-right text-[11px] text-muted-foreground">

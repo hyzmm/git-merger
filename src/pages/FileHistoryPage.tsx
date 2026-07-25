@@ -12,6 +12,7 @@
  */
 import { useEffect } from "react";
 import { ArrowRight, FileClock, GitCommit, History as HistoryIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { timeAgo } from "@/lib/time";
@@ -58,14 +59,15 @@ export function FileHistoryPage() {
             · {fh.entries.length} {t("fileHistory.commits")}
           </span>
           {fh.loading && <span className="text-muted-foreground">· loading…</span>}
-          <button
+          <Button
             onClick={() => fh.startPath && void openBlame(fh.startPath)}
             disabled={!fh.startPath}
+            variant="ghost"
+            size="icon-sm"
             title={t("fileHistory.openBlame")}
-            className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <HistoryIcon className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
         {fh.error && (
           <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
@@ -79,11 +81,13 @@ export function FileHistoryPage() {
             </div>
           )}
           {fh.entries.map((e, i) => (
-            <button
+            <Button
               key={`${e.commit.oid}-${i}`}
               onClick={() => void select(i)}
+              variant="ghost"
+              size="sm"
               className={cn(
-                "block w-full border-b border-border/40 px-3 py-2 text-left hover:bg-accent/30",
+                "block w-full border-b border-border/40 py-2",
                 i === fh.selectedIdx && "bg-accent/60",
               )}
             >
@@ -125,7 +129,7 @@ export function FileHistoryPage() {
                   <span>{e.path_at_commit}</span>
                 </div>
               )}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -138,37 +142,34 @@ export function FileHistoryPage() {
               <GitCommit className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="truncate font-mono">{entry.path_at_commit}</span>
               <span className="text-muted-foreground">·</span>
-              <button
+              <Button
                 onClick={() => {
-                  // Jump to the full commit diff in the standard Diff view.
                   void openDiff(entry.commit.oid, entry.path_at_commit);
                 }}
+                variant="link"
+                size="sm"
+                className="font-mono"
                 title={t("fileHistory.openInDiff")}
-                className="font-mono text-[11px] text-[hsl(var(--branch-1))] hover:underline"
               >
                 {entry.commit.short_oid}
-              </button>
+              </Button>
               <span className="truncate text-muted-foreground">{entry.commit.summary}</span>
 
               <div className="ml-auto flex items-center gap-1 rounded-md border border-border bg-secondary p-0.5">
-                <button
+                <Button
                   onClick={() => setDiffMode("sbs")}
-                  className={cn(
-                    "h-6 rounded px-2 text-[11px]",
-                    mode === "sbs" ? "bg-background text-foreground" : "text-muted-foreground",
-                  )}
+                  variant={mode === "sbs" ? "default" : "ghost"}
+                  size="xs"
                 >
                   Side-by-side
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => setDiffMode("unified")}
-                  className={cn(
-                    "h-6 rounded px-2 text-[11px]",
-                    mode === "unified" ? "bg-background text-foreground" : "text-muted-foreground",
-                  )}
+                  variant={mode === "unified" ? "default" : "ghost"}
+                  size="xs"
                 >
                   Unified
-                </button>
+                </Button>
               </div>
             </>
           ) : (

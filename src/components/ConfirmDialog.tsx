@@ -22,6 +22,7 @@ import { AlertTriangle, ShieldAlert, X } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export function ConfirmDialog() {
   const req = useApp((s) => s.confirmRequest);
@@ -43,9 +44,6 @@ export function ConfirmDialog() {
   const isDanger = req.level === "danger";
   const Icon = isDanger ? ShieldAlert : AlertTriangle;
   const iconCls = isDanger ? "text-[hsl(var(--destructive))]" : "text-[hsl(var(--branch-3))]";
-  const confirmCls = isDanger
-    ? "bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground,0_0%_100%))] hover:opacity-90"
-    : "bg-primary text-primary-foreground hover:opacity-90";
   const defaultLabel = isDanger ? t("common.delete") : t("common.confirm");
 
   return (
@@ -77,13 +75,14 @@ export function ConfirmDialog() {
             <Icon className={cn("h-4 w-4", iconCls)} />
             <h2 className="text-sm font-semibold">{req.title}</h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={onCancel}
             aria-label="Close"
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </header>
 
         <div className="space-y-3 px-4 py-3">
@@ -96,21 +95,23 @@ export function ConfirmDialog() {
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               type="button"
               onClick={onCancel}
-              className="rounded border border-border bg-secondary px-3 py-1.5 text-xs hover:bg-accent"
             >
               {req.cancelLabel ?? t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={isDanger ? "destructive" : "default"}
+              size="sm"
               ref={confirmRef}
               type="button"
               onClick={onConfirm}
-              className={cn("rounded px-3 py-1.5 text-xs font-medium", confirmCls)}
             >
               {req.confirmLabel ?? defaultLabel}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

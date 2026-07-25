@@ -12,6 +12,7 @@
  * checkout (for local branches) or jump to their commit; views switch.
  */
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -318,15 +319,14 @@ function Row({
   );
   const Icon = item.Icon;
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       type="button"
       data-idx={idx}
       onMouseEnter={onHover}
       onClick={onActivate}
-      className={cn(
-        "flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm",
-        active && "bg-accent/60",
-      )}
+      className={cn("w-full text-left", active && "bg-accent/60")}
     >
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">{segments}</span>
@@ -336,6 +336,6 @@ function Row({
         </span>
       )}
       {active && <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
-    </button>
+    </Button>
   );
 }

@@ -7,6 +7,7 @@
  *   - executing: backend has begun replaying. We show a progress bar and the
  *     remaining steps; on conflict we route the user to the Merge view.
  */
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -164,49 +165,54 @@ function Header({
       <div className="ml-auto flex items-center gap-2">
         {!inProgress && (
           <>
-            <button
+            <Button
               onClick={onClose}
               disabled={busy}
-              className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent disabled:opacity-50"
+              variant="secondary"
+              size="sm"
             >
               {t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={onStart}
               disabled={busy}
-              className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              variant="default"
+              size="sm"
             >
               {t("rebase.start")}
-            </button>
+            </Button>
           </>
         )}
         {inProgress && conflicted && (
           <>
-            <button
+            <Button
               onClick={onGoMerge}
-              className="h-7 rounded-md border border-border bg-secondary px-3 text-xs hover:bg-accent"
+              variant="secondary"
+              size="sm"
             >
               {t("rebase.goMerge")}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={onContinue}
               disabled={busy}
-              className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              variant="default"
+              size="sm"
             >
               {t("rebase.continue")}
-            </button>
+            </Button>
           </>
         )}
         {inProgress && (
-          <button
+          <Button
             onClick={onAbort}
             disabled={busy}
+            variant="destructive"
+            size="sm"
             title={t("rebase.abort")}
-            className="flex h-7 items-center gap-1 rounded-md border border-[hsl(var(--destructive)/.4)] bg-[hsl(var(--destructive)/.10)] px-2.5 text-[11px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/.18)] disabled:opacity-50"
           >
             <RotateCcw className="h-3 w-3" />
             {t("rebase.abort")}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -247,22 +253,24 @@ function PlanRow({
     >
       <div className="flex items-center gap-2">
         <div className="flex flex-col">
-          <button
+          <Button
             onClick={onMoveUp}
             disabled={disabled || index === 0}
+            variant="ghost"
+            size="icon-xs"
             title={t("rebase.moveUp")}
-            className="rounded p-0.5 text-muted-foreground hover:bg-accent disabled:opacity-30"
           >
             <ArrowUp className="h-3 w-3" />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onMoveDown}
             disabled={disabled || index === total - 1}
+            variant="ghost"
+            size="icon-xs"
             title={t("rebase.moveDown")}
-            className="rounded p-0.5 text-muted-foreground hover:bg-accent disabled:opacity-30"
           >
             <ArrowDown className="h-3 w-3" />
-          </button>
+          </Button>
         </div>
 
         <Select

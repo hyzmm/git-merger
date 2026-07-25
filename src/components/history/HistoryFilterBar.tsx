@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { Filter, X, GitBranch, Eye, EyeOff } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useSettings, type GraphMode } from "@/stores/settings";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /** Filter chip-style row that sits in the CommitList toolbar.
  *  Hosts: text filter, author dropdown, date range, pathspec. */
@@ -89,39 +89,34 @@ export function HistoryFilterBar() {
           placeholder="Filter commits (message, author, oid, ref)..."
           className="h-7 flex-1 text-xs"
         />
-        <button
+        <Button
+          variant={advOpen ? "default" : "outline"}
+          size="sm"
           onClick={() => setAdvOpen((v) => !v)}
-          className={cn(
-            "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px]",
-            advOpen ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent",
-          )}
           title="Advanced filters: author, date range, path"
         >
           <Filter className="h-3 w-3" />
           More
-        </button>
-        <button
+        </Button>
+        <Button
+          variant={graphMode !== "normal" ? "default" : "outline"}
+          size="sm"
           onClick={cycleGraphMode}
-          className={cn(
-            "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px]",
-            graphMode === "normal"
-              ? "text-muted-foreground hover:bg-accent"
-              : "bg-secondary text-foreground",
-          )}
           title={`${graphLabel(graphMode)} — click to cycle (full → compact → hidden)`}
         >
           <GraphIcon className="h-3 w-3" />
           {graphMode === "normal" ? "Full" : graphMode === "compact" ? "Compact" : "Hidden"}
-        </button>
+        </Button>
         {hasAnyFilter && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={resetFilters}
-            className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:bg-accent"
             title="Clear all filters"
           >
             <X className="h-3 w-3" />
             Reset
-          </button>
+          </Button>
         )}
       </div>
 

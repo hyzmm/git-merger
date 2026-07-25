@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
@@ -30,12 +31,13 @@ export class ErrorBoundary extends Component<Props, State> {
         <pre className="max-w-3xl overflow-auto rounded-md border border-border bg-card p-4 font-mono text-xs">
           {error.stack || error.message}
         </pre>
-        <button
+        <Button
+          variant="default"
+          size="sm"
           onClick={this.reset}
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           Reset
-        </button>
+        </Button>
       </div>
     );
   }

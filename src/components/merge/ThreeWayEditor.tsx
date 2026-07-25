@@ -3,6 +3,7 @@ import { ChevronUp, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { type Chunk, type ConflictChunk, chunkSummary } from "@/lib/conflictParser";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const COL_BASE = "flex min-w-0 flex-col bg-background";
 const HEAD_BASE = "flex h-8 shrink-0 items-center gap-2 border-b bg-card px-3 text-xs";
@@ -115,60 +116,66 @@ export function ThreeWayEditor() {
           {/* v0.13.18 — Prev / Next conflict navigation. Disabled when the
               file has no conflict blocks (e.g. resolved-only review). */}
           <div className="flex items-center gap-0.5 rounded-md border border-border bg-secondary">
-            <button
+            <Button
               onClick={() => navigate(-1)}
               disabled={conflictBlocks.length === 0}
               title="Previous conflict (F7)"
-              className="flex h-7 items-center px-1.5 hover:bg-accent disabled:opacity-50"
+              variant="ghost"
+              size="icon-xs"
             >
               <ChevronUp className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => navigate(1)}
               disabled={conflictBlocks.length === 0}
               title="Next conflict (F8)"
-              className="flex h-7 items-center px-1.5 hover:bg-accent disabled:opacity-50"
+              variant="ghost"
+              size="icon-xs"
             >
               <ChevronDown className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
 
           {/* v0.13.18 — Bulk accept / reset. */}
-          <button
+          <Button
             onClick={() => applyAllResolutions("left")}
             disabled={summary.total === 0}
             title="Accept all blocks from the LEFT (ours) side"
-            className="h-7 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
             All ◄
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => applyAllResolutions("right")}
             disabled={summary.total === 0}
             title="Accept all blocks from the RIGHT (theirs) side"
-            className="h-7 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
             All ►
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => applyAllResolutions("both")}
             disabled={summary.total === 0}
             title="Accept BOTH sides for every conflict block (ours then theirs)"
-            className="h-7 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
             All ◄►
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={resetAllResolutions}
             disabled={summary.total === 0 || (!allResolved && !hasPending)}
             title="Reset every block back to pending (drops applied choices and manual edits)"
-            className="h-7 rounded-md border border-border bg-secondary px-2 text-[10.5px] hover:bg-accent disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
             Reset
-          </button>
+          </Button>
 
           {/* v0.13.18 — Show / hide the BASE column. */}
-          <button
+          <Button
             onClick={() => setShowBase((v) => !v)}
             disabled={!hasAncestor}
             title={
@@ -176,27 +183,21 @@ export function ThreeWayEditor() {
                 ? "Show the common-ancestor (base) column"
                 : "No common ancestor available for this conflict"
             }
-            className={cn(
-              "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[10.5px] hover:bg-accent disabled:opacity-50",
-              showBase && hasAncestor && "bg-secondary text-foreground",
-            )}
+            variant={showBase && hasAncestor ? "secondary" : "outline"}
+            size="sm"
           >
             {showBase ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
             Base
-          </button>
+          </Button>
 
-          <button
+          <Button
             disabled={hasPending || summary.total === 0}
             onClick={resolveCurrentFile}
-            className={cn(
-              "h-7 rounded-md px-3 text-xs font-medium",
-              !hasPending && summary.total > 0
-                ? "bg-primary text-primary-foreground hover:opacity-90"
-                : "cursor-not-allowed bg-secondary text-muted-foreground opacity-60",
-            )}
+            variant="default"
+            size="sm"
           >
             Mark resolved &amp; stage
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -467,16 +468,12 @@ function ActionBtn({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       onClick={onClick}
-      className={cn(
-        "h-5 rounded border px-2 text-[10.5px]",
-        active
-          ? "border-[hsl(142_70%_55%/.5)] bg-[hsl(142_70%_55%/.18)] text-[hsl(142_70%_55%)]"
-          : "border-border bg-secondary text-muted-foreground hover:bg-accent",
-      )}
+      variant={active ? "default" : "outline"}
+      size="xs"
     >
       {children}
-    </button>
+    </Button>
   );
 }
