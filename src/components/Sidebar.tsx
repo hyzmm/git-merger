@@ -1,7 +1,5 @@
 import {
   History,
-  GitCompare,
-  GitMerge,
   FilePlus2,
   Archive,
   Undo2,
@@ -40,8 +38,6 @@ const items: { key: ViewKey; labelKey: TKey; Icon: typeof History }[] = [
   { key: "gitignore", labelKey: "sidebar.gitignore", Icon: FileX },
   { key: "search", labelKey: "sidebar.search", Icon: Search },
   { key: "tags", labelKey: "sidebar.tags", Icon: Tag },
-  { key: "diff", labelKey: "sidebar.diff", Icon: GitCompare },
-  { key: "merge", labelKey: "sidebar.merge", Icon: GitMerge },
   { key: "stats", labelKey: "sidebar.stats", Icon: BarChart3 },
 ];
 

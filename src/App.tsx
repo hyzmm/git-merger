@@ -15,8 +15,6 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { RecentFilesPalette } from "@/components/RecentFilesPalette";
 import { ToastContainer } from "@/components/ToastContainer";
 import { HistoryPage } from "@/pages/HistoryPage";
-import { DiffPage } from "@/pages/DiffPage";
-import { MergePage } from "@/pages/MergePage";
 import { BlamePage } from "@/pages/BlamePage";
 import { ChangesPage } from "@/pages/ChangesPage";
 import { StashPage } from "@/pages/StashPage";
@@ -67,8 +65,6 @@ export default function App() {
       "ctrl+3": () => repo && setView("stash"),
       "ctrl+4": () => repo && setView("reflog"),
       "ctrl+5": () => repo && setView("submodules"),
-      "ctrl+6": () => repo && setView("diff"),
-      "ctrl+7": () => repo && setView("merge"),
       "ctrl+8": () => repo && setView("rebase"),
       "ctrl+9": () => repo && setView("worktrees"),
       "ctrl+0": () => repo && setView("gitignore"),
@@ -178,10 +174,6 @@ export default function App() {
                   <WelcomePage />
                 ) : view === "history" ? (
                   <HistoryPage />
-                ) : view === "diff" ? (
-                  <DiffPage />
-                ) : view === "merge" ? (
-                  <MergePage />
                 ) : view === "changes" ? (
                   <ChangesPage />
                 ) : view === "stash" ? (

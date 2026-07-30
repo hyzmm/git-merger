@@ -12,8 +12,6 @@ export const zh: Dict = {
   "sidebar.gitignore": ".gitignore 编辑器",
   "sidebar.search": "历史搜索",
   "sidebar.tags": "Tag 管理",
-  "sidebar.diff": "Diff",
-  "sidebar.merge": "合并",
   "sidebar.toggle": "切换侧边栏",
   "sidebar.stats": "统计",
 

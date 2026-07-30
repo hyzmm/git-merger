@@ -70,7 +70,7 @@ export function RebasePage() {
         onContinue={() => void continueRebase()}
         onAbort={() => void abortRebase()}
         onClose={closePlan}
-        onGoMerge={() => setView("merge")}
+        onGoMerge={() => setView("changes")}
       />
 
       {rebase.error && (

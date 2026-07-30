@@ -86,8 +86,6 @@ export function CommandPalette() {
       { key: "submodules", labelKey: "sidebar.submodules", Icon: Box },
       { key: "rebase", labelKey: "sidebar.rebase", Icon: GitBranch },
       { key: "tags", labelKey: "sidebar.tags", Icon: TagIcon },
-      { key: "diff", labelKey: "sidebar.diff", Icon: FileText },
-      { key: "merge", labelKey: "sidebar.merge", Icon: GitBranch },
     ];
     for (const v of VIEWS) {
       const label = t(v.labelKey);

@@ -14,8 +14,6 @@ export const en = {
   "sidebar.gitignore": ".gitignore",
   "sidebar.search": "Search",
   "sidebar.tags": "Tags",
-  "sidebar.diff": "Diff",
-  "sidebar.merge": "Merge",
   "sidebar.toggle": "Toggle Sidebar",
   "sidebar.stats": "Stats",
   "sidebar.settings": "Settings",

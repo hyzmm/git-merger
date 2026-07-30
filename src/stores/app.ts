@@ -2068,7 +2068,7 @@ export const useApp = create<AppState>((set, get) => ({
     const repo = get().repo;
     if (!repo) return;
     set((s) => ({
-      view: "diff",
+      view: "changes",
       diff: {
         ...s.diff,
         oid: WORKING_OID,
@@ -3530,7 +3530,7 @@ export const useApp = create<AppState>((set, get) => ({
       void get().loadHistory();
       // If cherry-pick produced conflicts, switch to merge view to resolve them.
       const ms = await git.mergeState(repo.path);
-      if (ms !== "clean") set({ view: "merge" });
+      if (ms !== "clean") set({ view: "changes" });
       void get().loadMerge();
       void get().loadChanges();
     } catch (e) {
@@ -3588,7 +3588,7 @@ export const useApp = create<AppState>((set, get) => ({
         // still pending. We deliberately do NOT auto-resume after the
         // user resolves: the next `cherryPick` / `cherryPickMany` is
         // their explicit choice (matches IntelliJ's behaviour).
-        set({ view: "merge" });
+        set({ view: "changes" });
         void get().loadMerge();
         const remaining = outcome.pending.length;
         set((s) => ({
@@ -3621,7 +3621,7 @@ export const useApp = create<AppState>((set, get) => ({
       await git.revertCommit(repo.path, oid);
       void get().loadHistory();
       const ms = await git.mergeState(repo.path);
-      if (ms !== "clean") set({ view: "merge" });
+      if (ms !== "clean") set({ view: "changes" });
       void get().loadMerge();
       void get().loadChanges();
     } catch (e) {
@@ -4354,7 +4354,7 @@ function applyRebaseStatus(_set: unknown, get: () => AppState, status: RebaseSta
   }));
   if (status.kind === "conflicted") {
     // Surface the merge view so the user can resolve.
-    useApp.setState((s) => ({ view: s.view === "rebase" ? s.view : ("merge" as ViewKey) }));
+    useApp.setState((s) => ({ view: s.view === "rebase" ? s.view : ("changes" as ViewKey) }));
     void get().loadMerge();
     void get().loadChanges();
   }

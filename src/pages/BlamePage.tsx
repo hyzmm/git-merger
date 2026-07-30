@@ -138,11 +138,11 @@ export function BlamePage() {
             File history
           </Button>
           <Button
-            onClick={() => setView("diff")}
+            onClick={() => setView("changes")}
             variant="secondary"
             size="sm"
           >
-            Back to Diff
+            Back to Changes
           </Button>
         </div>
       </div>
