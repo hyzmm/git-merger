@@ -166,59 +166,62 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <Sidebar />
-        <SidebarInset>
-          <RepoTabs />
-          <Topbar />
-
-          <main className="min-h-0 flex-1 overflow-hidden">
-            {!repo ? (
-              <WelcomePage />
-            ) : view === "history" ? (
-              <HistoryPage />
-            ) : view === "diff" ? (
-              <DiffPage />
-            ) : view === "merge" ? (
-              <MergePage />
-            ) : view === "changes" ? (
-              <ChangesPage />
-            ) : view === "stash" ? (
-              <StashPage />
-            ) : view === "reflog" ? (
-              <ReflogPage />
-            ) : view === "submodules" ? (
-              <SubmodulesPage />
-            ) : view === "rebase" ? (
-              <RebasePage />
-            ) : view === "worktrees" ? (
-              <WorktreesPage />
-            ) : view === "gitignore" ? (
-              <GitignorePage />
-            ) : view === "search" ? (
-              <SearchPage />
-            ) : view === "tags" ? (
-              <TagsPage />
-            ) : view === "fileHistory" ? (
-              <FileHistoryPage />
-            ) : view === "stats" ? (
-              <StatsPage />
-            ) : (
-              <BlamePage />
-            )}
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
-      {panelOpen && (
-        <div className="h-48 shrink-0">
-          <OutputPanel />
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+        <div className="flex min-h-0 flex-1">
+          <SidebarProvider className="flex min-h-0 flex-1">
+            <Sidebar />
+            <SidebarInset>
+              <RepoTabs />
+              <Topbar />
+              <main className="min-h-0 flex-1 overflow-hidden">
+                {!repo ? (
+                  <WelcomePage />
+                ) : view === "history" ? (
+                  <HistoryPage />
+                ) : view === "diff" ? (
+                  <DiffPage />
+                ) : view === "merge" ? (
+                  <MergePage />
+                ) : view === "changes" ? (
+                  <ChangesPage />
+                ) : view === "stash" ? (
+                  <StashPage />
+                ) : view === "reflog" ? (
+                  <ReflogPage />
+                ) : view === "submodules" ? (
+                  <SubmodulesPage />
+                ) : view === "rebase" ? (
+                  <RebasePage />
+                ) : view === "worktrees" ? (
+                  <WorktreesPage />
+                ) : view === "gitignore" ? (
+                  <GitignorePage />
+                ) : view === "search" ? (
+                  <SearchPage />
+                ) : view === "tags" ? (
+                  <TagsPage />
+                ) : view === "fileHistory" ? (
+                  <FileHistoryPage />
+                ) : view === "stats" ? (
+                  <StatsPage />
+                ) : (
+                  <BlamePage />
+                )}
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
         </div>
-      )}
-      <StatusBar />
-      <CredentialDialog />
-      <CommandPalette />
-      <RecentFilesPalette />
-      <ToastContainer />
+        {panelOpen && (
+          <div className="h-48 shrink-0">
+            <OutputPanel />
+          </div>
+        )}
+        <StatusBar />
+        <CredentialDialog />
+        <CommandPalette />
+        <RecentFilesPalette />
+        <ToastContainer />
+      </div>
     </TooltipProvider>
   );
 }

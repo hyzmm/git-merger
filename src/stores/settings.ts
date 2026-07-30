@@ -57,7 +57,7 @@ export const HISTORY_RIGHT_MAX = 720;
 
 const DEFAULT: UiSettings = {
   theme: "dark",
-  fontSize: 14,
+  fontSize: 16,
   tabSize: 4,
   graphMode: "normal",
   historyLeftWidth: 220,

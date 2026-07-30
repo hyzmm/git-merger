@@ -12,6 +12,7 @@ import {
   Search,
   Tag,
   BarChart3,
+  Settings,
 } from "lucide-react";
 import { useApp, type ViewKey } from "@/stores/app";
 import { useT, type TKey } from "@/lib/i18n";
@@ -73,15 +74,23 @@ export function Sidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SettingsDialog>
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <Settings />
+                    <span>{t("sidebar.settings")}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SettingsDialog>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SettingsDialog />
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
       <SidebarRail />
+      <SidebarFooter className="h-6"></SidebarFooter>
     </SidebarRoot>
   );
 }

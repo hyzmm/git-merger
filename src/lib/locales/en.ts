@@ -18,6 +18,7 @@ export const en = {
   "sidebar.merge": "Merge",
   "sidebar.toggle": "Toggle Sidebar",
   "sidebar.stats": "Stats",
+  "sidebar.settings": "Settings",
 
   // Topbar
   "topbar.openRepo": "Open Repository",

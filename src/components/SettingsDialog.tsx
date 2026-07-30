@@ -29,7 +29,7 @@ const AUTOCRLF_VALUES = [
   { value: "true", label: "true — convert CRLF↔LF (recommended on Windows)" },
 ];
 
-export function SettingsDialog() {
+export function SettingsDialog({ children }: { children: React.ReactElement }) {
   const repo = useApp((s) => s.repo);
   const settingsOpen = useApp((s) => s.settingsOpen);
   const openSettings = useApp((s) => s.openSettings);
@@ -176,13 +176,7 @@ export function SettingsDialog() {
         else closeSettings();
       }}
     >
-      <DialogTrigger
-        render={
-          <Button variant="ghost" size="icon" title={t("topbar.settings")}>
-            <Settings className="h-4 w-4" />
-          </Button>
-        }
-      />
+      <DialogTrigger render={children} />
       <DialogContent className={"min-w-fit"}>
         <DialogHeader>
           <DialogTitle>{t("settings.title")}</DialogTitle>
