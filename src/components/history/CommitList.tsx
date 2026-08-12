@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useApp } from "@/stores/app";
-import { useSettings } from "@/stores/settings";
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useApp } from '@/stores/app';
+import { useSettings } from '@/stores/settings';
 import {
   applyColMapping,
   buildColMapping,
@@ -10,16 +10,17 @@ import {
   extendLayout,
   type LayoutState,
   type RowLayout,
-} from "@/lib/graph";
-import { computeTrunkOids } from "@/lib/trunkOids";
-import { timeAgo } from "@/lib/time";
-import { cn } from "@/lib/utils";
-import { confirm } from "@/lib/confirm";
-import { GraphRow, GRAPH_LANE_WIDTH } from "./GraphRow";
-import { GraphSkeleton } from "./GraphSkeleton";
-import { HistoryFilterBar } from "./HistoryFilterBar";
-import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
-import type { CommitSummary } from "@/ipc/git";
+} from '@/lib/graph';
+import { computeTrunkOids } from '@/lib/trunkOids';
+import { timeAgo } from '@/lib/time';
+import { cn } from '@/lib/utils';
+import { confirm } from '@/lib/confirm';
+import { useShortcuts } from '@/lib/useShortcuts';
+import { GraphRow, GRAPH_LANE_WIDTH } from './GraphRow';
+import { GraphSkeleton } from './GraphSkeleton';
+import { HistoryFilterBar } from './HistoryFilterBar';
+import { ContextMenu, type ContextMenuPos, type MenuItem } from '@/components/ContextMenu';
+import type { CommitSummary } from '@/ipc/git';
 
 const ROW_HEIGHT = 28;
 
@@ -35,7 +36,6 @@ interface MenuState {
   pos: ContextMenuPos;
   items: MenuItem[];
 }
-
 
 export function CommitList() {
   const commits = useApp((s) => s.history.commits);
@@ -143,7 +143,7 @@ export function CommitList() {
     rawRowsByOid: new Map(),
     maxRawWidth: 0,
     mappedRowsByOid: new Map(),
-    mappingKey: "__init__",
+    mappingKey: '__init__',
   });
 
   // v0.13.29 B-4 — derive the trunk hint from the current refs once
@@ -168,7 +168,7 @@ export function CommitList() {
       cache.rawRowsByOid = new Map();
       cache.maxRawWidth = 0;
       cache.mappedRowsByOid = new Map();
-      cache.mappingKey = "__init__";
+      cache.mappingKey = '__init__';
       const rows = extendLayout(cache.state, commits, { trunkOids });
       for (const r of rows) {
         cache.rawRowsByOid.set(r.oid, r);
@@ -196,7 +196,7 @@ export function CommitList() {
     // refs reload.
     const haveLanes = cache.maxRawWidth > 0;
     const mapping = haveLanes ? buildColMapping(cache.state, cache.maxRawWidth) : undefined;
-    const mappingKey = mapping ? mapping.join(",") : "";
+    const mappingKey = mapping ? mapping.join(',') : '';
     const trunkAllocationsChanged = mappingKey !== cache.mappingKey;
     if (trunkAllocationsChanged && mapping) {
       // Trunk permutation actually shifted — every existing mapped
@@ -232,8 +232,8 @@ export function CommitList() {
   // "track" width is what we let the grid cell occupy (capped so the
   // commit summary always has room). When natural > track, the SVG just
   // scrolls horizontally inside the cell.
-  const compact = graphMode === "compact";
-  const hidden = graphMode === "hidden";
+  const compact = graphMode === 'compact';
+  const hidden = graphMode === 'hidden';
   const laneW = compact ? GRAPH_LANE_WIDTH.compact : GRAPH_LANE_WIDTH.normal;
   const naturalGraphW = graphCols * laneW;
   const cap = compact ? GRAPH_COL_CAP.compact : GRAPH_COL_CAP.normal;
@@ -255,7 +255,7 @@ export function CommitList() {
     if (!selectedOid) return;
     const idx = filtered.findIndex((c) => c.oid === selectedOid);
     if (idx < 0) return;
-    virtualizer.scrollToIndex(idx, { align: "center" });
+    virtualizer.scrollToIndex(idx, { align: 'center' });
   }, [selectedOid, filtered, virtualizer]);
 
   // Infinite scroll: when the last virtualized row is within ~20 rows of the
@@ -301,36 +301,36 @@ export function CommitList() {
     const items: MenuItem[] = [
       { label: `${c.short_oid} — ${c.summary.slice(0, 60)}`, heading: true },
       {
-        label: "New branch from here…",
+        label: 'New branch from here…',
         onClick: () => {
-          const name = window.prompt(`New branch from ${c.short_oid}:`, "")?.trim();
+          const name = window.prompt(`New branch from ${c.short_oid}:`, '')?.trim();
           if (!name) return;
           void (async () => {
             const ck = await confirm({
-              level: "warning",
+              level: 'warning',
               title: `Checkout '${name}' after creating?`,
               message: `OK = create + checkout. Cancel = just create the ref, stay on the current branch.`,
-              confirmLabel: "Create + checkout",
-              cancelLabel: "Create only",
+              confirmLabel: 'Create + checkout',
+              cancelLabel: 'Create only',
             });
             void createBranch(name, c.oid, ck);
           })();
         },
       },
       {
-        label: "Create tag here…",
+        label: 'Create tag here…',
         onClick: () => {
-          const name = window.prompt(`Tag name at ${c.short_oid}:`, "")?.trim();
+          const name = window.prompt(`Tag name at ${c.short_oid}:`, '')?.trim();
           if (!name) return;
-          const msg = window.prompt(`Tag message (blank = lightweight tag):`, "") ?? "";
+          const msg = window.prompt(`Tag message (blank = lightweight tag):`, '') ?? '';
           void createTag(name, c.oid, msg.trim() || undefined);
         },
       },
       {
-        label: "Checkout (detached HEAD)",
+        label: 'Checkout (detached HEAD)',
         onClick: () => void checkoutCommit(c.oid),
       },
-      { separator: true, label: "" },
+      { separator: true, label: '' },
       // v0.13.26 — when right-clicking inside an N-element multi-select,
       // cherry-pick acts on the whole set (oldest-first inside the
       // store). When the click is outside the set, we fall back to the
@@ -342,68 +342,87 @@ export function CommitList() {
             onClick: () => void cherryPickMany([...selectedOids]),
           }
         : {
-            label: "Cherry-pick onto HEAD",
+            label: 'Cherry-pick onto HEAD',
             onClick: () => void cherryPick(c.oid),
           },
       {
-        label: "Revert this commit",
+        label: 'Revert this commit',
         onClick: () => void revertCommit(c.oid),
       },
-      { separator: true, label: "" },
-      { label: "Reset HEAD to here", heading: true },
+      { separator: true, label: '' },
+      { label: 'Reset HEAD to here', heading: true },
       {
-        label: "Soft (keep index + working tree)",
-        onClick: () => void resetTo(c.oid, "soft"),
+        label: 'Soft (keep index + working tree)',
+        onClick: () => void resetTo(c.oid, 'soft'),
       },
       {
-        label: "Mixed (keep working tree)",
-        onClick: () => void resetTo(c.oid, "mixed"),
+        label: 'Mixed (keep working tree)',
+        onClick: () => void resetTo(c.oid, 'mixed'),
       },
       {
-        label: "Hard (discard everything)",
+        label: 'Hard (discard everything)',
         danger: true,
-        onClick: () => void resetTo(c.oid, "hard"),
+        onClick: () => void resetTo(c.oid, 'hard'),
       },
-      { separator: true, label: "" },
+      { separator: true, label: '' },
       {
         label: c.parents[0]
           ? `Rebase interactively from here (${c.short_oid}^)`
-          : "Rebase interactively from here (root commit — n/a)",
+          : 'Rebase interactively from here (root commit — n/a)',
         disabled: !c.parents[0],
         onClick: () => {
           if (c.parents[0]) void openRebasePlan(c.parents[0]);
         },
       },
-      { separator: true, label: "" },
-      { label: "Highlight reachability", heading: true },
+      { separator: true, label: '' },
+      { label: 'Highlight reachability', heading: true },
       {
-        label: "Ancestors (this commit + parents)",
+        label: 'Ancestors (this commit + parents)',
         onClick: () => void highlightAncestors(c.oid),
       },
       {
-        label: "Descendants (this commit + children)",
+        label: 'Descendants (this commit + children)',
         onClick: () => void highlightDescendants(c.oid),
       },
       ...(highlightOid
         ? [
             {
-              label: "Clear highlight",
+              label: 'Clear highlight',
               onClick: () => clearHighlight(),
             },
           ]
         : []),
-      { separator: true, label: "" },
+      { separator: true, label: '' },
       {
         label: `Copy SHA (${c.short_oid})`,
-        onClick: () =>  writeText(c.oid),
+        onClick: () => writeText(c.oid),
       },
       {
-        label: "Copy commit message",
-        onClick: () =>  writeText(c.summary),
+        label: 'Copy commit message',
+        onClick: () => writeText(c.summary),
       },
     ];
     setMenu({ pos: { x: e.clientX, y: e.clientY }, items });
   };
+
+  // v0.13.x — Cmd/Ctrl+C to copy commit message(s).
+  // Single selection: copies the focused commit's summary.
+  // Multi-selection: copies all selected commits' summaries, one per line,
+  // in the order they appear in the commit list.
+  const copyShortcutMap = useMemo(
+    () => ({
+      'ctrl+c': () => {
+        if (selectedOids.size === 0) return;
+        const selected = commits.filter((c) => selectedOids.has(c.oid));
+        if (selected.length === 0) return;
+        const text = selected.map((c) => c.summary).join('\n');
+        void writeText(text);
+      },
+    }),
+    [selectedOids, commits],
+  );
+
+  useShortcuts(copyShortcutMap);
 
   return (
     <section className="flex h-full min-w-0 min-h-0 flex-col">
@@ -456,7 +475,7 @@ export function CommitList() {
           <span className="ml-auto flex items-center gap-1.5 rounded bg-[hsl(var(--branch-3)/.15)] px-2 py-0.5 text-[10.5px] text-[hsl(var(--branch-3))]">
             <span>
               {highlightLoading
-                ? "computing..."
+                ? 'computing...'
                 : `Highlighting ${highlightMode} of ${highlightOid.slice(0, 7)}`}
             </span>
             {!highlightLoading && (
@@ -487,14 +506,14 @@ export function CommitList() {
           />
         ) : !loading && filtered.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
-            {commits.length === 0 ? "No commits in this repository." : "No matches."}
+            {commits.length === 0 ? 'No commits in this repository.' : 'No matches.'}
           </div>
         ) : (
           <div
             style={{
               height: virtualizer.getTotalSize(),
-              width: "100%",
-              position: "relative",
+              width: '100%',
+              position: 'relative',
             }}
           >
             {virtualizer.getVirtualItems().map((vRow) => {
@@ -522,26 +541,26 @@ export function CommitList() {
                     // v0.13.26 — modifier-aware multi-select. Plain
                     // click collapses to single; ctrl/cmd toggles; shift
                     // extends the range from the anchor.
-                    const mode: "single" | "ctrl" | "shift" = e.shiftKey
-                      ? "shift"
+                    const mode: 'single' | 'ctrl' | 'shift' = e.shiftKey
+                      ? 'shift'
                       : e.ctrlKey || e.metaKey
-                        ? "ctrl"
-                        : "single";
+                        ? 'ctrl'
+                        : 'single';
                     void selectCommitMulti(c.oid, mode);
                   }}
                   onContextMenu={(e) => onContextMenu(e, c)}
                   className={cn(
-                    "absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-border/40 px-3 text-[12.5px]",
-                    "hover:bg-accent/40",
-                    selected && "bg-accent",
+                    'absolute left-0 top-0 grid w-full cursor-pointer items-center gap-3 border-b border-border/40 px-3 text-[12.5px]',
+                    'hover:bg-accent/40',
+                    selected && 'bg-accent',
                     // Slight inner ring so the user can see the
                     // currently focused row inside a wide multi-selection.
                     isFocus &&
                       selectedOids.size > 1 &&
-                      "ring-1 ring-inset ring-[hsl(var(--branch-1)/.6)]",
-                    dimmed && "opacity-25",
+                      'ring-1 ring-inset ring-[hsl(var(--branch-1)/.6)]',
+                    dimmed && 'opacity-25',
                     isHighlightRoot &&
-                      "ring-1 ring-inset ring-[hsl(var(--branch-3)/.6)] bg-[hsl(var(--branch-3)/.07)]",
+                      'ring-1 ring-inset ring-[hsl(var(--branch-3)/.6)] bg-[hsl(var(--branch-3)/.07)]',
                   )}
                   style={{
                     height: ROW_HEIGHT,
@@ -551,17 +570,17 @@ export function CommitList() {
                   title={
                     selectedOids.size > 1
                       ? `${selectedOids.size} commits selected · right-click for batch actions`
-                      : "Click to focus, Ctrl/Shift+Click for multi-select, right-click for actions"
+                      : 'Click to focus, Ctrl/Shift+Click for multi-select, right-click for actions'
                   }
                 >
                   {!hidden && (
                     <div
                       className={cn(
-                        "flex h-7 items-center",
+                        'flex h-7 items-center',
                         // When the SVG is wider than the track, allow it
                         // to scroll horizontally inside its own cell so
                         // the commit summary column never gets squeezed.
-                        graphOverflows && "overflow-x-auto",
+                        graphOverflows && 'overflow-x-auto',
                       )}
                       // Hide the inline scrollbar so the row stays clean
                       // visually; users still scroll via wheel + shift /
@@ -569,7 +588,7 @@ export function CommitList() {
                       // that the lane is alive even when off-screen.
                       style={
                         graphOverflows
-                          ? { scrollbarWidth: "none", msOverflowStyle: "none" }
+                          ? { scrollbarWidth: 'none', msOverflowStyle: 'none' }
                           : undefined
                       }
                       title={
@@ -609,21 +628,21 @@ function RefBadges({ refs }: { refs: string[] }) {
   return (
     <span className="flex shrink-0 gap-1">
       {refs.slice(0, 4).map((r) => {
-        const isTag = !r.includes("/") && /^v?\d/.test(r);
-        const isRemote = r.startsWith("origin/") || r.startsWith("upstream/");
-        const isHead = r === "HEAD";
+        const isTag = !r.includes('/') && /^v?\d/.test(r);
+        const isRemote = r.startsWith('origin/') || r.startsWith('upstream/');
+        const isHead = r === 'HEAD';
         const cls = isHead
-          ? "border-[hsl(var(--branch-4)/.4)] bg-[hsl(var(--branch-4)/.1)] text-[hsl(var(--branch-4))]"
+          ? 'border-[hsl(var(--branch-4)/.4)] bg-[hsl(var(--branch-4)/.1)] text-[hsl(var(--branch-4))]'
           : isTag
-            ? "border-[hsl(var(--branch-3)/.4)] bg-[hsl(var(--branch-3)/.1)] text-[hsl(var(--branch-3))]"
+            ? 'border-[hsl(var(--branch-3)/.4)] bg-[hsl(var(--branch-3)/.1)] text-[hsl(var(--branch-3))]'
             : isRemote
-              ? "border-[hsl(var(--branch-2)/.4)] bg-[hsl(var(--branch-2)/.1)] text-[hsl(var(--branch-2))]"
-              : "border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.1)] text-[hsl(var(--branch-1))]";
+              ? 'border-[hsl(var(--branch-2)/.4)] bg-[hsl(var(--branch-2)/.1)] text-[hsl(var(--branch-2))]'
+              : 'border-[hsl(var(--branch-1)/.4)] bg-[hsl(var(--branch-1)/.1)] text-[hsl(var(--branch-1))]';
         return (
           <span
             key={r}
             className={cn(
-              "inline-flex h-[18px] items-center rounded-full border px-2 text-[10.5px]",
+              'inline-flex h-4.5 items-center rounded-full border px-2 text-[10.5px]',
               cls,
             )}
           >
