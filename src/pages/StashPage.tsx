@@ -1,16 +1,23 @@
 import { useEffect } from "react";
-import { Archive, Check, Trash2 } from "lucide-react";
+import { Archive, Check, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/stores/app";
 import { cn } from "@/lib/utils";
 import { confirm } from "@/lib/confirm";
 import { Unified } from "@/components/diff/DiffViews";
 import type { FileChange } from "@/ipc/git";
 
+// Compact timestamp ("8/25 14:30") so the time column doesn't eat row
+// width in the narrow stash list pane; the year is only kept when the
+// stash is from a previous year. The full locale string used to force
+// horizontal scrolling.
 function fmtTime(t: number): string {
   if (!t) return "";
   const d = new Date(t * 1000);
-  return d.toLocaleString();
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const md = `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  return d.getFullYear() === new Date().getFullYear() ? md : `${d.getFullYear()}/${md}`;
 }
 
 // Mirror the FileTree component's status icons. Kept inline here because
@@ -93,10 +100,14 @@ export function StashPage() {
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-xs">
         <Archive className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-muted-foreground">{entries.length} stash entries</span>
-        {loading && <span className="text-muted-foreground">· loading...</span>}
-        {busy && <span className="text-muted-foreground">· working...</span>}
-        {status && <span className="text-[hsl(var(--branch-1))]">· {status}</span>}
+        <span className="min-w-0 truncate text-muted-foreground">{entries.length} stash entries</span>
+        {loading && (
+          <span className="shrink-0 text-muted-foreground">· loading...</span>
+        )}
+        {busy && <span className="shrink-0 text-muted-foreground">· working...</span>}
+        {status && (
+          <span className="min-w-0 truncate text-[hsl(var(--branch-1))]">· {status}</span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Button
             onClick={onNewStash}
@@ -110,14 +121,14 @@ export function StashPage() {
       </div>
 
       {error && (
-        <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+        <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] break-words text-destructive">
           {error}
         </div>
       )}
 
       <div
         className="grid min-h-0 overflow-hidden"
-        style={{ gridTemplateColumns: "minmax(340px, 1fr) 280px minmax(0, 2fr)" }}
+        style={{ gridTemplateColumns: "minmax(240px, 1fr) minmax(0, 280px) minmax(0, 2fr)" }}
       >
         {/* ----- Left: stash list ----- */}
         <div className="min-h-0 overflow-auto border-r border-border">
@@ -134,58 +145,91 @@ export function StashPage() {
                 key={e.index}
                 onClick={() => void selectStashEntry(e.index)}
                 className={cn(
-                  "flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2",
+                  "group flex cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2",
                   "hover:bg-accent/30",
                   active && "bg-accent",
                 )}
                 title="Click to preview · use the action buttons to apply / pop / drop"
               >
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  stash@{`{${e.index}}`}
-                </span>
-                <span className="font-mono text-[11px] text-[hsl(var(--branch-1))]">
-                  {e.short_oid}
-                </span>
-                <span className="flex-1 truncate text-xs">{e.message}</span>
-                <span className="shrink-0 text-[10.5px] text-muted-foreground">
-                  {fmtTime(e.time)}
-                </span>
+                {/* Text block: min-w-0 everywhere so long messages / hashes
+                    truncate instead of forcing the row wider than the pane. */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                      stash@{`{${e.index}}`}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] text-[hsl(var(--branch-1))]">
+                      {e.short_oid}
+                    </span>
+                    <span className="ml-auto min-w-0 shrink truncate text-right text-[10px] text-muted-foreground">
+                      {fmtTime(e.time)}
+                    </span>
+                  </div>
+                  <div className="truncate text-xs" title={e.message}>
+                    {e.message}
+                  </div>
+                </div>
+                {/* Icon-only actions: fixed width, never stretch with content.
+                    Dimmed until the row is hovered or a button receives
+                    keyboard focus. Clicks are contained here so picking an
+                    action doesn't *also* swap the preview to this row. */}
                 <div
-                  className="flex shrink-0 items-center gap-1.5"
-                  // Stop click propagation from each action button so picking
-                  // "Apply" doesn't *also* swap the preview to this row. The
-                  // confirm dialog handles the whole flow on its own.
+                  className={cn(
+                    "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
+                    "group-hover:opacity-100 focus-within:opacity-100",
+                    active && "opacity-100",
+                  )}
                   onClick={(ev) => ev.stopPropagation()}
                 >
-                  <Button
-                    onClick={() => void applyStash(e.index)}
-                    disabled={busy}
-                    variant="secondary"
-                    size="sm"
-                    title="Apply (keep on stack)"
-                  >
-                    Apply…
-                  </Button>
-                  <Button
-                    onClick={() => void popStash(e.index)}
-                    disabled={busy}
-                    variant="default"
-                    size="sm"
-                    title="Apply and remove from stack"
-                  >
-                    <Check className="h-3 w-3" />
-                    Pop…
-                  </Button>
-                  <Button
-                    onClick={() => void dropStash(e.index)}
-                    disabled={busy}
-                    variant="destructive"
-                    size="sm"
-                    title="Drop without applying"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Drop…
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={busy}
+                          aria-label="Apply (keep on stack)"
+                          onClick={() => void applyStash(e.index)}
+                        />
+                      }
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent>Apply… (keep on stack)</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={busy}
+                          aria-label="Apply and remove from stack"
+                          onClick={() => void popStash(e.index)}
+                        />
+                      }
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent>Pop… (apply and remove)</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={busy}
+                          aria-label="Drop without applying"
+                          className="text-destructive hover:bg-destructive/15 hover:text-destructive"
+                          onClick={() => void dropStash(e.index)}
+                        />
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent>Drop… (without applying)</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             );

@@ -3,6 +3,7 @@ import { useApp } from "@/stores/app";
 import { fullDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ContextMenu, type ContextMenuPos, type MenuItem } from "@/components/ContextMenu";
+import { DiffDialog } from "@/components/DiffDialog";
 import { toast } from "@/lib/toast";
 import {
   AlertTriangle,
@@ -60,12 +61,15 @@ export function CommitDetails() {
   const files = useApp((s) => s.history.files);
   const filesLoading = useApp((s) => s.history.filesLoading);
   const repoPath = useApp((s) => s.repo?.path ?? null);
-  const openDiff = useApp((s) => s.openDiff);
   const openBlame = useApp((s) => s.openBlame);
   const openFileHistory = useApp((s) => s.openFileHistory);
   const selectCommit = useApp((s) => s.selectCommit);
 
   const [menu, setMenu] = useState<{ pos: ContextMenuPos; items: MenuItem[] } | null>(null);
+
+  // Diff dialog state
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffFile, setDiffFile] = useState<string | null>(null);
 
   // Signature status (v0.13.19) ships inside `commit_meta` as of the post-
   // release perf cleanup — one fewer Tauri round-trip per commit selection
@@ -245,14 +249,21 @@ export function CommitDetails() {
           files.map((f) => (
             <div
               key={`${f.old_path ?? ""}->${f.path}`}
-              onClick={() => commit && openDiff(commit.oid, f.path, files)}
+              onClick={() => {
+                if (!commit) return;
+                setDiffFile(f.path);
+                setDiffOpen(true);
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 if (!commit) return;
                 const items: MenuItem[] = [
                   {
                     label: "Open diff at this commit",
-                    onClick: () => openDiff(commit.oid, f.path, files),
+                    onClick: () => {
+                      setDiffFile(f.path);
+                      setDiffOpen(true);
+                    },
                   },
                   {
                     label: "Show file history (follows renames)",
@@ -310,6 +321,16 @@ export function CommitDetails() {
         items={menu?.items ?? []}
         onClose={() => setMenu(null)}
       />
+      {diffFile && (
+        <DiffDialog
+          open={diffOpen}
+          onOpenChange={setDiffOpen}
+          oid={commit.oid}
+          filename={diffFile}
+          allFiles={files}
+          onNavigate={(f) => setDiffFile(f.path)}
+        />
+      )}
     </aside>
   );
 }

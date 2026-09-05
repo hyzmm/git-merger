@@ -9,6 +9,11 @@ import { diffLineKey, matchesForLine, matchesForSide, type DiffMatch } from "@/l
 import { cn } from "@/lib/utils";
 import type { DiffHunk, FileDiff } from "@/ipc/git";
 
+/** Stable empty array reference to avoid infinite re-renders when
+ *  Zustand selectors return `[]` as a fallback value. A new `[]`
+ *  literal on every render would break Object.is comparison. */
+const EMPTY_MATCHES: DiffMatch[] = [];
+
 function stripNL(s: string): string {
   return s.replace(/\r?\n$/, "");
 }
@@ -81,7 +86,7 @@ export function SideBySide({ fileDiff: fdProp, filename: nameProp }: DiffViewPro
   const filename = nameProp ?? fnStore;
   // v0.13.34 — search state. Only the live store-driven view participates;
   // when `fdProp` is provided we're a stash preview etc, no search there.
-  const searchMatches = useApp((s) => (fdProp === undefined ? s.diff.search.matches : []));
+  const searchMatches = useApp((s) => (fdProp === undefined ? s.diff.search.matches : EMPTY_MATCHES));
   const searchActiveIdx = useApp((s) => (fdProp === undefined ? s.diff.search.activeIdx : -1));
 
   const hunks = useMemo(() => {
@@ -212,7 +217,7 @@ export function Unified({ fileDiff: fdProp, filename: nameProp }: DiffViewProps 
   const linePickerActive = oid === WORKING_OID && fdProp === undefined;
 
   // v0.13.34 — search hits. Disabled when fdProp is used (stash preview etc).
-  const searchMatches = useApp((s) => (fdProp === undefined ? s.diff.search.matches : []));
+  const searchMatches = useApp((s) => (fdProp === undefined ? s.diff.search.matches : EMPTY_MATCHES));
   const searchActiveIdx = useApp((s) => (fdProp === undefined ? s.diff.search.activeIdx : -1));
 
   const hunks = useMemo(() => fileDiff?.hunks ?? [], [fileDiff]);

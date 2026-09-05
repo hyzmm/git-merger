@@ -5,10 +5,9 @@
 //! - `diff.rs` exposes structured `FileDiff`s for the Side-by-side /
 //!   Unified renderers; this one deals with the standard `*.patch`
 //!   text format used by `git format-patch` / `git am` and so on.
-//! - Apply uses `git2::Repository::apply` with `ApplyLocation::WorkDir`
-//!   — the inverse direction (text → working tree) needs different
-//!   plumbing than the read-only `Diff` walks `collect_file_diff`
-//!   uses.
+//! - v0.13.35: the Changes-panel half (working-tree patch + apply)
+//!   shells out to `git diff` / `git apply` instead of libgit2, so
+//!   patches are byte-identical to what the terminal produces.
 //!
 //! Public surface (4 functions):
 //! - `format_commit_file_patch(repo, oid, file)` — patch text for a
@@ -16,14 +15,16 @@
 //! - `format_working_file_patch(repo, file)` — patch text for a
 //!   single file in the working tree (HEAD/index → workdir).
 //! - `apply_patch_check(repo, patch)` — dry-run; returns OK if the
-//!   patch *would* apply cleanly, otherwise an error with libgit2's
+//!   patch *would* apply cleanly, otherwise an error with git's
 //!   reason. Used by the UI to surface "this patch won't apply"
 //!   before clobbering anything.
 //! - `apply_patch(repo, patch)` — actually apply to the working
 //!   tree. Index is left alone — the user can stage afterwards.
 
-use git2::{ApplyLocation, ApplyOptions, Diff, DiffOptions, Oid, Repository};
+use git2::{Diff, DiffOptions, Oid, Repository};
 use serde::{Deserialize, Serialize};
+
+use super::cli::{self, GitError};
 
 /// Where a patch should land. Mirrors `git2::ApplyLocation`, exposed as a
 /// serde-tagged enum so the frontend can pick at the IPC boundary.
@@ -37,27 +38,22 @@ use serde::{Deserialize, Serialize};
 /// - `Both`: apply to working tree AND index (= `git apply --index`).
 ///   Useful for "stage these lines, leave the rest alone in the workdir"
 ///   when the patch changes context.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PatchLocation {
+    #[default]
     WorkDir,
     Index,
     Both,
 }
 
-impl Default for PatchLocation {
-    fn default() -> Self {
-        Self::WorkDir
-    }
-}
-
-impl From<PatchLocation> for ApplyLocation {
-    fn from(loc: PatchLocation) -> Self {
-        match loc {
-            PatchLocation::WorkDir => ApplyLocation::WorkDir,
-            PatchLocation::Index => ApplyLocation::Index,
-            PatchLocation::Both => ApplyLocation::Both,
-        }
+/// `git apply` flag for each location, mirroring the old
+/// `git2::ApplyLocation` mapping. `None` = plain worktree apply.
+fn apply_flag(loc: PatchLocation) -> Option<&'static str> {
+    match loc {
+        PatchLocation::WorkDir => None,
+        PatchLocation::Index => Some("--cached"),
+        PatchLocation::Both => Some("--index"),
     }
 }
 
@@ -82,26 +78,9 @@ pub fn format_commit_file_patch(path: &str, oid: &str, file: &str) -> Result<Str
     diff_to_patch(&diff)
 }
 
-/// Format the working-tree diff (HEAD → workdir, including unstaged
-/// edits) for a single file. We diff `tree → workdir` rather than
-/// `index → workdir` so the resulting patch carries *all* user edits,
-/// not just the unstaged delta — which is what "send this patch to
-/// my colleague" needs.
-pub fn format_working_file_patch(path: &str, file: &str) -> Result<String, git2::Error> {
-    let repo = Repository::discover(path)?;
-    let head_tree = repo.head().ok().and_then(|r| r.peel_to_tree().ok());
-    let mut opts = DiffOptions::new();
-    opts.pathspec(file);
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    let diff = repo.diff_tree_to_workdir(head_tree.as_ref(), Some(&mut opts))?;
-    diff_to_patch(&diff)
-}
-
 /// Walk a `Diff` and concatenate every emitted patch line into a
-/// single owned `String`. Identical for both `format_*` functions
-/// above — kept private so callers don't accidentally serialise a
-/// stale `Diff` reference.
+/// single owned `String`. Kept for `format_commit_file_patch`, which
+/// still serves the History / File History views via libgit2.
 fn diff_to_patch(diff: &Diff<'_>) -> Result<String, git2::Error> {
     let mut buf = String::new();
     diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
@@ -119,45 +98,141 @@ fn diff_to_patch(diff: &Diff<'_>) -> Result<String, git2::Error> {
     Ok(buf)
 }
 
+/// Format the working-tree diff (HEAD → workdir, including unstaged
+/// edits) for a single file. We diff `HEAD → workdir` rather than
+/// `index → workdir` so the resulting patch carries *all* user edits,
+/// not just the unstaged delta — which is what "send this patch to
+/// my colleague" needs.
+///
+/// v0.13.35 — CLI edition: `git diff HEAD -- <file>`. Untracked files
+/// (and every file on an unborn HEAD) fall back to `git diff --no-index`
+/// against the null device, which git renders as a standard new-file
+/// patch (`--- /dev/null`).
+pub fn format_working_file_patch(path: &str, file: &str) -> Result<String, GitError> {
+    let head_exists = cli::run_status(path, &[cli::s("rev-parse"), cli::s("-q"), cli::s("--verify"), cli::s("HEAD")])?
+        .status
+        .success();
+
+    let tracked = head_exists
+        && cli::run_status(
+            path,
+            &[
+                cli::s("ls-files"),
+                cli::s("--error-unmatch"),
+                cli::s("--"),
+                cli::literal(file),
+            ],
+        )?
+        .status
+        .success();
+
+    let out = if tracked {
+        cli::run_diff(
+            path,
+            &[
+                cli::s("-c"),
+                cli::s("core.quotePath=false"),
+                cli::s("diff"),
+                cli::s("--no-ext-diff"),
+                cli::s("--no-textconv"),
+                cli::s("HEAD"),
+                cli::s("--"),
+                cli::literal(file),
+            ],
+        )?
+    } else {
+        new_file_patch(path, file)?
+    };
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Patch for a brand-new file: `git diff --no-index` against the null
+/// device. Run from the working directory so the emitted paths stay
+/// repo-relative (applyable). Missing files yield an empty patch.
+fn new_file_patch(path: &str, file: &str) -> Result<std::process::Output, GitError> {
+    let workdir = cli::workdir(path)?;
+    let abs = workdir.join(file);
+    if !abs.is_file() {
+        return Ok(std::process::Output {
+            status: Default::default(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        });
+    }
+    let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    cli::run_diff(
+        workdir.to_string_lossy().as_ref(),
+        &[
+            cli::s("-c"),
+            cli::s("core.quotePath=false"),
+            cli::s("diff"),
+            cli::s("--no-index"),
+            cli::s("--no-ext-diff"),
+            cli::s("--no-textconv"),
+            cli::s("--"),
+            cli::s(null),
+            cli::s(file),
+        ],
+    )
+}
+
 /// Dry-run apply: returns Ok(()) if `patch_text` would apply cleanly
-/// against the chosen location, otherwise an error whose message
-/// surfaces the libgit2 reason (so the toast can show "context line N
-/// does not match" / etc.).
+/// against the chosen location, otherwise an error whose message is
+/// git's own (`error: patch failed: …`), so the toast can show
+/// "context line N does not match" / etc.
 pub fn apply_patch_check(
     path: &str,
     patch_text: &str,
     location: PatchLocation,
-) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let diff = Diff::from_buffer(patch_text.as_bytes())?;
-    let mut opts = ApplyOptions::new();
-    opts.check(true);
-    repo.apply(&diff, location.into(), Some(&mut opts))?;
-    Ok(())
+) -> Result<(), GitError> {
+    apply_patch_inner(path, patch_text, location, true)
 }
 
 /// Apply `patch_text` to the requested location. v0.13.25 added the
 /// `location` arg so callers can choose:
 /// - `WorkDir` — only the working tree (legacy v0.13.9 behaviour).
 /// - `Index`  — only the index (= `git apply --cached`); used by
-///              line-level staging.
+///   line-level staging.
 /// - `Both`   — apply to both, mirroring `git apply --index`.
 ///
 /// Reverse application (= `git apply -R`) is **not** done here. Callers
 /// that want to undo a patch should construct the reversed text
 /// themselves (swap +/-, swap a/b headers, invert each hunk header's
-/// old/new ranges) and feed it back through this same function. Doing
-/// reverse on the frontend keeps a single linear apply path on the
-/// backend and dodges libgit2's lack of a `--reverse` option on
-/// `Repository::apply`.
+/// old/new ranges) and feed it back through this same function — same
+/// contract as before.
 pub fn apply_patch(
     path: &str,
     patch_text: &str,
     location: PatchLocation,
-) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let diff = Diff::from_buffer(patch_text.as_bytes())?;
-    repo.apply(&diff, location.into(), None)?;
+) -> Result<(), GitError> {
+    apply_patch_inner(path, patch_text, location, false)
+}
+
+/// Shared plumbing: `git apply` reading the patch from stdin.
+/// `--no-3way` keeps the strict context-match semantics the line-level
+/// staging flow was built around (libgit2's apply had no 3-way
+/// fallback either); `--whitespace=nowarn` keeps stderr clean for
+/// whitespace-only nits git would otherwise warn about.
+fn apply_patch_inner(
+    path: &str,
+    patch_text: &str,
+    location: PatchLocation,
+    check: bool,
+) -> Result<(), GitError> {
+    let mut args = vec![
+        cli::s("-c"),
+        cli::s("core.quotePath=false"),
+        cli::s("apply"),
+        cli::s("--no-3way"),
+        cli::s("--whitespace=nowarn"),
+    ];
+    if check {
+        args.push(cli::s("--check"));
+    }
+    if let Some(flag) = apply_flag(location) {
+        args.push(cli::s(flag));
+    }
+    cli::run_in(path, &args, patch_text.as_bytes())?;
     Ok(())
 }
 

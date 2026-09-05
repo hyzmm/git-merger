@@ -2,13 +2,13 @@
 
 pub mod blame;
 pub mod blob;
+pub mod cli;
 pub mod commit_ops;
 pub mod commit_relations;
 pub mod config;
 pub mod diff;
 pub mod file_history;
 pub mod gitignore;
-pub mod hooks;
 pub mod log;
 pub mod merge;
 pub mod patch;

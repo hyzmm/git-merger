@@ -76,6 +76,7 @@ pub fn run() {
             commands::unstage_files,
             commands::discard_files,
             commands::commit_changes,
+            commands::head_commit_message,
             commands::read_working_file,
             commands::read_head_file,
             commands::write_working_file,

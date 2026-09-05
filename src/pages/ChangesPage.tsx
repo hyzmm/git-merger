@@ -72,6 +72,7 @@ export function ChangesPage() {
   const clearChangesPreview = useApp((s) => s.clearChangesPreview);
   const setAuthorOverride = useApp((s) => s.setAuthorOverride);
   const setShowAdvancedOptions = useApp((s) => s.setShowAdvancedOptions);
+  const selectConflict = useApp((s) => s.selectConflict);
 
   // ---- local state ----
   const [applyOpen, setApplyOpen] = useState(false);
@@ -159,6 +160,20 @@ export function ChangesPage() {
     if (!ctxFile) return [];
     const path = ctxFile.path;
     return [
+      // IDEA-style entry point for unmerged files — jump straight into the
+      // three-way merge view with this file selected.
+      ...(ctxFile.flag === "conflict"
+        ? [
+            {
+              label: "Resolve Conflict",
+              onClick: async () => {
+                setView("merge");
+                void selectConflict(path);
+              },
+            },
+            { separator: true, label: "" },
+          ]
+        : []),
       {
         label: "Show Diff",
         onClick: () => {
@@ -385,7 +400,7 @@ export function ChangesPage() {
   return (
     <div className="grid h-full grid-cols-[280px_1fr_320px]">
       {/* Left: File tree */}
-      <div className="flex min-w-0 flex-col border-r border-border">
+      <div className="flex min-w-0 flex-col border-r border-border overflow-hidden">
         <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border px-2">
           <div className="inline-flex overflow-hidden rounded-md border border-border text-[11px]">
             <Button

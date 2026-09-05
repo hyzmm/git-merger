@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef } from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 export interface MenuItem {
   label: string;
@@ -35,18 +35,18 @@ export function ContextMenu({ pos, items, onClose }: Props) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     }
     function onScroll() {
       onClose();
     }
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("wheel", onScroll, true);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', onScroll, true);
     return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("wheel", onScroll, true);
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', onScroll, true);
     };
   }, [pos, onClose]);
 
@@ -60,7 +60,7 @@ export function ContextMenu({ pos, items, onClose }: Props) {
       ref={ref}
       role="menu"
       style={{ left: x, top: y }}
-      className="fixed z-50 min-w-[200px] rounded-md border border-border bg-popover py-1 text-xs shadow-lg"
+      className="fixed z-50 min-w-50 rounded-md border border-border bg-popover py-1 text-xs shadow-lg"
     >
       {items.map((it, i) => {
         if (it.separator) return <div key={i} className="my-1 h-px bg-border" aria-hidden="true" />;
@@ -86,9 +86,9 @@ export function ContextMenu({ pos, items, onClose }: Props) {
               it.onClick?.();
             }}
             className={cn(
-              "w-full text-left",
-              it.disabled && "cursor-not-allowed opacity-60",
-              it.danger && !it.disabled && "text-[hsl(var(--destructive))]",
+              'w-full text-left',
+              it.disabled && 'cursor-not-allowed opacity-60',
+              it.danger && !it.disabled && 'text-destructive',
             )}
           >
             {it.label}

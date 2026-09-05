@@ -249,6 +249,13 @@ pub fn commit_changes(
     Ok(git::workspace::commit_changes(&path, &message, &opts)?)
 }
 
+/// v0.13.35 — full commit message of HEAD via CLI. Backs the Changes
+/// panel's amend prefill (`git log -1 --format=%B`).
+#[tauri::command]
+pub fn head_commit_message(path: String) -> R<Option<String>> {
+    Ok(git::workspace::head_commit_message(&path)?)
+}
+
 // ---------- Working-tree file editor (v0.13.3) ----------
 
 #[tauri::command]

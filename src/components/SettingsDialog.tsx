@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Settings } from "lucide-react";
 import { useApp } from "@/stores/app";
 import { useSettings, type GraphMode, type ThemeMode, SettingsStore } from "@/stores/settings";
 import { useI18n, useT, type Locale } from "@/lib/i18n";

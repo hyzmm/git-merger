@@ -1,5 +1,15 @@
-use git2::{IndexAddOption, ObjectType, Repository, Status, StatusOptions};
+//! Working-tree operations backing the Changes panel (v0.13.35 — CLI
+//! edition). Every function here shells out to the user's `git` binary
+//! instead of using libgit2, so staging / un-staging / discarding / committing
+//! behave exactly like the terminal: hooks run, `clean` filters and
+//! `commit.gpgsign` are honoured natively, and error messages are git's own.
+
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
+
+use super::cli::{self, GitError};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -38,155 +48,197 @@ pub struct WorkingFile {
     pub status: WorkingStatus,
 }
 
-pub fn working_changes(path: &str) -> Result<Vec<WorkingFile>, git2::Error> {
-    let repo = Repository::discover(path)?;
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true)
-        .include_ignored(false)
-        .recurse_untracked_dirs(true)
-        .renames_head_to_index(true)
-        .renames_index_to_workdir(true);
+/// `git status --porcelain=v1 -z`. The two-letter XY code per entry gives us
+/// the index (X) and worktree (Y) state in one place, and `-z` makes the
+/// output path-safe. Renames appear as two NUL-separated tokens: the XY
+/// entry carries the *new* path, the following token the old one.
+pub fn working_changes(path: &str) -> Result<Vec<WorkingFile>, GitError> {
+    let out = cli::run(
+        path,
+        &[
+            cli::s("-c"),
+            cli::s("core.quotePath=false"),
+            cli::s("status"),
+            cli::s("--porcelain=v1"),
+            cli::s("-z"),
+            cli::s("--untracked-files=all"),
+        ],
+    )?;
+    parse_porcelain_v1(&out.stdout)
+}
 
-    let statuses = repo.statuses(Some(&mut opts))?;
-    let mut out: Vec<WorkingFile> = Vec::with_capacity(statuses.len());
-    for entry in statuses.iter() {
-        let p = match entry.path() {
-            Some(p) => p.to_string(),
-            None => continue,
-        };
-        let s = entry.status();
-
-        if s.is_ignored() {
+fn parse_porcelain_v1(stdout: &[u8]) -> Result<Vec<WorkingFile>, GitError> {
+    let tokens: Vec<&[u8]> = stdout
+        .split(|&b| b == 0)
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut out: Vec<WorkingFile> = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        let t = tokens[i];
+        // "XY <path>"
+        if t.len() < 4 || t[2] != b' ' {
+            i += 1;
             continue;
         }
+        let x = (t[0] as char).to_ascii_uppercase();
+        let y = (t[1] as char).to_ascii_uppercase();
+        let path = String::from_utf8_lossy(&t[3..]).into_owned();
+        // Rename / copy entries: the XY token is the NEW path, the next
+        // NUL-separated token is the OLD path (field order is reversed in
+        // -z mode vs. the human-readable "old -> new").
+        if (x == 'R' || x == 'C') && i + 1 < tokens.len() {
+            i += 1; // consume the old-path token; we only report `path`.
+        }
 
-        let in_index = s.is_index_new()
-            || s.is_index_modified()
-            || s.is_index_deleted()
-            || s.is_index_renamed()
-            || s.is_index_typechange();
-        let in_wt = s.is_wt_new()
-            || s.is_wt_modified()
-            || s.is_wt_deleted()
-            || s.is_wt_renamed()
-            || s.is_wt_typechange();
-
-        let flag = if s.is_conflicted() {
-            WorkingFlag::Conflict
-        } else if s.is_wt_new() && !in_index {
-            WorkingFlag::Untracked
-        } else if in_index && in_wt {
-            WorkingFlag::Both
-        } else if in_index {
-            WorkingFlag::Staged
-        } else if in_wt {
-            WorkingFlag::Unstaged
-        } else {
-            continue;
-        };
-
-        // Pick a primary "what kind" status. Index takes precedence over WT.
-        let status = if s.is_conflicted() {
-            WorkingStatus::Conflict
-        } else if s.is_index_new() || s.is_wt_new() {
-            // distinguish brand-new untracked vs added-to-index
-            if matches!(flag, WorkingFlag::Untracked) {
-                WorkingStatus::Untracked
-            } else {
-                WorkingStatus::Added
-            }
-        } else if s.is_index_deleted() || s.is_wt_deleted() {
-            WorkingStatus::Deleted
-        } else if s.is_index_renamed() || s.is_wt_renamed() {
-            WorkingStatus::Renamed
-        } else if s.is_index_typechange() || s.is_wt_typechange() {
-            WorkingStatus::Typechange
-        } else if s.is_index_modified() || s.is_wt_modified() {
-            WorkingStatus::Modified
-        } else if s.contains(Status::CURRENT) {
-            continue;
-        } else {
-            WorkingStatus::Modified
-        };
-
-        out.push(WorkingFile {
-            path: p,
-            flag,
-            status,
-        });
+        let (flag, status) = classify_xy(x, y);
+        out.push(WorkingFile { path, flag, status });
+        i += 1;
     }
     Ok(out)
 }
 
-/// Stage a list of paths (works for adds, modifications, and untracked files).
-pub fn stage_files(path: &str, paths: &[String]) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let mut index = repo.index()?;
-    let pathspecs: Vec<&str> = paths.iter().map(String::as_str).collect();
-    index.add_all(&pathspecs, IndexAddOption::DEFAULT, None)?;
-    index.write()?;
+/// Map a porcelain v1 `XY` pair to our flag/status enums, mirroring the
+/// priority order the old libgit2 implementation used (conflict > untracked
+/// > added > deleted > renamed > typechange > modified).
+fn classify_xy(x: char, y: char) -> (WorkingFlag, WorkingStatus) {
+    if x == 'U' || y == 'U' {
+        return (WorkingFlag::Conflict, WorkingStatus::Conflict);
+    }
+    if x == '?' {
+        return (WorkingFlag::Untracked, WorkingStatus::Untracked);
+    }
+    let in_index = x != ' ';
+    let in_wt = y != ' ';
+    let flag = if in_index && in_wt {
+        WorkingFlag::Both
+    } else if in_index {
+        WorkingFlag::Staged
+    } else {
+        WorkingFlag::Unstaged
+    };
+    let status = if x == 'A' || y == 'A' {
+        WorkingStatus::Added
+    } else if x == 'D' || y == 'D' {
+        WorkingStatus::Deleted
+    } else if x == 'R' || y == 'R' {
+        WorkingStatus::Renamed
+    } else if x == 'T' || y == 'T' {
+        WorkingStatus::Typechange
+    } else {
+        WorkingStatus::Modified
+    };
+    (flag, status)
+}
+
+/// Stage a list of paths (adds, modifications, and tracked deletions) via
+/// `git add -A`. Paths that no longer exist anywhere (stale entries) are
+/// dropped up front — a single non-matching pathspec would abort the whole
+/// `git add`, whereas the old libgit2 add_all silently skipped them.
+pub fn stage_files(path: &str, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let tracked = ls_files(path, paths, false)?;
+    let untracked = ls_files(path, paths, true)?;
+
+    let mut args = vec![cli::s("add"), cli::s("-A"), cli::s("--")];
+    let mut any = false;
+    for p in paths {
+        if tracked.contains(p) || untracked.contains(p) {
+            args.push(cli::literal(p));
+            any = true;
+        }
+    }
+    if !any {
+        return Ok(());
+    }
+    cli::run(path, &args)?;
     Ok(())
 }
 
-/// Unstage paths — reset their index entry to match HEAD's tree.
-pub fn unstage_files(path: &str, paths: &[String]) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let head = repo.head()?.peel(ObjectType::Commit)?;
-    let pathspecs: Vec<&str> = paths.iter().map(String::as_str).collect();
-    repo.reset_default(Some(&head), pathspecs.iter())?;
+/// Unstage paths — restore their index entries to HEAD's state
+/// (`git restore --staged`). Restricted to paths that actually carry staged
+/// changes, so a stale path can't abort the command and the no-op case stays
+/// silent like the old `reset_default`.
+pub fn unstage_files(path: &str, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let staged: HashSet<String> = {
+        let out = cli::run_diff(
+            path,
+            &[
+                cli::s("diff"),
+                cli::s("--cached"),
+                cli::s("--name-only"),
+                cli::s("-z"),
+            ],
+        )?;
+        cli::nul_set(&out.stdout)
+    };
+
+    let mut args = vec![cli::s("restore"), cli::s("--staged"), cli::s("--")];
+    let mut any = false;
+    for p in paths {
+        if staged.contains(p) {
+            args.push(cli::literal(p));
+            any = true;
+        }
+    }
+    if !any {
+        return Ok(());
+    }
+    cli::run(path, &args)?;
     Ok(())
 }
 
-/// Discard working-tree changes — checkout the index version of the listed
-/// files, overwriting any modifications. For untracked files we just delete
-/// them from the working tree.
-pub fn discard_files(path: &str, paths: &[String]) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let workdir = repo
-        .workdir()
-        .ok_or_else(|| git2::Error::from_str("repository has no workdir (bare repo)"))?;
+/// Discard working-tree changes. Tracked files are restored from the index
+/// (`git restore`); untracked files are deleted from the filesystem.
+pub fn discard_files(path: &str, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let tracked = ls_files(path, paths, false)?;
+    let untracked = ls_files(path, paths, true)?;
 
-    // Separate untracked files (need filesystem deletion) from tracked ones.
-    let mut tracked: Vec<&str> = Vec::new();
-    let mut untracked: Vec<&str> = Vec::new();
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true);
-    let statuses = repo.statuses(Some(&mut opts))?;
-    let untracked_set: std::collections::HashSet<String> = statuses
-        .iter()
-        .filter_map(|e| {
-            if e.status().is_wt_new() && !e.status().is_index_new() {
-                e.path().map(String::from)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    for p in paths.iter() {
-        if untracked_set.contains(p) {
-            untracked.push(p.as_str());
-        } else {
-            tracked.push(p.as_str());
+    let mut args = vec![cli::s("restore"), cli::s("--")];
+    let mut any = false;
+    for p in paths {
+        // A stale path (tracked nowhere) has nothing to discard — skip.
+        if tracked.contains(p) && !untracked.contains(p) {
+            args.push(cli::literal(p));
+            any = true;
         }
     }
-
-    // Tracked: checkout from index, force-overwrite working tree.
-    if !tracked.is_empty() {
-        let mut co = git2::build::CheckoutBuilder::new();
-        co.force();
-        for p in &tracked {
-            co.path(*p);
-        }
-        repo.checkout_index(None, Some(&mut co))?;
+    if any {
+        cli::run(path, &args)?;
     }
 
-    // Untracked: delete from filesystem.
-    for p in untracked {
-        let abs = workdir.join(p);
-        let _ = std::fs::remove_file(&abs);
+    let workdir = cli::workdir(path)?;
+    for p in paths {
+        if untracked.contains(p) {
+            let _ = std::fs::remove_file(workdir.join(p));
+        }
     }
     Ok(())
+}
+
+/// Index entries matching any of `paths` (`git ls-files`), or — with
+/// `others` — untracked files currently present on disk
+/// (`git ls-files --others --exclude-standard`).
+fn ls_files(path: &str, paths: &[String], others: bool) -> Result<HashSet<String>, GitError> {
+    let mut args = vec![cli::s("ls-files"), cli::s("-z")];
+    if others {
+        args.push(cli::s("--others"));
+        args.push(cli::s("--exclude-standard"));
+    }
+    args.push(cli::s("--"));
+    for p in paths {
+        args.push(cli::literal(p));
+    }
+    let out = cli::run(path, &args)?;
+    Ok(cli::nul_set(&out.stdout))
 }
 
 /// Options governing a commit operation. Captured as one struct so the
@@ -194,7 +246,7 @@ pub fn discard_files(path: &str, paths: &[String]) -> Result<(), git2::Error> {
 /// `--allow-empty` later without re-shaping callers).
 ///
 /// Defaults match `git commit` with no flags.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CommitOptions {
     /// Replace HEAD with a new commit (`git commit --amend`). Parents are
     /// taken from the *current HEAD's parents*, not from HEAD itself, so
@@ -217,13 +269,27 @@ pub struct CommitOptions {
     #[serde(default = "default_run_hooks")]
     pub run_hooks: bool,
     /// Override commit author in "Name <email>" format.
-    /// Parsed into a git2::Signature with the current time.
     #[serde(default)]
     pub author: Option<String>,
 }
 
 fn default_run_hooks() -> bool {
     true
+}
+
+// Manual Default so `run_hooks` defaults to ON — matching the serde default
+// and the doc comment above. (A derived Default would flip it to `false`
+// and silently skip hooks for Rust-side callers using `Default::default()`.)
+impl Default for CommitOptions {
+    fn default() -> Self {
+        Self {
+            amend: false,
+            signoff: false,
+            reset_author: false,
+            run_hooks: true,
+            author: None,
+        }
+    }
 }
 
 /// Result of a successful commit. Carries the new oid plus a small bag of
@@ -238,143 +304,91 @@ pub struct CommitOutcome {
     pub post_commit_ran: bool,
 }
 
-/// Create a commit using the current index. Honours `commit.gpgsign`
-/// (v0.13.19), optional sign-off trailer (v0.13.20), optional amend mode
-/// (v0.13.20), and the user's `pre-commit` / `commit-msg` / `post-commit`
-/// hooks (v0.13.20).
-///
-/// Hook semantics mirror upstream git:
-///   1. `pre-commit` runs against the staged tree; non-zero exit aborts.
-///   2. The message is written to a temp file and `commit-msg <path>` is
-///      invoked; the hook may rewrite the file in place. Non-zero aborts.
-///   3. The (possibly rewritten) message is used to build the commit
-///      object, signed if requested.
-///   4. `post-commit` runs after success; failures are non-fatal.
+/// Create a commit using the current index via `git commit`. Hooks,
+/// sign-off, amend semantics and `commit.gpgsign` are all handled natively
+/// by git itself — the flag mapping below mirrors the options the old
+/// hand-rolled libgit2 commit path supported.
 pub fn commit_changes(
     path: &str,
     message: &str,
     opts: &CommitOptions,
-) -> Result<CommitOutcome, git2::Error> {
-    let repo = Repository::discover(path)?;
-
-    // ---- 1. pre-commit hook ----
-    if opts.run_hooks {
-        if let super::hooks::HookOutcome::Failed { exit_code, stderr } =
-            super::hooks::run_pre_commit(&repo)
-        {
-            return Err(git2::Error::from_str(&format!(
-                "pre-commit hook failed (exit {exit_code}):\n{stderr}"
-            )));
-        }
+) -> Result<CommitOutcome, GitError> {
+    let mut args = vec![cli::s("commit")];
+    if opts.amend {
+        args.push(cli::s("--amend"));
     }
-
-    // ---- 2. resolve signatures + parents ----
-    let head_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
-    let cfg_sig = repo.signature()?;
-
-    // Resolve author override: parse "Name <email>" into a Signature.
-    let author_override = opts.author.as_deref().and_then(parse_author);
-    // Default author is either the override or the configured signature.
-    let default_author = author_override.clone().unwrap_or_else(|| cfg_sig.clone());
-
-    // Author / committer / parent layout depends on amend.
-    let (author, committer, parents_owned, amended): (
-        git2::Signature<'_>,
-        git2::Signature<'_>,
-        Vec<git2::Commit<'_>>,
-        bool,
-    ) = if opts.amend {
-        let head = head_commit.clone().ok_or_else(|| {
-            git2::Error::from_str("cannot --amend on an unborn HEAD: there is no commit to amend")
-        })?;
-        // Parents come from the original HEAD's parents (we're replacing it,
-        // not chaining onto it).
-        let parents: Vec<git2::Commit<'_>> = (0..head.parent_count())
-            .map(|i| head.parent(i))
-            .collect::<Result<_, _>>()?;
-        let author = if opts.reset_author {
-            default_author.clone()
-        } else if author_override.is_some() {
-            default_author.clone()
-        } else {
-            head.author().to_owned()
-        };
-        // Committer is always "now, you", matching `git commit --amend`.
-        (author, cfg_sig.clone(), parents, true)
-    } else {
-        let parents: Vec<git2::Commit<'_>> = head_commit.into_iter().collect();
-        (default_author.clone(), cfg_sig.clone(), parents, false)
-    };
-
-    // ---- 3. apply sign-off trailer (idempotent) ----
-    let mut effective_message = message.trim().to_string();
     if opts.signoff {
-        let name = cfg_sig.name().unwrap_or("");
-        let email = cfg_sig.email().unwrap_or("");
-        if !name.is_empty() && !email.is_empty() {
-            effective_message = super::signing::append_signoff(&effective_message, name, email);
-        }
+        args.push(cli::s("--signoff"));
     }
-
-    // ---- 4. commit-msg hook (may rewrite the message) ----
-    if opts.run_hooks
-        && super::hooks::hook_path(&repo, super::hooks::CommitHook::CommitMsg).is_some()
-    {
-        // Write message to a temp file inside the .git dir so hook
-        // tools (e.g. commitizen) that look for `.git/COMMIT_EDITMSG`-
-        // style siblings still find them. We use a unique name to
-        // avoid clobbering an in-progress real commit edit.
-        let msg_path = repo.path().join("GITTOOLS_COMMIT_EDITMSG");
-        std::fs::write(&msg_path, effective_message.as_bytes())
-            .map_err(|e| git2::Error::from_str(&format!("write commit-msg buffer: {e}")))?;
-
-        match super::hooks::run_commit_msg(&repo, &msg_path) {
-            super::hooks::HookOutcome::Failed { exit_code, stderr } => {
-                let _ = std::fs::remove_file(&msg_path);
-                return Err(git2::Error::from_str(&format!(
-                    "commit-msg hook failed (exit {exit_code}):\n{stderr}"
-                )));
-            }
-            super::hooks::HookOutcome::Ok => {
-                // Re-read whatever the hook left behind.
-                if let Ok(rewritten) = std::fs::read_to_string(&msg_path) {
-                    effective_message = rewritten;
-                }
-            }
-            super::hooks::HookOutcome::Skipped => {}
-        }
-        let _ = std::fs::remove_file(&msg_path);
+    if !opts.run_hooks {
+        args.push(cli::s("--no-verify"));
     }
+    let author = opts.author.as_deref().map(str::trim).unwrap_or("");
+    if !author.is_empty() {
+        args.push(cli::s("--author"));
+        args.push(cli::s(author));
+    } else if opts.amend && opts.reset_author {
+        // The old code honoured an explicit author override over
+        // reset_author; `--author` above already covers that precedence.
+        args.push(cli::s("--reset-author"));
+    }
+    args.push(cli::s("-m"));
+    args.push(cli::s(message));
 
-    // ---- 5. write tree + commit object (signed if configured) ----
-    let mut index = repo.index()?;
-    let tree_id = index.write_tree()?;
-    let tree = repo.find_tree(tree_id)?;
-    let parent_refs: Vec<&git2::Commit<'_>> = parents_owned.iter().collect();
-    let oid = super::signing::commit_to_head(
-        &repo,
-        &author,
-        &committer,
-        effective_message.trim(),
-        &tree,
-        &parent_refs,
-    )?;
+    cli::run(path, &args)?;
 
-    // ---- 6. post-commit hook (non-fatal) ----
-    let post_commit_ran = if opts.run_hooks {
-        matches!(
-            super::hooks::run_post_commit(&repo),
-            super::hooks::HookOutcome::Ok
-        )
-    } else {
-        false
-    };
-
+    let post_commit_ran = opts.run_hooks && post_commit_hook_exists(path)?;
+    let oid = cli::stdout_utf8(path, &[cli::s("rev-parse"), cli::s("HEAD")])?;
     Ok(CommitOutcome {
-        oid: oid.to_string(),
-        amended,
+        oid: oid.trim().to_string(),
+        amended: opts.amend,
         post_commit_ran,
     })
+}
+
+/// Best-effort probe for the "post-commit hook ran" toast. Resolves the
+/// hooks directory the way git would (`rev-parse --git-path hooks` honours
+/// `core.hooksPath`) and reports whether a runnable `post-commit` exists.
+/// git itself ran the hook during `git commit`; we only observe.
+fn post_commit_hook_exists(path: &str) -> Result<bool, GitError> {
+    let raw = cli::stdout_utf8(
+        path,
+        &[cli::s("rev-parse"), cli::s("--git-path"), cli::s("hooks")],
+    )?;
+    let mut dir = PathBuf::from(raw.trim());
+    if dir.is_relative() {
+        dir = cli::workdir(path)?.join(dir);
+    }
+    let hook = dir.join("post-commit");
+    if !hook.is_file() {
+        return Ok(false);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        Ok(std::fs::metadata(&hook)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false))
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows has no execute bit; existence is the cheap signal git's
+        // own hooks machinery effectively uses.
+        Ok(true)
+    }
+}
+
+/// Full commit message of HEAD (`git log -1 --format=%B`), or `None` on an
+/// unborn HEAD. Backs the Changes panel's amend toggle, which prefills the
+/// message editor from HEAD's message without going through libgit2's log
+/// machinery.
+pub fn head_commit_message(path: &str) -> Result<Option<String>, GitError> {
+    let out = cli::run_status(path, &[cli::s("log"), cli::s("-1"), cli::s("--format=%B")])?;
+    if !out.status.success() {
+        // Unborn HEAD — nothing to prefill.
+        return Ok(None);
+    }
+    Ok(Some(String::from_utf8_lossy(&out.stdout).into_owned()))
 }
 
 // ---------- Working-tree file editor (v0.13.3) ----------
@@ -402,10 +416,7 @@ pub struct WorkingFileText {
 /// canonicalise that, and verify it sits inside the workdir. The portion of
 /// the path that doesn't exist yet is structurally appended after the safety
 /// check, so it can't introduce new traversal opportunities.
-fn safe_workdir_path(repo: &Repository, file: &str) -> Result<std::path::PathBuf, git2::Error> {
-    let workdir = repo
-        .workdir()
-        .ok_or_else(|| git2::Error::from_str("repository has no workdir (bare repo)"))?;
+fn safe_workdir_path(workdir: &Path, file: &str) -> Result<PathBuf, GitError> {
     let candidate = workdir.join(file);
 
     // Walk up until we find an existing ancestor (the workdir itself always
@@ -417,19 +428,17 @@ fn safe_workdir_path(repo: &Repository, file: &str) -> Result<std::path::PathBuf
         }
         match existing.parent() {
             Some(p) => existing = p,
-            None => {
-                return Err(git2::Error::from_str("invalid path: no existing ancestor"));
-            }
+            None => return Err(GitError::new("invalid path: no existing ancestor")),
         }
     }
 
     let canonical_existing = std::fs::canonicalize(existing)
-        .map_err(|e| git2::Error::from_str(&format!("canonicalize ancestor: {e}")))?;
+        .map_err(|e| GitError::new(format!("canonicalize ancestor: {e}")))?;
     let canonical_workdir = std::fs::canonicalize(workdir)
-        .map_err(|e| git2::Error::from_str(&format!("canonicalize workdir: {e}")))?;
+        .map_err(|e| GitError::new(format!("canonicalize workdir: {e}")))?;
 
     if !canonical_existing.starts_with(&canonical_workdir) {
-        return Err(git2::Error::from_str(
+        return Err(GitError::new(
             "path escapes the working directory — refusing",
         ));
     }
@@ -438,7 +447,7 @@ fn safe_workdir_path(repo: &Repository, file: &str) -> Result<std::path::PathBuf
     // case some component was a symlink that pointed back inside the workdir
     // before resolving but encoded `..` segments in the relative form.
     if file.split(['/', '\\']).any(|seg| seg == "..") {
-        return Err(git2::Error::from_str(
+        return Err(GitError::new(
             "path escapes the working directory — refusing",
         ));
     }
@@ -455,9 +464,9 @@ fn looks_binary(bytes: &[u8]) -> bool {
 
 /// Read a tracked or untracked file from the working directory. Used by the
 /// bidirectional Diff editor to seed the editable buffer.
-pub fn read_working_file(path: &str, file: &str) -> Result<WorkingFileText, git2::Error> {
-    let repo = Repository::discover(path)?;
-    let abs = safe_workdir_path(&repo, file)?;
+pub fn read_working_file(path: &str, file: &str) -> Result<WorkingFileText, GitError> {
+    let workdir = cli::workdir(path)?;
+    let abs = safe_workdir_path(&workdir, file)?;
 
     if !abs.exists() {
         return Ok(WorkingFileText {
@@ -467,23 +476,23 @@ pub fn read_working_file(path: &str, file: &str) -> Result<WorkingFileText, git2
     }
 
     let metadata =
-        std::fs::metadata(&abs).map_err(|e| git2::Error::from_str(&format!("stat: {e}")))?;
+        std::fs::metadata(&abs).map_err(|e| GitError::new(format!("stat: {e}")))?;
     if metadata.len() > MAX_FILE_BYTES {
-        return Err(git2::Error::from_str(&format!(
+        return Err(GitError::new(format!(
             "file is too large to edit ({} bytes; limit {} bytes)",
             metadata.len(),
             MAX_FILE_BYTES
         )));
     }
 
-    let bytes = std::fs::read(&abs).map_err(|e| git2::Error::from_str(&format!("read: {e}")))?;
+    let bytes = std::fs::read(&abs).map_err(|e| GitError::new(format!("read: {e}")))?;
     if looks_binary(&bytes) {
-        return Err(git2::Error::from_str(
+        return Err(GitError::new(
             "binary file — bidirectional editor refuses to load",
         ));
     }
     let text = String::from_utf8(bytes)
-        .map_err(|_| git2::Error::from_str("file is not valid UTF-8 — refusing to edit"))?;
+        .map_err(|_| GitError::new("file is not valid UTF-8 — refusing to edit"))?;
     Ok(WorkingFileText {
         content: text,
         missing: false,
@@ -492,44 +501,35 @@ pub fn read_working_file(path: &str, file: &str) -> Result<WorkingFileText, git2
 
 /// Read a file's contents at HEAD — used as the read-only "original" pane
 /// next to the editable working-tree buffer. Returns `missing: true` when
-/// the file isn't tracked at HEAD (e.g. brand-new working-tree file).
-pub fn read_head_file(path: &str, file: &str) -> Result<WorkingFileText, git2::Error> {
-    let repo = Repository::discover(path)?;
+/// the file isn't tracked at HEAD (e.g. brand-new working-tree file) or the
+/// repository has no commits yet.
+pub fn read_head_file(path: &str, file: &str) -> Result<WorkingFileText, GitError> {
+    let workdir = cli::workdir(path)?;
     // Validate the path (rejects path-traversal); we don't need the absolute
     // path itself — just the safety check.
-    let _ = safe_workdir_path(&repo, file)?;
+    let _ = safe_workdir_path(&workdir, file)?;
 
-    let head = match repo.head() {
-        Ok(h) => h,
-        Err(_) => {
-            // Empty repo (no HEAD yet).
-            return Ok(WorkingFileText {
-                content: String::new(),
-                missing: true,
-            });
-        }
-    };
-    let tree = head.peel_to_tree()?;
-    let entry = match tree.get_path(std::path::Path::new(file)) {
-        Ok(e) => e,
-        Err(e) if e.code() == git2::ErrorCode::NotFound => {
-            return Ok(WorkingFileText {
-                content: String::new(),
-                missing: true,
-            });
-        }
-        Err(e) => return Err(e),
-    };
-    let blob = repo.find_blob(entry.id())?;
-    let bytes = blob.content();
-    if looks_binary(bytes) {
-        return Err(git2::Error::from_str(
+    // `cat-file -t` answers both "does HEAD exist?" (unborn → exit 1) and
+    // "is this a blob?" (gitlinks / directories resolve to other types).
+    let rev = format!("HEAD:{file}");
+    let probe = cli::run_status(path, &[cli::s("cat-file"), cli::s("-t"), cli::s(&rev)])?;
+    let is_blob = probe.status.success()
+        && String::from_utf8_lossy(&probe.stdout).trim() == "blob";
+    if !is_blob {
+        return Ok(WorkingFileText {
+            content: String::new(),
+            missing: true,
+        });
+    }
+
+    let bytes = cli::run(path, &[cli::s("show"), cli::s(&rev)])?.stdout;
+    if looks_binary(&bytes) {
+        return Err(GitError::new(
             "binary file — bidirectional editor refuses to load",
         ));
     }
-    let text = std::str::from_utf8(bytes)
-        .map_err(|_| git2::Error::from_str("HEAD blob is not valid UTF-8"))?
-        .to_string();
+    let text = String::from_utf8(bytes)
+        .map_err(|_| GitError::new("HEAD blob is not valid UTF-8"))?;
     Ok(WorkingFileText {
         content: text,
         missing: false,
@@ -538,18 +538,18 @@ pub fn read_head_file(path: &str, file: &str) -> Result<WorkingFileText, git2::E
 
 /// Write a file back to the working directory atomically (write to a sibling
 /// `.gittools-tmp-<rand>` file then rename), preserving the parent directory.
-pub fn write_working_file(path: &str, file: &str, content: &str) -> Result<(), git2::Error> {
-    let repo = Repository::discover(path)?;
-    let abs = safe_workdir_path(&repo, file)?;
+pub fn write_working_file(path: &str, file: &str, content: &str) -> Result<(), GitError> {
+    let workdir = cli::workdir(path)?;
+    let abs = safe_workdir_path(&workdir, file)?;
 
     if let Some(parent) = abs.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| git2::Error::from_str(&format!("create parent dirs: {e}")))?;
+            .map_err(|e| GitError::new(format!("create parent dirs: {e}")))?;
     }
 
     let bytes = content.as_bytes();
     if (bytes.len() as u64) > MAX_FILE_BYTES {
-        return Err(git2::Error::from_str(&format!(
+        return Err(GitError::new(format!(
             "content is too large ({} bytes; limit {} bytes)",
             bytes.len(),
             MAX_FILE_BYTES
@@ -561,7 +561,7 @@ pub fn write_working_file(path: &str, file: &str, content: &str) -> Result<(), g
     // step on each other. The `XXXXXX` is replaced atomically by the runtime.
     let parent = abs
         .parent()
-        .ok_or_else(|| git2::Error::from_str("invalid path: no parent"))?;
+        .ok_or_else(|| GitError::new("invalid path: no parent"))?;
     let stem = abs.file_name().and_then(|s| s.to_str()).unwrap_or("file");
     // Use process id + a monotonically increasing counter for uniqueness;
     // we deliberately avoid pulling in `rand` for this single call site.
@@ -573,33 +573,12 @@ pub fn write_working_file(path: &str, file: &str, content: &str) -> Result<(), g
     {
         use std::io::Write;
         let mut f = std::fs::File::create(&tmp)
-            .map_err(|e| git2::Error::from_str(&format!("create tmp: {e}")))?;
+            .map_err(|e| GitError::new(format!("create tmp: {e}")))?;
         f.write_all(bytes)
-            .map_err(|e| git2::Error::from_str(&format!("write tmp: {e}")))?;
+            .map_err(|e| GitError::new(format!("write tmp: {e}")))?;
         f.sync_all()
-            .map_err(|e| git2::Error::from_str(&format!("fsync tmp: {e}")))?;
+            .map_err(|e| GitError::new(format!("fsync tmp: {e}")))?;
     }
-    std::fs::rename(&tmp, &abs).map_err(|e| git2::Error::from_str(&format!("rename: {e}")))?;
+    std::fs::rename(&tmp, &abs).map_err(|e| GitError::new(format!("rename: {e}")))?;
     Ok(())
-}
-
-/// Parse a "Name <email>" string into a `git2::Signature` with the current time.
-/// Returns `None` if the string is empty or doesn't match the expected format.
-fn parse_author(raw: &str) -> Option<git2::Signature<'static>> {
-    let raw = raw.trim();
-    if raw.is_empty() {
-        return None;
-    }
-    // Try parsing "Name <email>" format.
-    if let Some(lt) = raw.rfind('<') {
-        let name = raw[..lt].trim();
-        let email_part = &raw[lt..];
-        if let Some(gt) = email_part.find('>') {
-            let email = &email_part[1..gt];
-            let name = if name.is_empty() { email } else { name };
-            return git2::Signature::now(name, email).ok();
-        }
-    }
-    // Fallback: treat the whole string as both name and email.
-    git2::Signature::now(raw, raw).ok()
 }

@@ -5,8 +5,11 @@
  * expandable/collapsible folders, per-file checkboxes, colour-coded status
  * letters (A/M/D/?), a summary bar at the top, and directory-level
  * tri-state checkboxes for bulk select/deselect.
+ *
+ * Like IDEA, conflicted (unmerged) files are pulled out of the directory
+ * tree and listed flat in a dedicated "Conflicts" section at the top.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +58,8 @@ export interface FileTreeProps {
   onDoubleClickFile: (path: string) => void;
   /** Right-click context menu callback. */
   onContextMenu: (path: string, e: React.MouseEvent) => void;
+  /** Toggle all conflict files at once (select all or deselect all). */
+  onToggleAllConflicts?: () => void;
 }
 
 interface TreeNode {
@@ -158,20 +163,27 @@ export function FileTree({
   onClickFile,
   onDoubleClickFile,
   onContextMenu,
+  onToggleAllConflicts,
 }: FileTreeProps) {
-  const tree = useMemo(() => buildTree(files), [files]);
+  // Conflicted files are listed flat in a top section, IDEA-style, so the
+  // directory tree below only contains resolvable working-tree changes.
+  const conflicts = files.filter((f) => f.flag === 'conflict');
+  const treeFiles = files.filter((f) => f.flag !== 'conflict');
+  const tree = useMemo(() => buildTree(treeFiles), [treeFiles]);
 
   const staged = files.filter((f) => f.flag === 'staged' || f.flag === 'both');
   const unstaged = files.filter(
     (f) => f.flag === 'unstaged' || f.flag === 'untracked' || f.flag === 'both',
   );
-  const conflicts = files.filter((f) => f.flag === 'conflict');
 
   const q = fileFilter.toLowerCase();
   const filteredTree = useMemo(() => {
     if (!q) return tree;
     return filterTree(tree, q);
   }, [tree, q]);
+  const filteredConflicts = q
+    ? conflicts.filter((f) => f.path.toLowerCase().includes(q))
+    : conflicts;
 
   const hasSelection = selected.size > 0;
   const allDirsExpanded = useMemo(() => {
@@ -180,7 +192,7 @@ export function FileTree({
   }, [tree, expandedDirs]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex overflow-hidden flex-col flex-1">
       {/* Summary bar */}
       <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card px-2 text-sm">
         <span className="font-medium text-foreground">{files.length} files</span>
@@ -255,7 +267,7 @@ export function FileTree({
 
       {/* File tree */}
       <ItemGroup className="min-h-0 flex-1 overflow-auto gap-0 has-data-[size=xs]:gap-0">
-        {filteredTree.length === 0 && files.length > 0 && (
+        {filteredTree.length === 0 && filteredConflicts.length === 0 && treeFiles.length > 0 && (
           <div className="p-4 text-center text-sm text-muted-foreground">
             No files match &ldquo;{fileFilter}&rdquo;
           </div>
@@ -264,6 +276,17 @@ export function FileTree({
           <div className="p-6 text-center text-sm text-muted-foreground">
             Working tree is clean.
           </div>
+        )}
+        {filteredConflicts.length > 0 && (
+          <ConflictSection
+            files={filteredConflicts}
+            selected={selected}
+            onToggle={onToggle}
+            onClickFile={onClickFile}
+            onDoubleClickFile={onDoubleClickFile}
+            onContextMenu={onContextMenu}
+            onToggleAllConflicts={onToggleAllConflicts}
+          />
         )}
         {filteredTree.map((node) => (
           <TreeNodeRow
@@ -282,6 +305,145 @@ export function FileTree({
         ))}
       </ItemGroup>
     </div>
+  );
+}
+
+/**
+ * Flat "Conflicts" section at the top of the tree, IDEA-style.
+ * Header carries a tri-state checkbox to select/deselect all conflicted files.
+ */
+function ConflictSection({
+  files,
+  selected,
+  onToggle,
+  onClickFile,
+  onDoubleClickFile,
+  onContextMenu,
+  onToggleAllConflicts,
+}: {
+  files: WorkingFile[];
+  selected: Set<string>;
+  onToggle: (path: string) => void;
+  onClickFile: (path: string) => void;
+  onDoubleClickFile: (path: string) => void;
+  onContextMenu: (path: string, e: React.MouseEvent) => void;
+  onToggleAllConflicts?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const paths = files.map((f) => f.path);
+  const selectedCount = paths.filter((p) => selected.has(p)).length;
+  const headerChecked: boolean | 'indeterminate' =
+    selectedCount === paths.length ? true : selectedCount > 0 ? 'indeterminate' : false;
+
+  const toggleExpand = () => setExpanded((prev) => !prev);
+
+  const handleToggleAllConflicts = onToggleAllConflicts ?? (() => {
+    const allSelected = selectedCount === paths.length;
+    for (const p of paths) {
+      if (allSelected ? selected.has(p) : !selected.has(p)) onToggle(p);
+    }
+  });
+
+  return (
+    <>
+      <Item
+        size="xs"
+        variant="default"
+        className="flex-nowrap gap-1 px-1 py-0.5 rounded-none border-0 border-b border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/10"
+        style={{ paddingLeft: '4px' }}
+        title="Merge/rebase left these files with unresolved conflicts"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          toggleExpand();
+        }}
+      >
+        <ItemMedia
+          variant="icon"
+          className="relative z-10 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleExpand();
+          }}
+        >
+          {expanded ? (
+            <ChevronDown className="size-3 text-destructive" />
+          ) : (
+            <ChevronRight className="size-3 text-destructive" />
+          )}
+        </ItemMedia>
+        <Checkbox
+          checked={headerChecked === true}
+          indeterminate={headerChecked === 'indeterminate'}
+          onCheckedChange={handleToggleAllConflicts}
+          className="size-3.5 shrink-0"
+          aria-label="Select all conflicted files"
+          onClick={(e) => e.stopPropagation()}
+        />
+        <ItemContent className="gap-0">
+          <ItemTitle
+            className="text-[10.5px] font-semibold uppercase tracking-wider text-destructive cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpand();
+            }}
+          >
+            Conflicts
+          </ItemTitle>
+        </ItemContent>
+        <span
+          className="ml-auto shrink-0 cursor-pointer text-[10px] tabular-nums text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleExpand();
+          }}
+        >
+          {files.length}
+        </span>
+      </Item>
+      {expanded && files.map((f) => {
+        const isSelected = selected.has(f.path);
+        return (
+          <Item
+            key={f.path}
+            size="xs"
+            variant="default"
+            className={cn(
+              'flex-nowrap border-0 border-b border-border/20 gap-1 px-1 py-0.5 rounded-none cursor-pointer hover:bg-accent/40',
+              isSelected && 'bg-accent/60',
+            )}
+            style={{ paddingLeft: '4px' }}
+            onClick={() => onClickFile(f.path)}
+            onDoubleClick={() => onDoubleClickFile(f.path)}
+            onContextMenu={(e) => onContextMenu(f.path, e)}
+          >
+            <span className="w-3 shrink-0" />
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggle(f.path)}
+              className="size-3.5 shrink-0"
+              aria-label={`Select ${f.path}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span
+              className={cn(
+                'w-3.5 shrink-0 text-center font-mono text-sm font-bold',
+                STATUS_COLOR[f.status],
+              )}
+            >
+              {STATUS_LABEL[f.status]}
+            </span>
+            <ItemContent className="gap-0">
+              <ItemTitle className="truncate text-sm font-mono font-normal">
+                {f.path}
+              </ItemTitle>
+            </ItemContent>
+            <span className="shrink-0 rounded bg-[hsl(var(--destructive))]/20 px-1 py-px text-[9px] font-medium text-destructive">
+              conflict
+            </span>
+          </Item>
+        );
+      })}
+    </>
   );
 }
 
@@ -327,7 +489,7 @@ function TreeNodeRow({
         <Item
           size="xs"
           variant="default"
-          className="border-0 border-b border-border/20 gap-1 px-1 py-0.5 rounded-none hover:bg-accent/40"
+          className="border-0 flex-nowrap border-b border-border/20 gap-1 px-1 py-0.5 rounded-none hover:bg-accent/40"
           style={{ paddingLeft: `${depth * 14 + 4}px` }}
           onDoubleClick={(e) => {
             e.stopPropagation();
@@ -408,7 +570,7 @@ function TreeNodeRow({
       size="xs"
       variant="default"
       className={cn(
-        'border-0 border-b border-border/20 gap-1 px-1 py-0.5 rounded-none cursor-pointer hover:bg-accent/40',
+        'flex-nowrap border-0 border-b border-border/20 gap-1 px-1 py-0.5 rounded-none cursor-pointer hover:bg-accent/40',
         isSelected && 'bg-accent/60',
       )}
       style={{ paddingLeft: `${depth * 14 + 4}px` }}

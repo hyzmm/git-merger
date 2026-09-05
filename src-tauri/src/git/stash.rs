@@ -1,7 +1,9 @@
 //! Stash workflow — list / save / apply / pop / drop.
 
-use git2::{Repository, StashApplyOptions, StashFlags};
+use git2::{Repository, StashApplyOptions};
 use serde::{Deserialize, Serialize};
+
+use super::cli::{self, GitError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StashEntry {
@@ -43,26 +45,49 @@ pub fn list(path: &str) -> Result<Vec<StashEntry>, git2::Error> {
     Ok(out)
 }
 
-/// Create a new stash. If `keep_index` is true, staged changes are kept in
-/// the index after stashing (mirrors `git stash --keep-index`).
-/// `include_untracked` mirrors `git stash -u`.
+/// Create a new stash via `git stash push`. If `keep_index` is true, staged
+/// changes are kept in the index after stashing (mirrors `git stash
+/// --keep-index`). `include_untracked` mirrors `git stash -u`.
+///
+/// v0.13.35 — CLI edition, so it behaves like the terminal: when there is
+/// nothing to stash no empty stash entry is created (the old libgit2 path
+/// would leave an empty entry behind).
 pub fn save(
     path: &str,
     message: Option<&str>,
     include_untracked: bool,
     keep_index: bool,
-) -> Result<String, git2::Error> {
-    let mut repo = Repository::discover(path)?;
-    let sig = repo.signature()?;
-    let mut flags = StashFlags::DEFAULT;
+) -> Result<String, GitError> {
+    let mut args = vec![cli::s("stash"), cli::s("push")];
     if include_untracked {
-        flags |= StashFlags::INCLUDE_UNTRACKED;
+        args.push(cli::s("-u"));
     }
     if keep_index {
-        flags |= StashFlags::KEEP_INDEX;
+        args.push(cli::s("--keep-index"));
     }
-    let oid = repo.stash_save(&sig, message.unwrap_or(""), Some(flags))?;
-    Ok(oid.to_string())
+    if let Some(m) = message {
+        let m = m.trim();
+        if !m.is_empty() {
+            args.push(cli::s("-m"));
+            args.push(cli::s(m));
+        }
+    }
+    cli::run(path, &args)?;
+
+    // Best-effort oid of the just-created entry; empty when git decided
+    // there was nothing to save. The frontend ignores the value anyway.
+    let oid = cli::run_status(
+        path,
+        &[
+            cli::s("rev-parse"),
+            cli::s("-q"),
+            cli::s("--verify"),
+            cli::s("stash@{0}"),
+        ],
+    )
+    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    .unwrap_or_default();
+    Ok(oid)
 }
 
 /// Apply stash @{index} without removing it from the stack.

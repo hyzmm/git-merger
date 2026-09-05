@@ -1390,6 +1390,24 @@ fn workspace_commit_changes_creates_a_new_head_commit() {
     assert!(after.is_empty());
 }
 
+/// v0.13.35 — CLI-backed amend prefill: `git log -1 --format=%B` returns
+/// HEAD's full message (subject + body), and `None` on an unborn HEAD.
+#[test]
+fn workspace_head_commit_message_full_message_and_unborn_none() {
+    let r = TempRepo::init();
+    // No commits yet → None.
+    assert!(git::workspace::head_commit_message(&r.path_str())
+        .unwrap()
+        .is_none());
+
+    r.commit_file("a.txt", "v1\n", "subject line\n\nbody text");
+    let msg = git::workspace::head_commit_message(&r.path_str()).unwrap();
+    assert_eq!(
+        msg.as_deref().map(str::trim_end),
+        Some("subject line\n\nbody text")
+    );
+}
+
 /// v0.13.20 amend: replaces HEAD with a new commit whose parents are
 /// HEAD's parents (root commit ⇒ no parents) and whose tree picks up the
 /// freshly-staged delta. The original commit becomes unreferenced.
@@ -1525,7 +1543,8 @@ fn workspace_commit_changes_aborts_when_pre_commit_hook_fails() {
         &git::workspace::CommitOptions::default(),
     )
     .unwrap_err();
-    assert!(err.message().contains("pre-commit"));
+    // git itself relays the hook's stderr verbatim; the failing script's
+    // message must survive into the error (git doesn't name the hook).
     assert!(err.message().contains("linter says no"));
     let head_after = r.repo.head().unwrap().target().unwrap();
     assert_eq!(

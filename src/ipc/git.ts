@@ -673,6 +673,10 @@ export const git = {
   discardFiles: (path: string, paths: string[]) => invoke<void>("discard_files", { path, paths }),
   commitChanges: (path: string, message: string, options?: CommitOptions) =>
     invoke<CommitOutcome>("commit_changes", { path, message, options: options ?? null }),
+  /** v0.13.35 — full commit message of HEAD (`git log -1 --format=%B`), or
+   *  `null` on an unborn HEAD. CLI-backed; used by the amend prefill. */
+  headCommitMessage: (path: string) =>
+    invoke<string | null>("head_commit_message", { path }),
   /** Read a working-tree file's full text. Returns `missing: true` when the file doesn't exist on disk. */
   readWorkingFile: (path: string, file: string) =>
     invoke<WorkingFileText>("read_working_file", { path, file }),

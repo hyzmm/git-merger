@@ -40,10 +40,13 @@ export function HistoryPage() {
   const [drag, setDrag] = useState<null | "left" | "right">(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const onMouseDown = useCallback((side: "left" | "right") => (e: React.MouseEvent) => {
-    e.preventDefault();
-    setDrag(side);
-  }, []);
+  const onMouseDown = useCallback(
+    (side: "left" | "right") => (e: React.MouseEvent) => {
+      e.preventDefault();
+      setDrag(side);
+    },
+    [],
+  );
 
   // While a divider is being dragged, listen on the window so the
   // pointer can stray off the thin handle without dropping the drag,
@@ -130,7 +133,7 @@ function DragHandle({
       // -right-[2px] centres the 4 px hit area over the 1 px border.
       // z-10 ensures it sits above the inner pane content (which has
       // overflow-auto scrollbars that would otherwise eat the grab).
-      className={`absolute -right-[2px] top-0 z-10 h-full w-1 cursor-col-resize transition-colors ${
+      className={`absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize transition-colors ${
         active ? "bg-primary/60" : "hover:bg-primary/40"
       }`}
     />

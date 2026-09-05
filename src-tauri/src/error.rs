@@ -172,6 +172,14 @@ impl From<std::io::Error> for AppError {
     }
 }
 
+/// CLI-backed git layer (Changes panel). The message is git's own stderr
+/// text, which is already user-facing, so `Kind::Git` carries it verbatim.
+impl From<crate::git::cli::GitError> for AppError {
+    fn from(e: crate::git::cli::GitError) -> Self {
+        Self::new(Kind::Git, e.message)
+    }
+}
+
 impl From<serde_json::Error> for AppError {
     fn from(e: serde_json::Error) -> Self {
         Self::new(Kind::Internal, format!("serde_json: {e}"))

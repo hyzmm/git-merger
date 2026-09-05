@@ -45,3 +45,4 @@ conflict-demo.txt
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+.deslop/

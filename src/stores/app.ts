@@ -2946,11 +2946,12 @@ export const useApp = create<AppState>((set, get) => ({
       if (repo) {
         try {
           // Use the already-loaded HEAD commit summary if the user has
-          // history selected; fall back to a fresh meta lookup otherwise.
+          // history selected; otherwise fetch HEAD's full message via the
+          // CLI-backed command (v0.13.35 — no libgit2 in the amend flow).
           const head = get().history.commits[0];
           if (head) {
-            const meta = await git.commitMeta(repo.path, head.oid);
-            prefill = (meta.message || head.summary).trimEnd();
+            const msg = await git.headCommitMessage(repo.path);
+            prefill = (msg?.trimEnd() || head.summary).trimEnd();
           }
         } catch {
           /* leave prefill = current draft */

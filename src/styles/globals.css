@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 /* ---- shadcn/ui design tokens (Tailwind v4 CSS-first config) ---- */
 @theme {
@@ -8,18 +8,18 @@
      platform-appropriate Han Sans so Chinese/Japanese/Korean glyphs render
      well even though we ship no font files. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Inter", system-ui,
-    "Roboto", "Helvetica Neue", "Helvetica", "Arial", "PingFang SC", "Microsoft YaHei UI",
-    "Microsoft YaHei", "Source Han Sans SC", "Source Han Sans CN", "Noto Sans CJK SC",
-    "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', 'Inter', system-ui,
+    'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', 'PingFang SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', 'Source Han Sans SC', 'Source Han Sans CN', 'Noto Sans CJK SC',
+    'WenQuanYi Micro Hei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
 
   /* Monospace: same idea — pick the best system mono first, then provide a
      CJK mono fallback so 中文 columns line up with code. */
   --font-mono:
-    ui-monospace, "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Fira Code", SFMono-Regular,
-    "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Courier New", "PingFang SC",
-    "Microsoft YaHei UI", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans Mono CJK SC",
+    ui-monospace, 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', SFMono-Regular,
+    'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', 'Courier New', 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans Mono CJK SC',
     monospace;
 
   --radius-lg: 0.75rem;
@@ -128,7 +128,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground select-none;
   }
 }
 
@@ -213,13 +213,13 @@ kbd,
 pre,
 samp,
 .font-mono,
-[class*="font-mono"] {
+[class*='font-mono'] {
   font-family: var(--font-mono);
   font-feature-settings:
-    "calt" 1,
-    "liga" 1,
-    "tnum" 1,
-    "zero" 1; /* slashed zero for clearer 0/O distinction */
+    'calt' 1,
+    'liga' 1,
+    'tnum' 1,
+    'zero' 1; /* slashed zero for clearer 0/O distinction */
   tab-size: var(--tab-size);
   -moz-tab-size: var(--tab-size);
 }
